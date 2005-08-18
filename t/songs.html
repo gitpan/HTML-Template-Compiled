@@ -1,0 +1,23 @@
+<a href="<%= .SELF%>?lang=<TMPL_VAR .LANGUAGE>">Start</a><br>
+Band: <tmpl_var bAND><br>
+Albums:
+<TMPL_LOOP ALBUMS>
+	<!-- TMPL_IF __first__ --><hr><!-- /TMPL_IF -->
+	<b><TMPL_VAR NAME></b>(<TMPL_IF SINGLE>Single<TMPL_ELSIF ALBUM>Album<TMPL_ELSE>Other</TMPL_IF>)<br>
+	<%LOOP SONGS%>
+		<%= __counter__%>. <TMPL_VAR NAME><br>
+	<%/LOOP%>
+	<TMPL_IF __last__><hr></TMPL_IF>
+</TMPL_LOOP>
+Bio: <p><TMPL_VAR .INFO.BIOGRAPHY></p>
+Homepage: <a href="<!-- TMPL_VAR INFO.LINK -->">Start</a>
+<TMPL_WITH INFO>
+<TMPL_VAR _ ESCAPE=HTML>
+Bio: <p><TMPL_VAR BIOGRAPHY></p>
+Homepage: <a href="<TMPL_VAR LINK>">Start</a>
+</TMPL_WITH>
+<TMPL_VAR NAME="ALBUMS.0.SONGS.0.NAME">
+<!-- TMPL_VAR URITEST ESCAPE=URI -->
+<TMPL_INCLUDE NAME="include.html">
+<TMPL_WITH NAME="OBJECT"><TMPL_VAR NAME="_/key"></TMPL_WITH>
+<%= OBJECT/key%>

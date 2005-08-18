@@ -1,0 +1,14 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+t/HTML-Template-Compiled.t
+lib/HTML/Template/Compiled.pm
+examples/test.html
+examples/included.html
+examples/bench.pl
+examples/test.tt
+t/songs.html
+t/wrong.html
+t/include.html
+META.yml                                 Module meta-data (added by MakeMaker)

@@ -1,0 +1,105 @@
+Revision history for Perl extension HTML::Template::Compiled.
+
+0.32 Thu Aug 18 23:52:33 CEST 2005
+- fixed caching bug
+
+0.31 Thu Aug 18 22:48:22 CEST 2005
+- better object syntax
+
+0.30 Mon Aug 15 01:55:29 CEST 2005
+- some internal optimizations
+- case_insensitive for those who want it
+
+0.29 Sun Aug 14 22:51:30 CEST 2005
+- examples directory with bechmark of 4 template modules
+
+0.28 Fri Aug 12 23:32:44 CEST 2005
+- case insensitive TMPL_*
+
+0.27 Thu Aug  4 00:06:34 CEST 2005
+- added <%tag%> feature
+
+0.26 Thu Jul 28 22:11:48 CEST 2005
+- some docs
+- fixed regex and objects
+ 
+0.25 Wed Jul 27 23:18:06 CEST 2005
+- undefstring userdefined
+- fixed TMPL_IF method
+
+0.24 Wed Jul 20 20:57:00 CEST 2005
+- fixed <TMPL_VAR NAME="_" ESCAPE=HTML>
+
+0.23 Mon Jul 18 00:03:08 CEST 2005
+- first step for rendering objects,
+  documentation will follow. (yes, promised =)
+
+0.22 Sun Jul 17 19:15:22 CEST 2005
+- bugfix TMPL_INCLUDE
+
+0.21 Fri Jul  1 21:48:51 CEST 2005
+- fixed ESCAPE=HTML|URI
+- implemented <!-- TMPL_* -->
+
+0.20 Sun Jun 26 18:04:11 CEST 2005
+- Errors for wrong balanced tags
+
+0.19  Sun Jun 26 15:02:37 CEST 2005
+- bugfix NAME=ONE.TWO
+- TMPL_WITH
+- Dumper
+
+0.18  Sun Jun 26 12:36:15 CEST 2005
+- small bugfixes for older perl versions
+- typos
+- TMPL_ELSIF
+
+0.17  Mon Jun 20 23:30:43 CEST 2005
+- small bugfixes, warnings
+- doc
+
+0.16  Mon May 16 15:42:07 CEST 2005
+- TMPL_WITH
+- bugfix with .root
+
+0.15  Mon May 16 15:18:42 CEST 2005
+- bugfix
+
+0.14  Mon May 16 14:27:31 CEST 2005
+- bug in caching removed
+- TMPL_VAR .root
+- TMPL_VAR key.path.with.numbers.23
+
+0.13  Mon May  2 23:49:08 CEST 2005
+- clear_cache()
+
+0.12  Mon May  2 22:18:35 CEST 2005
+- remove warnings
+
+0.10 Mon Apr 18 22:06:10 CEST 2005
+ - HTML_TEMPLATE_ROOT
+ - caching
+ - loop_context_vars
+
+0.09  Fri Apr 15 00:31:23 CEST 2005
+ - </TMPL_IF name>
+ - caching improved (expire)
+
+0.06  Sat Feb 26 00:45:31 CET 2005
+ - ESCAPE=HTML
+
+0.05  Sat Feb 26 00:31:21 CET 2005
+ - TMPL_INCLUDE
+
+0.04  Fri Feb 25 00:29:44 CET 2005
+ - caching improved
+
+0.03  Thu Feb 24 23:17:10 CET 2005
+ - Quote Handling (NAME="var")
+
+0.02  Tue Feb 22 01:18:23 CET 2005
+ - fixed bugs, caching half implemented
+
+0.01  Sun Feb 20 17:44:07 2005
+	- original version; created by h2xs 1.23 with options
+		-AX -n HTML::Template::Compiled

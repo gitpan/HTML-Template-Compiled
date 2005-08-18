@@ -1,0 +1,19 @@
+===test.html 1==========================================
+name: [% name %] look ma: ~
+name with "": [% name %]
+INCLUDE: (((<TMPL_INCLUDE included.html>)))
+---------------
+loop a:
+[% FOREACH var = loopa %]first?[% first() %] or last?[% last() %]
+-----num:[% index() %]
+ item: [% var.a %]
+[% END %]
+loop b:[% FOREACH var = loopb %]item: ROOT:<TMPL_VAR inner>[% END %]
+loop c
+---------------
+[% FOREACH var = c %]----num:<TMPL_VAR __counter__>
+[% FOREACH var = d %]*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: [% F %]<TMPL_IF __odd__>odd</TMPL_IF>
+[% END %][% END %]
+---------------------
+[% IF if2 %]if.if2![% END %] [% IF if3 %]if.if3!  [% ELSE %]no if.if3![% END %] [% UNLESS if3 %]no if.if3!![% END %]
+===test.html ende==========================================
