@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.11 2005/08/18 21:52:15 tina Exp $
+# $Id: Compiled.pm,v 1.15 2005/08/19 17:51:56 tina Exp $
 my $version = <<'=cut';
 =pod
 
@@ -9,7 +9,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.32";
+our $VERSION = "0.34";
 
 =cut
 use Data::Dumper; $Data::Dumper::Indent = 1; $Data::Dumper::Sortkeys = 1;
@@ -17,7 +17,7 @@ use strict;
 use warnings;
 # doesn't work with make tardist
 #our $VERSION = ($version =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.09";
-our $VERSION = "0.32";
+our $VERSION = "0.34";
 
 use Fcntl qw(:seek :flock);
 eval {
@@ -42,12 +42,12 @@ use constant TELSE => 'ELSE';
 use constant TLOOP => 'LOOP';
 use constant TWITH => 'WITH';
 
-my $start_re = $ENABLE_ASP ? '(?i:<TMPL_|<!-- TMPL_|<%)' : '(?i:<TMPL_|<!-- TMPL_)';
-my $end_re = $ENABLE_ASP ? '(?:>| -->|%>)' : '(?:>| -->)';
+my $start_re = $ENABLE_ASP ? '(?i:<TMPL_|<!-- *TMPL_|<%)' : '(?i:<TMPL_|<!-- *TMPL_)';
+my $end_re = $ENABLE_ASP ? '(?:>| *-->|%>)' : '(?:>| *-->)';
 my $tmpl_re = $ENABLE_ASP ?
-	'(?i:</?TMPL.*?>|<!-- /?TMPL_.*? -->|<%/?.*?%>)' :
-	'(?i:</?TMPL.*?>|<!-- /?TMPL_.*? -->)';
-my $close_re = $ENABLE_ASP ? '(?i:</TMPL_|<!-- /TMPL_|<%/)' : '(?i:</TMPL_|<!-- /TMPL_)';
+	'(?i:</?TMPL.*?>|<!-- */?TMPL_.*? *-->|<%/?.*?%>)' :
+	'(?i:</?TMPL.*?>|<!-- */?TMPL_.*? *-->)';
+my $close_re = $ENABLE_ASP ? '(?i:</TMPL_|<!-- */TMPL_|<%/)' : '(?i:</TMPL_|<!-- */TMPL_)';
 my $var_re = '(?:[\w./]+|->)+';
 
 # options / object attributes
@@ -158,7 +158,6 @@ sub cached_or_new {
 	my ($code,$sub) = $self->_compile($text,$file);
 	$self->code($code);
 	$self->perl($sub);
-	print "adding ".$file." to cache\n";
 	$self->cache({
 			'sub'=>$sub,
 			checked=>time,
@@ -244,9 +243,7 @@ EOM
 			if ($var =~ s/^\.//) {
 				# we have NAME=.ROOT
 				$root++;
-				#$varstr = "\$\$sp->{'$var'}";
 			}
-			#my $varstr = "\$v";
 			if ($var =~ tr/.//) {
 				# we have NAME=BLAH.BLUBB
 				$path++;
@@ -255,7 +252,6 @@ EOM
 				# we want a dump
 				$code .= qq#require Data::Dumper;\n#;
 				$varstr = qq#Data::Dumper->Dump([\$\$sp],['DUMP'])#;
-				#next;
 			}
 			if ($root || $path) {
 				$code .= qq#${indent}\{\n${indent}  my \$sp = \$sp;\n#;
@@ -266,12 +262,11 @@ EOM
 			if ($path) {
 				my @paths = split /\./, $var;
 				my $s = join ",", map { "'\Q$_\E'" } @paths;
-			my $varstr = $self->_make_path(
-				deref => $deref,
-				method_call => $meth,
-				var => $var,
-			);
-				$varstr = '$$sp';
+				my $varstr = $self->_make_path(
+					deref => $deref,
+					method_call => $meth,
+					var => $var,
+				);
 			}
 			if (uc $type eq 'VAR') {
 				if (uc $escape eq 'HTML') {
@@ -293,7 +288,7 @@ EOM
 		# --------- TMPL_WITH
 		elsif (m#${start_re}WITH (?:NAME=)?(['"]?)($var_re)\1$end_re#i) {
 			push @$stack, TWITH;
-				$level++;
+			$level++;
 			my $var = $2;
 			my $varstr = $self->_make_path(
 				deref => $deref,
@@ -334,7 +329,7 @@ EOM
 		}
 
 		# --------- TMPL_ELSE
-		elsif (m#${start_re}ELSE>#i) {
+		elsif (m#${start_re}ELSE *$end_re#i) {
 			# we can only have an open if or unless
 			$self->_checkstack($fname,$line,$stack, TELSE);
 			my $indent = "  " x ($level-1);
@@ -411,7 +406,7 @@ EOM
 		
 	}
 	$code .= "\n} # end of sub\n";
-	#print $code if $self->debug;
+	print $code if $self->debug;
 	my $sub = eval $code;
 	die "code: $@" if $@;
 	return $code, $sub;
@@ -423,7 +418,6 @@ sub _make_path {
 	my ($self, %args) = @_;
 	my $root = 0;
 	if ($args{var} =~ m/^__(\w+)__$/) {
-		no strict 'refs';
 		return "\$$args{var}";
 	}
 	if ($args{var} =~ s/^_//) {
@@ -437,23 +431,21 @@ sub _make_path {
 	for my $p (@split) {
 		if ($p =~ s/^\Q$args{method_call}//) {
 			push @paths, '['.PATH_METHOD.",'$p']";
-			#push @paths, "->$p()";
 		}
 		elsif ($p =~ s/^\Q$args{deref}//) {
 			push @paths, '['.PATH_DEREF.",'".($self->_case_insensitive?uc $p:$p)."']";
 		}
 		else {
 			push @paths, '['.PATH_DEREF.", '".($self->_case_insensitive?uc $p:$p)."']";
-			#push @paths, "->{'$p'}";
 		}
 	}
 	local $" = ",";
-	my $varstr = "\$t->walkpath(" .($root?'$p':'$$sp').",@paths)";
+	my $varstr = "\$t->_walkpath(" .($root?'$p':'$$sp').",@paths)";
 	return $varstr;
 	return ($root, \@paths);
 }
 
-sub walkpath {
+sub _walkpath {
 	my ($self, $ref, @paths) = @_;
 	my $walk = $ref;
 	for my $path (@paths) {
@@ -499,7 +491,6 @@ sub walkpath {
 sub cache {
 	my $self = shift;
 	my ($sub, $code, $filename) = @_;
-	print "cache($sub, code, $filename)\n";
 	#my $sub = $self->perl;
 	my $cache = $self->cache_dir;
 	$self->add_sub($filename, $cache, $sub);
@@ -516,12 +507,11 @@ sub cache {
 			$HTML::Template::Compiled::main::root = $cache;
 			#print "HTC-Main.pm generated\n";
 		}
-		my $plfile = "_sample";
+		my $plfile;
 		my $trfile = $filename;
 		$trfile =~ s#^./##; # TODO File::Spec
 		$trfile =~ tr#/#:#; # TODO File::Spec
 		$plfile = $trfile;
-		# TODO only add filename if not already there
 		{
 			open my $fh, "+<", $main or die $!;
 			while (<$fh>) {
@@ -570,8 +560,7 @@ sub escape_html {
 	return $new;
 }
 sub escape_uri {
-	my ($self, $var) = @_;
-	return URI::Escape::uri_escape($var);
+	return URI::Escape::uri_escape($_[1]);
 }
 
 sub _checktimes {
@@ -590,9 +579,6 @@ sub _checktimes {
 sub _maincode {
 	my ($self) = @_;
 	my $code;
-	if ($self->_loop_context) {
-		#$code .= qq#use vars qw(\$__first__ \$__last__ \$__inner__ \$__odd__ \$__counter__);\n#;
-	};
 	return $code . 'package HTML::Template::Compiled::main;'.<<'EOM'."__DATA__\n";
 
 use strict;
@@ -719,7 +705,7 @@ __END__
 HTML::Template::Compiled (HTC) is a template system which uses the same
 template syntax as HTML::Template and the same perl API. Internally
 it works different, because it turns the template into perl code,
-and once that is done, generating the output is much quicker (5 times)
+and once that is done, generating the output is much quicker (20 times)
 than with HTML::Template (at least with my tests). It also can generate
 perl files so that the next time the template is loaded it doesn't have to
 be parsed again. The best performance gain is probably reached in
@@ -959,7 +945,7 @@ You create a template almost like in HTML::Template:
     cache_dir => "cache",
   );
 
-The next time you start your application, HTC will read all genereated
+The next time you start your application, HTC will read all generated
 perl files, and a call to the constructor like above won't parse
 the template, but just use the loaded code. If your template
 file has changed, though, then it will be parsed again.
@@ -1006,11 +992,13 @@ http://www.tinita.de/projects/perl/
 
 =head1 AUTHOR
 
-Tina Mueller, Bjoern Kriews
+Tina Mueller
 
 =head1 CREDITS
 
 Bjoern Kriews (Original Idea)
+
+Ronnie Neumann, Martin Fabiani for ideas and beta-testing
 
 =head1 COPYRIGHT AND LICENSE
 

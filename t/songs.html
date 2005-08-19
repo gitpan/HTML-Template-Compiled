@@ -2,7 +2,8 @@
 Band: <tmpl_var bAND><br>
 Albums:
 <TMPL_LOOP ALBUMS>
-	<!-- TMPL_IF __first__ --><hr><!-- /TMPL_IF -->
+	<!--TMPL_IF __first__ -->(first)<!-- /TMPL_IF -->
+	<!--TMPL_UNLESS NAME=__last__ -->(not last)<!--TMPL_ELSE-->(last)<!-- /TMPL_UNLESS -->
 	<b><TMPL_VAR NAME></b>(<TMPL_IF SINGLE>Single<TMPL_ELSIF ALBUM>Album<TMPL_ELSE>Other</TMPL_IF>)<br>
 	<%LOOP SONGS%>
 		<%= __counter__%>. <TMPL_VAR NAME><br>
