@@ -1,5 +1,8 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.41 Sat Aug 27 12:07:08 CEST 2005
+- test failed because of missing cache dir
+
 0.40 Sat Aug 27 03:05:00 CEST 2005
 - more internal changes
 

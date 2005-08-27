@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: HTML-Template-Compiled.t,v 1.15 2005/08/27 00:48:48 tina Exp $
+# $Id: HTML-Template-Compiled.t,v 1.16 2005/08/27 10:08:26 tina Exp $
 
 #########################
 
@@ -44,6 +44,7 @@ my $hash = {
 };
 sub HTC::Test::key { return $_[0]->{"_key"} }
 
+mkdir "cache" or die "could not create cache dir: $!";
 my %args = (
 	path => 't',
 	#case_insensitive => 1,
