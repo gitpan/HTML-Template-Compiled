@@ -1,7 +1,7 @@
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
 name with "": <TMPL_VAR NAME="name">
-INCLUDE: (((<TMPL_INCLUDE included.html>)))
+INCLUDE: (((<TMPL_INCLUDE included.htc>)))
 ---------------
 loop a:
 <TMPL_LOOP loopa>first?<TMPL_VAR __first__> or last?<TMPL_VAR __last__>

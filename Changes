@@ -1,5 +1,25 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.40 Sat Aug 27 03:05:00 CEST 2005
+- more internal changes
+
+0.39 Mon Aug 22 22:27:52 CEST 2005
+- bug with caching fixed
+
+0.38 Mon Aug 22 21:02:30 CEST 2005
+- __counter__ now correct
+- more internal changes
+
+0.37 Mon Aug 22 00:31:58 CEST 2005
+- case_insensitive removed, use only case_sensitive
+- internal changes
+
+0.36 Sun Aug 21 03:41:45 CEST 2005
+- newlines in tags
+- ESCAPE=DUMP, chaining ESCAPE
+- DEFAULT=...
+- option dumper
+
 0.34 Fri Aug 19 19:58:56 CEST 2005
 - minor bugs, removed debugging statement
 

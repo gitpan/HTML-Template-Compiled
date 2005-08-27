@@ -2,7 +2,8 @@
 Band: <tmpl_var bAND><br>
 Albums:
 <TMPL_LOOP ALBUMS>
-	<!--TMPL_IF __first__ -->(first)<!-- /TMPL_IF -->
+<!--
+TMPL_IF __first__ -->(first)<!-- /TMPL_IF -->
 	<!--TMPL_UNLESS NAME=__last__ -->(not last)<!--TMPL_ELSE-->(last)<!-- /TMPL_UNLESS -->
 	<b><TMPL_VAR NAME></b>(<TMPL_IF SINGLE>Single<TMPL_ELSIF ALBUM>Album<TMPL_ELSE>Other</TMPL_IF>)<br>
 	<%LOOP SONGS%>
@@ -10,15 +11,15 @@ Albums:
 	<%/LOOP%>
 	<TMPL_IF __last__><hr></TMPL_IF>
 </TMPL_LOOP>
-Bio: <p><TMPL_VAR .INFO.BIOGRAPHY></p>
+Bio: <p><TMPL_VAR .INFO.BIOGRAPHY DEFAULT="No bio available"></p>
 Homepage: <a href="<!-- TMPL_VAR INFO.LINK -->">Start</a>
 <TMPL_WITH INFO>
-<TMPL_VAR _ ESCAPE=HTML>
-Bio: <p><TMPL_VAR BIOGRAPHY></p>
+<TMPL_VAR _ ESCAPE=DUMP|HTML>
+Bio: <p><TMPL_VAR BIOGRAPHY DEFAULT='No bio available'></p>
 Homepage: <a href="<TMPL_VAR LINK>">Start</a>
 </TMPL_WITH>
 <TMPL_VAR NAME="ALBUMS.0.SONGS.0.NAME">
-<!-- TMPL_VAR URITEST ESCAPE=URI -->
+<!-- TMPL_VAR URITEST ESCAPE=URL -->
 <TMPL_INCLUDE NAME="include.html">
 <TMPL_WITH NAME="OBJECT"><TMPL_VAR NAME="_/key"></TMPL_WITH>
 <%= OBJECT/key%>

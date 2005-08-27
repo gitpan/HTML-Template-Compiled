@@ -1,6 +1,6 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.15 2005/08/19 17:51:56 tina Exp $
-my $version = <<'=cut';
+# $Id: Compiled.pm,v 1.33 2005/08/27 01:03:34 tina Exp $
+my $version_pod = <<'=cut';
 =pod
 
 =head1 NAME
@@ -9,17 +9,18 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.34";
+our $VERSION = "0.40";
 
 =cut
+# doesn't work with make tardist
+#our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
+our $VERSION = "0.40";
 use Data::Dumper; $Data::Dumper::Indent = 1; $Data::Dumper::Sortkeys = 1;
 use strict;
 use warnings;
-# doesn't work with make tardist
-#our $VERSION = ($version =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.09";
-our $VERSION = "0.34";
 
 use Fcntl qw(:seek :flock);
+use File::Spec;
 eval {
 	require HTML::Entities;
 	require URI::Escape;
@@ -31,6 +32,7 @@ $NEW_CHECK = 60 * 10; # 10 minutes default
 $UNDEF = ''; # set for debugging
 $ENABLE_ASP = 1;
 
+use constant D => 0;
 use constant MTIME => 0;
 use constant CHECKED => 1;
 use constant LMTIME => 2;
@@ -42,146 +44,261 @@ use constant TELSE => 'ELSE';
 use constant TLOOP => 'LOOP';
 use constant TWITH => 'WITH';
 
-my $start_re = $ENABLE_ASP ? '(?i:<TMPL_|<!-- *TMPL_|<%)' : '(?i:<TMPL_|<!-- *TMPL_)';
-my $end_re = $ENABLE_ASP ? '(?:>| *-->|%>)' : '(?:>| *-->)';
+my $start_re = $ENABLE_ASP ? '(?i:<TMPL_|<!--\s*TMPL_|<%)' : '(?i:<TMPL_|<!--\s*TMPL_)';
+my $end_re = $ENABLE_ASP ? '(?:>|\s*-->|%>)' : '(?:>|\s*-->)';
 my $tmpl_re = $ENABLE_ASP ?
-	'(?i:</?TMPL.*?>|<!-- */?TMPL_.*? *-->|<%/?.*?%>)' :
-	'(?i:</?TMPL.*?>|<!-- */?TMPL_.*? *-->)';
-my $close_re = $ENABLE_ASP ? '(?i:</TMPL_|<!-- */TMPL_|<%/)' : '(?i:</TMPL_|<!-- */TMPL_)';
+	'(?i:</?TMPL.*?>|<!--\s*/?TMPL_.*?\s*-->|<%/?.*?%>)' :
+	'(?i:</?TMPL.*?>|<!--\s*/?TMPL_.*?\s*-->)';
+my $close_re = $ENABLE_ASP ? '(?i:</TMPL_|<!--\s*/TMPL_|<%/)' : '(?i:</TMPL_|<!--\s*/TMPL_)';
 my $var_re = '(?:[\w./]+|->)+';
 
-# options / object attributes
-use constant FILENAME => 0;
-use constant DEBUG => 1;
-use constant TEXT => 2;
-use constant CODE => 3;
-use constant PARAM => 4;
-use constant PERL => 5;
-use constant CACHE_DIR => 6;
-use constant PATH => 7;
-use constant LOOP_CONTEXT => 8;
-use constant LINE_NUMBERS => 9;
-use constant CASE_INSENSITIVE => 10;
-use constant USE_OBJECTS => 11;
-use constant METHOD_CALL => 12;
-use constant DEREF => 13;
+use constant PATH_METHOD => 1;
+use constant PATH_DEREF => 2;
 
-sub _line_numbers { shift->attr(LINE_NUMBERS, @_) }
-sub filename { shift->attr(FILENAME, @_) }
-sub debug { shift->attr(DEBUG, @_) }
-sub text { shift->attr(TEXT, @_) }
-sub code { shift->attr(CODE, @_) }
-sub perl { shift->attr(PERL, @_) }
-sub cache_dir { shift->attr(CACHE_DIR, @_) }
-sub path { shift->attr(PATH, @_) }
-sub _loop_context { shift->attr(LOOP_CONTEXT, @_) }
-sub _case_insensitive { shift->attr(CASE_INSENSITIVE, @_) }
-sub _use_objects {shift->attr(USE_OBJECTS, @_) }
-sub _method_call {shift->attr(METHOD_CALL, @_) }
-sub _deref {shift->attr(DEREF, @_) }
+# options / object attributes
+use constant PARAM => 14;
+
+{
+	my @map = qw(
+		filename debug file source perl cache_dir path loop_context
+	 	line_numbers case_sensitive dumper method_call deref cache);
+	for my $i (0..$#map) {
+		my $method = ucfirst $map[$i];
+		my $get = sub { return $_[0]->[$i] };
+		my $set = sub { $_[0]->[$i] = $_[1] };
+		no strict 'refs';
+		*{"get$method"} = $get;
+		*{"set$method"} = $set;
+	}
+}
 
 sub new {
-	my $class = shift;
-	my %args = @_;
+	my ($class, %args) = @_;
 	my $self = [];
 	bless $self, $class;
 	$args{path} ||= $ENV{'HTML_TEMPLATE_ROOT'} || '';
-	length $args{path} and $args{path} .= '/' unless $args{path} =~ m#/$#;
 	#print "PATH: $args{path}!!\n";
-	$self->path($args{path});
-	if (my $file = $args{filename}) {
-		$self->filename($self->path().$file);
+	if ($args{perl}) {
+		# we have perl code already!
+		$self->init(%args);
+		$self->setPerl($args{perl});
+		$self->setCache(exists $args{cache}?$args{cache}:1);
+		$self->setFilename($args{filename});
+		$self->setCache_dir($args{cache_dir});
+		$self->setPath($args{path});
+		my $file = $self->createFilename($self->getPath,$self->getFilename);
+		$self->setFile($file);
+		return $self;
 	}
-	$self->init(%args);
-	$self->debug($args{debug});
-	$self->cache_dir($args{cache_dir}||"");
-	$self->_read_cache;
-	my $cached_or_new = $self->cached_or_new($self->filename, $self->cache_dir);
+	if (my $filename = $args{filename}) {
+		my $t = $self->create(%args);
+		return $t;
+	}
+}
+
+sub create {
+	my ($self, %args) = @_;
+	D && $self->stack;
+	if (%args) {
+		$self->setCache(exists $args{cache}?$args{cache}:1);
+		$self->setFilename($args{filename});
+		$self->setCache_dir($args{cache_dir});
+		$self->setPath($args{path});
+	}
+	else {
+		#my $file = $self->createFilename($self->getPath,$self->getFilename);
+		#$self->setFile($file);
+	}
+	my $t = $self->fromCache();
+	return $t if $t;
+	# ok, seems we have nothing in cache, so compile
+	my $file = $self->createFilename($self->getPath,$self->getFilename);
+	$self->setFile($file);
+	$self->init(%args) if %args;
+	$self->compile();
+	return $self;
+}
+sub fromCache {
+	my ($self) = @_;
+	my $t;
+	# try to get memory cache
+	if ($self->getCache) {
+		$t = $self->fromMemCache();
+		return $t if $t;
+	}
+	# not in memory cache, try file cache
+	if ($self->getCache_dir) {
+		$t = $self->include();
+		return $t if $t;
+	}
+	return;
+}
+
+{
+	my $cache;
+	my $times;
+	sub fromMemCache {
+		my ($self, %args) = @_;
+		my $dir = $self->getCache_dir;
+		$dir = '' unless defined $dir;
+		my $cached = $cache->{$dir}->{$self->getFilename};
+		my $times = $times->{$dir}->{$self->getFilename};
+		if ($cached && $self->uptodate($times)) {
+			return $cached;
+		}
+		D && $self->log("no or old memcache");
+		return;
+	}
+	sub addCache {
+		my ($self, %times) = @_;
+		my $dir = $self->getCache_dir;
+		$dir = '' unless defined $dir;
+		D && $self->log("addCache ".$self->getFilename);
+		$cache->{$dir}->{$self->getFilename} = $self;
+		$times->{$dir}->{$self->getFilename} = \%times;
+	}
+}
+sub compile {
+	my ($self) = @_;
+	#my $file = $self->createFilename($self->getPath,$self->getFilename);
+	my $file = $self->getFile;
+	#$self->setFile($file);
+	#$self->log("compile $file");
+	my @times = $self->_checktimes($self->getFile);
+	my $text = $self->_readfile($file);
+	my ($source,$compiled) = $self->_compile($text,$file);
+	$self->setPerl($compiled);
+	$self->addCache(
+		checked=>time,
+		mtime => $times[MTIME],
+	);
+	D && $self->log("compiled $file");
+	if ($self->getCache_dir) {
+		D && $self->log("addFileCache($file)");
+		$self->addFileCache($source,
+			checked=>time,
+			mtime => $times[MTIME],
+		);
+	}
+}
+sub addFileCache {
+	my ($self, $source, %times) = @_;
+	$self->lock;
+	my $cache = $self->getCache_dir;
+	my $plfile = $self->escape_filename($self->getFile);
+	my $filename = $self->getFilename;
+	my $lmtime = localtime $times{mtime};
+	my $lchecked = localtime $times{checked};
+	open my $fh, ">$cache/$plfile.pl" or die $!; # TODO File::Spec
+	print $fh <<EOM;
+		package HTML::Template::Compiled;
+# file date $lmtime
+# last checked date $lchecked
+my \$args = {
+	times => {
+		mtime => $times{mtime},
+		checked => $times{checked},
+	},
+	htc => {
+		case_sensitive => @{[$self->getCase_sensitive]},
+		cache_dir => '$cache',
+		filename => '@{[$self->getFilename]}',
+		file => '@{[$self->getFile]}',
+		path => '@{[$self->getPath]}',
+		method_call => '@{[$self->getMethod_call]}',
+		deref => '@{[$self->getDeref]}',
+		# template subroutine
+		perl => $source,
+		# template subroutine
+	},
+};
+EOM
+	D && $self->log("$cache/$plfile.pl generated");
+	$self->unlock;
+}
+
+sub include {
+	my ($self) = @_;
+	D && $self->stack;
+	my $file = $self->createFilename($self->getPath,$self->getFilename);
+	D && $self->log("include file: $file");
+	#$self->setFile($file);
+	my $dir = $self->getCache_dir;
+	my $escaped = $self->escape_filename($file);
+	my $req = File::Spec->catfile($dir, "$escaped.pl");
+	return unless -f $req;
+	D && $self->log("require $req");
+	my $r = do "$req";
+	my $args = $r->{htc};
+	my $t = HTML::Template::Compiled->new(%$args);
+	D && $self->log("include",$t,"$args->{perl}");
+	return unless $self->uptodate($r->{times});
+	$t->addCache(
+		checked=>$r->{times}->{checked},
+		mtime => $r->{times}->{mtime},
+	);
+	return $t;
+}
+
+sub createFilename {
+	my ($self,$path,$filename) = @_;
+	D && $self->log("createFilename($path,$filename)");
+	if (!length $path or File::Spec->file_name_is_absolute($filename)) {
+		return $filename;
+	}
+	else {
+		return File::Spec->catfile($path, $filename);
+	}
+}
+
+sub uptodate {
+	my ($self, $times) = @_;
+	my $now = time;
+	if ($now - $times->{checked} < $NEW_CHECK) {
+		return 1;
+	}
+	else {
+		my $file = $self->createFilename($self->getPath,$self->getFilename);
+		$self->setFile($file);
+		my @times = $self->_checktimes($file);
+		if ($times[MTIME] <= $times->{mtime}) {
+			D && $self->log("uptodate template old");
+			$times->{checked} = $now;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+sub dump {
+	my ($self, $var) = @_;
+	if (my $sub = $self->getDumper()) {
+		return $sub->($var);
+	}
+	else {
+		require Data::Dumper;
+		return Data::Dumper->Dump([$var],['DUMP']);
+	}
 }
 
 sub init {
 	my ($self, %args) = @_;
 	my %values = (
 		# defaults
-		use_objects => 1,
 		method_call => '->',
 		deref => '.',
 		line_numbers => 0,
 		loop_context_vars => 0,
-		case_insensitive => 0,
+		case_sensitive => 1,
 		%args,
 	);
-	$self->_use_objects(1) if $values{use_objects};
-	$self->_method_call($values{method_call});
-	$self->_deref($values{deref});
-	$self->_line_numbers(1) if $args{line_numbers};
-	$self->_loop_context(1) if $args{loop_context_vars};
-	$self->_case_insensitive(1) if $args{case_insensitive};
-}
-
-sub cached_or_new {
-	my $self = shift;
-	my ($file,$dir) = @_;
-	my $cached = $self->cached($file,$dir);
-	# see if we have a cache and if checktime is within
-	# $NEW_CHECK
-	if (defined $cached and (time - $cached->{checked} < $NEW_CHECK)) {
-		# use the cache
-		#print STDERR "use cache\n";
-		#print STDERR "last check: $cached->{checked}\n";
-		$self->perl($cached->{'sub'});
-		return $self;
-	}
-	else {
-		#print STDERR "new check\n";
-		my $test = time;
-		# no cache or $NEW_CHECK
-		#my @times = $self->_checktimes($self->filename);
-		my @times = $self->_checktimes($file);
-
-		#print STDERR "($file)time: $test, mtime: $times[MTIME], cached mtime: $cached->{mtime}\n";
-		#print STDERR "times:(@times)\n";
-		# see if we have a cache and modified time of
-		# file is more recent than our cache
-		if($cached->{mtime} && $times[MTIME] <= $cached->{mtime}) {
-			#print STDERR "template is old, use cache\n";
-			$self->perl($cached->{'sub'});
-			$cached->{'checked'} = time;
-			return $self;
-		}
-		# else just move on and generate new template
-	}
-	#print STDERR "template is new, no cache\n";
-	my @times = $self->_checktimes($self->filename);
-	my $text = $self->_readfile($file);
-	$self->text($text);
-	my ($code,$sub) = $self->_compile($text,$file);
-	$self->code($code);
-	$self->perl($sub);
-	$self->cache({
-			'sub'=>$sub,
-			checked=>time,
-			mtime => $times[MTIME],
-		},
-		$code,$file);
-	return $self;
-}
-
-sub _read_cache {
-	my $self = shift;
-	my $cache = $self->cache_dir or return;
-	my $main = "$cache/HTC-Main.pm";
-	return unless -f $main;
-	require $main;
-	$HTML::Template::Compiled::main::root = $cache;
-	HTML::Template::Compiled::main::include($self);
-}
-
-sub attr {
-	if (@_>2) {
-		return $_[0]->[$_[1]] = pop;
-	}
-	return $_[0]->[$_[1]];
+	$self->setMethod_call($values{method_call});
+	$self->setDeref($values{deref});
+	$self->setLine_numbers(1) if $args{line_numbers};
+	$self->setLoop_context(1) if $args{loop_context_vars};
+	$self->setCase_sensitive($values{case_sensitive});
+	$self->setDumper($args{dumper}) if $args{dumper};
+	$self->setDebug($args{debug});
 }
 
 sub _readfile {
@@ -194,7 +311,8 @@ sub _readfile {
 
 sub _compile {
 	my ($self, $text, $fname) = @_;
-	if ($self->_line_numbers) {
+	D && $self->log("_compile($fname)");
+	if ($self->getLine_numbers) {
 		# split lines and preserve empty trailing lines
 		my @lines = split /\n/, $text, -1;
 		for my $i (0..$#lines) {
@@ -202,12 +320,14 @@ sub _compile {
 		}
 		$text = join "\n", @lines;
 	}
-	my @p = split m#((?:__\d+__)?$tmpl_re)#, $text;
+	my $re = $self->getLine_numbers? qr#((?:__\d+__)?$tmpl_re)# : qr#($tmpl_re)#;
+	my @p = split $re, $text;
 	my $level = 1;
 	my $code = '';
 	my $stack = [];
 	$code .= <<"EOM";
 sub {
+	#local *__ANON__ = "htc_$fname";
 	my (\$t, \$p) = \@_;
 	my \$OUT;
 	my \$sp = \\\$p;
@@ -221,17 +341,26 @@ EOM
 		#$self->{code} .= qq#$indent print "sp: \$\$sp\\n";#;
 
 		my $line = 0;
-		if (s#__(\d+)__($tmpl_re)#$2#) {
+		if ($self->getLine_numbers && s#__(\d+)__($tmpl_re)#$2#) {
 			$line = $1;
 		}
-		my $meth = $self->_method_call;
-		my $deref = $self->_deref;
+		my $meth = $self->getMethod_call;
+		my $deref = $self->getDeref;
 		# --------- TMPL_VAR
-		if (m#$start_re(VAR|=) +(?:NAME=)?(['"]?)($var_re)\2(?: +ESCAPE=(['"]?)(HTML|URI)\4)? *$end_re#i) {
+		if (m#$start_re(VAR|=)\s+(?:NAME=)?(['"]?)($var_re)\2.*$end_re#i) {
 			my $type = $1;
 			$type = "VAR" if $type eq '=';
 			my $var = $3;
-			my $escape = $5 || "";
+			my $escape = '';
+			if (m/\s+ESCAPE=(['"]?)(\w+(?:\|\w+)*)\1/i) {
+				$escape = $2;
+			}
+			my $default;
+			if (($default)=m/\s+DEFAULT=('([^']*)'|"([^"]*)"|(\S+))/i) {
+				$default =~ s/^['"]//;
+				$default =~ s/['"]$//;
+				$default =~ s/'/\\'/g;
+			}
 			my $varstr = $self->_make_path(
 				deref => $deref,
 				method_call => $meth,
@@ -248,11 +377,6 @@ EOM
 				# we have NAME=BLAH.BLUBB
 				$path++;
 			}
-			if ($var eq '_') {
-				# we want a dump
-				$code .= qq#require Data::Dumper;\n#;
-				$varstr = qq#Data::Dumper->Dump([\$\$sp],['DUMP'])#;
-			}
 			if ($root || $path) {
 				$code .= qq#${indent}\{\n${indent}  my \$sp = \$sp;\n#;
 			}
@@ -268,12 +392,25 @@ EOM
 					var => $var,
 				);
 			}
+			if (defined $default) {
+				$varstr = qq#defined $varstr ? $varstr : '$default'#;
+			}
 			if (uc $type eq 'VAR') {
-				if (uc $escape eq 'HTML') {
-					$code .= qq#${indent}\$OUT .= \$t->escape_html($varstr);\n#;
-				}
-				elsif (uc $escape eq 'URI') {
-					$code .= qq#${indent}\$OUT .= \$t->escape_uri($varstr);\n#;
+				if ($escape) {
+					$escape = uc $escape;
+					my @escapes = split m/\|/, $escape;
+					for (@escapes) {
+						if ($_ eq 'HTML') {
+							$varstr = qq#\$t->escape_html($varstr)#;
+						}
+						elsif ($_ eq 'URL') {
+							$varstr = qq#\$t->escape_uri($varstr)#;
+						}
+						elsif ($_ eq 'DUMP') {
+							$varstr = qq#\$t->dump($varstr)#;
+						}
+					}
+					$code .= qq#${indent}\$OUT .= $varstr;\n#;
 				}
 				else {
 					#$code .= qq#print STDERR "<<<<<<<<<<< $var\\n";\n\# line 1000\n#;
@@ -286,7 +423,7 @@ EOM
 		}
 
 		# --------- TMPL_WITH
-		elsif (m#${start_re}WITH (?:NAME=)?(['"]?)($var_re)\1$end_re#i) {
+		elsif (m#${start_re}WITH\s+(?:NAME=)?(['"]?)($var_re)\1\s*$end_re#i) {
 			push @$stack, TWITH;
 			$level++;
 			my $var = $2;
@@ -300,7 +437,7 @@ EOM
 		}
 
 		# --------- TMPL_LOOP
-		elsif (m#${start_re}LOOP (?:NAME=)?(['"]?)($var_re)\1$end_re#i) {
+		elsif (m#${start_re}LOOP\s+(?:NAME=)?(['"]?)($var_re)\1\s*$end_re#i) {
 			push @$stack, TLOOP;
 			my $var = $2;
 			my $varstr = $self->_make_path(
@@ -317,9 +454,9 @@ ${indent}  # loop over $var
 ${indent}  for my \$ix (\$[..\$size) {
 ${indent}    my \$sp = \\ (${varstr}->[\$ix]);
 EOM
-			if ($self->_loop_context) {
+			if ($self->getLoop_context) {
 			$code .= <<EOM;
-${indent}    local \$__counter__ = \$ix;
+${indent}    local \$__counter__ = \$ix+1;
 ${indent}    local \$__first__   = \$ix == \$[;
 ${indent}    local \$__last__    = \$ix == \$size;
 ${indent}    local \$__odd__     = \$ix % 2;
@@ -329,7 +466,7 @@ EOM
 		}
 
 		# --------- TMPL_ELSE
-		elsif (m#${start_re}ELSE *$end_re#i) {
+		elsif (m#${start_re}ELSE\s*$end_re#i) {
 			# we can only have an open if or unless
 			$self->_checkstack($fname,$line,$stack, TELSE);
 			my $indent = "  " x ($level-1);
@@ -337,7 +474,7 @@ EOM
 		}
 
 		# --------- / TMPL_IF TMPL UNLESS TMPL_WITH
-		elsif (m#$close_re(IF|UNLESS|WITH)(?: $var_re)?$end_re#i) {
+		elsif (m#$close_re(IF|UNLESS|WITH)(?:\s+$var_re)?\s*$end_re#i) {
 			$self->_checkstack($fname,$line,$stack, "$1");
 			pop @$stack;
 			$level--;
@@ -346,9 +483,10 @@ EOM
 		}
 
 		# --------- / TMPL_LOOP
-		elsif (m#${close_re}LOOP(?: $var_re)? *$end_re#i) {
+		elsif (m#${close_re}LOOP(?:\s*$var_re\s*)?\s*$end_re#i) {
 			$self->_checkstack($fname,$line,$stack, TLOOP);
 			pop @$stack;
+			$level--;
 			$level--;
 			my $indent = "  " x $level;
 			$code .= <<EOM;
@@ -357,7 +495,7 @@ ${indent}} # end loop
 EOM
 		}
 		# --------- TMPL_IF TMPL UNLESS TMPL_ELSE
-		elsif (m#$start_re(ELSIF|IF|UNLESS) (?:NAME=)?(['"]?)($var_re)\2$end_re#i) {
+		elsif (m#$start_re(ELSIF|IF|UNLESS)\s+(?:NAME=)?(['"]?)($var_re)\2\s*$end_re#i) {
 			my $type = $1;
 			my $var = $3;
 			my $varstr = $self->_make_path(
@@ -380,40 +518,44 @@ EOM
 ${indent}$if($varstr) {
 EOM
 		}
-		elsif (m#${start_re}INCLUDE (?:NAME=)?(['"]?)([^'">]+)\1$end_re#i) {
+		elsif (m#${start_re}INCLUDE\s+(?:NAME=)?(['"]?)([^'">]+)\1\s*$end_re#i) {
 			my $filename = $2;
-			$filename = $self->path().$filename;
+			#$filename = $self->getPath().'/'.$filename;
+			my $path = $self->getPath();
 			# generate included template
 			{
-				#print "FILE: $filename!!\n";
-				my $cached_or_new = $self->cached_or_new($filename, $self->cache_dir);
+				D && $self->log("compile include $filename!!");
+				my $cached_or_new = $self->clone_init($path, $filename, $self->getCache_dir);
 			}
-			my $cache = $self->cache_dir;
+			my $cache = $self->getCache_dir;
 			$code .= <<EOM;
 ${indent}\{
-${indent}  my \$sub = \$t->cached_or_new("$filename", "$cache")->perl;
-${indent}  \$OUT .= \$sub->(\$t, \$\$sp);
+${indent}  my \$new = \$t->clone_init('$path','$filename', '$cache');
+${indent}  \$OUT .= \$new->getPerl()->(\$new,\$\$sp);
 ${indent}}
 EOM
 
 		}
 		else {
-			$_ = qq#q~$_~#;
-			s#^q~~.##;
-			s#.q~~##;
-			$code .= qq#$indent\$OUT .= $_;\n#;
+			if (length $_) {
+				s/\\/\\\\/g;
+				s/'/\\'/g;
+				#$_ = qq#q~$_~#;
+				#s#^q~~.##;
+				#s#.q~~##;
+				#$code .= qq#$indent\$OUT .= $_;\n#;
+				$code .= qq#$indent\$OUT .= '$_';\n#;
+			}
 		}
 		
 	}
 	$code .= "\n} # end of sub\n";
-	print $code if $self->debug;
+	print STDERR $code if $self->getDebug;
 	my $sub = eval $code;
 	die "code: $@" if $@;
 	return $code, $sub;
 	
 }
-use constant PATH_METHOD => 1;
-use constant PATH_DEREF => 2;
 sub _make_path {
 	my ($self, %args) = @_;
 	my $root = 0;
@@ -433,10 +575,10 @@ sub _make_path {
 			push @paths, '['.PATH_METHOD.",'$p']";
 		}
 		elsif ($p =~ s/^\Q$args{deref}//) {
-			push @paths, '['.PATH_DEREF.",'".($self->_case_insensitive?uc $p:$p)."']";
+			push @paths, '['.PATH_DEREF.",'".($self->getCase_sensitive?$p:uc$p)."']";
 		}
 		else {
-			push @paths, '['.PATH_DEREF.", '".($self->_case_insensitive?uc $p:$p)."']";
+			push @paths, '['.PATH_DEREF.", '".($self->getCase_sensitive?$p:uc$p)."']";
 		}
 	}
 	local $" = ",";
@@ -487,81 +629,15 @@ sub _walkpath {
 		die "'TMPL_$check' does not match opening tag ($stack->[-1]) at $fname line $line\n";
 	}
 }
+sub escape_filename {
+	my ($t, $f) = @_;
+	$f =~ s#([/:\\])#'%'.uc sprintf"%02x",ord $1#ge;
+	return $f;
+}
 
 sub cache {
-	my $self = shift;
-	my ($sub, $code, $filename) = @_;
-	#my $sub = $self->perl;
-	my $cache = $self->cache_dir;
-	$self->add_sub($filename, $cache, $sub);
-	if (defined $cache && -d $cache) {
-		$self->lock;
-		my $main = "$cache/HTC-Main.pm"; # TODO File::Spec
-		unless (-f $main) {
-			my $code = $self->_maincode;
-			open my $fh, ">$main" or die $!;
-			print $fh $code;
-			close $fh;
-			require $main;
-			die "code: $@" if $@;
-			$HTML::Template::Compiled::main::root = $cache;
-			#print "HTC-Main.pm generated\n";
-		}
-		my $plfile;
-		my $trfile = $filename;
-		$trfile =~ s#^./##; # TODO File::Spec
-		$trfile =~ tr#/#:#; # TODO File::Spec
-		$plfile = $trfile;
-		{
-			open my $fh, "+<", $main or die $!;
-			while (<$fh>) {
-				last if m/^__DATA__$/;
-			}
-			my $pos = tell $fh;
-			my $found;
-			my @files;
-			while (<$fh>) {
-				chomp;
-				$found = 1 if $_ eq $plfile;
-				push @files, "$_\n";
-			}
-			seek $fh, $pos, SEEK_SET;
-			truncate $fh, $pos;
-			print $fh @files;
-			print $fh "$plfile\n" unless $found;
-			close $fh;
-		}
-		my @times = $self->_checktimes($filename);
-		open my $fh, ">$cache/$plfile.pl" or die $!; # TODO File::Spec
-		print $fh <<EOM;
-		package HTML::Template::Compiled;
-# file date $times[LMTIME()]
-\$HTML::Template::Compiled::main::hash{"$cache"}->{"$filename"}->{mtime} = $times[MTIME()];
-# last checked date $times[LCHECKED()]
-\$HTML::Template::Compiled::main::hash{"$cache"}->{"$filename"}->{checked} = $times[CHECKED()];
-\$HTML::Template::Compiled::main::hash{"$cache"}->{"$filename"}->{sub} = 
-$code
-;
- 1;
-EOM
-		#print "$cache/$plfile.pl generated\n";
-		$self->unlock;
-	}
-
 }
 
-sub escape_html {
-	my ($self, $var) = @_;
-	my $new = $var;
-	# we have to do this cause HTML::Entities changes its arg
-	# doesn't do that in the latest version and i'm not sure
-	# how it behaved before
-	HTML::Entities::encode_entities($new);
-	return $new;
-}
-sub escape_uri {
-	return URI::Escape::uri_escape($_[1]);
-}
 
 sub _checktimes {
 	my	$self = shift;
@@ -569,67 +645,31 @@ sub _checktimes {
 	#print STDERR "_checktimes($filename)\n";
 	my $mtime = (stat $filename)[9];
 	#print STDERR "stat $filename = $mtime\n";
-
 	my $checked = time;
 	my $lmtime = localtime $mtime;
 	my $lchecked = localtime $checked;
 	return ($mtime, $checked, $lmtime, $lchecked);
 }
 
-sub _maincode {
+sub clone {
 	my ($self) = @_;
-	my $code;
-	return $code . 'package HTML::Template::Compiled::main;'.<<'EOM'."__DATA__\n";
-
-use strict;
-use warnings;
-
-use vars '$root';
-sub include {
-	my $t = shift;
-	while (<DATA>) {
-		chomp;
-		#warn "require ($root/$_.pl)";
-		require "$root/$_.pl";
-	}
-	my $dir = $t->cache_dir;
-	while (my ($key, $v) = each %{$HTML::Template::Compiled::main::hash{$dir}}) {
-		$t->add_sub($key, $dir, $v);
-	}
+	my $new = bless [@$self], ref $self;
+	$new;
 }
-1;
-EOM
+sub clone_init {
+	my ($self, $path,$filename,$file,$cache) = @_;
+	my $new = bless [@$self], ref $self;
+	$new->setFilename($filename);
+	$new->setPath($path);
+	#$new->setFile($new->createFilename($path,$filename));
+	$new = $new->create;
+	$new;
 }
-sub lock {
-	my $file = $_[0]->cache_dir . "/lock"; # TODO File::Spec
-	unless (-f $file) {
-		open LOCK, ">$file";
-		close LOCK;
-	}
-	open LOCK, "+<$file";
-	flock LOCK, LOCK_EX;
-}
-sub unlock {
-	close LOCK;
-}
-
 {
 	my %cache;
-	sub add_sub {
-		my ($self,$file, $dir, $code) = @_;
-		#print "add_sub($self,$file, $dir, $code)\n";
-		$dir = "" unless defined $dir;
-		$dir ||= "";
-		$cache{$dir}->{$file} = $code;
-	}
-	sub cached {
-		#print Dumper \%cache;
-		my ($self,$file, $dir) = @_;
-		$dir = "" unless defined $dir;
-		return $cache{$dir}->{$file};
-	}
+	my %objects;
 	sub clear_cache {
-		my $dir = $_[0]->cache_dir;
+		my $dir = $_[0]->getCache_dir;
 		$cache{$dir} = {};
 	}
 }
@@ -638,8 +678,13 @@ sub param {
 	unless (@_) {
 		return $self->[PARAM];
 	}
+	if (@_ == 1) {
+		# feed a hashref or object
+		$self->[PARAM] = $_[0];
+		return;
+	}
 	my %p = @_;
-	if ($self->_case_insensitive) {
+	if (!$self->getCase_sensitive) {
 		my $uc = $self->uchash({%p});
 		%p = %$uc;
 	}
@@ -671,10 +716,80 @@ sub uchash {
 sub output {
 	my $self = shift;
 	my $p = $self->param;
-	my $f = $self->filename;
-	#print STDERR "+++++++++++++++++++++++++++++ FILENAME $f\n";
-	$self->perl()->($self,$p);
+	my $f = $self->getFile;
+	$self->getPerl()->($self,$p);
 }
+
+sub lock {
+	my $file = $_[0]->getCache_dir . "/lock"; # TODO File::Spec
+	unless (-f $file) {
+		open LOCK, ">$file";
+		close LOCK;
+	}
+	open LOCK, "+<$file";
+	flock LOCK, LOCK_EX;
+}
+sub unlock {
+	close LOCK;
+}
+sub escape_html {
+	my ($self, $var) = @_;
+	my $new = $var;
+	# we have to do this cause HTML::Entities changes its arg
+	# doesn't do that in the latest version and i'm not sure
+	# how it behaved before
+	HTML::Entities::encode_entities($new);
+	return $new;
+}
+sub escape_uri {
+	return URI::Escape::uri_escape($_[1]);
+}
+
+sub __test_version {
+	my $v = __PACKAGE__->VERSION;
+	return 1 if $version_pod =~ m/VERSION.*\Q$v/;
+	return;
+}
+
+sub stack {
+	return unless D;
+	my ($self) = @_;
+	my $i = 0;
+	my $out;
+	while(my @c = caller($i)) {
+		$out .= "$i\t$c[0] l .$c[2] $c[3]\n";
+		$i++;
+	}
+	print STDERR $out;
+}
+sub log {
+	return unless D;
+	my ($self, @msg) = @_;
+	my @c = caller();
+	my @c2 = caller(1);
+	print STDERR "----------- ($c[0] line $c[2] $c2[3])\n";
+	for (@msg) {
+		if (!defined $_) {
+			print STDERR "---  UNDEF\n";
+		}
+		elsif (!ref $_) {
+			print STDERR "--- $_\n";
+		}
+		else {
+			if (ref $_ eq __PACKAGE__) {
+				print STDERR "DUMP HTC\n";
+				for my $m (qw(file perl)) {
+					my $s = "get".ucfirst$m;
+					print STDERR "\t$m:\t",$_->$s||"UNDEF","\n";
+				}
+			}
+			else {
+				print STDERR "--- DUMP ---: ".Dumper $_;
+			}
+		}
+	}
+}
+
 
 
 1;
@@ -705,7 +820,7 @@ __END__
 HTML::Template::Compiled (HTC) is a template system which uses the same
 template syntax as HTML::Template and the same perl API. Internally
 it works different, because it turns the template into perl code,
-and once that is done, generating the output is much quicker (20 times)
+and once that is done, generating the output is much quicker (5 times)
 than with HTML::Template (at least with my tests). It also can generate
 perl files so that the next time the template is loaded it doesn't have to
 be parsed again. The best performance gain is probably reached in
@@ -732,7 +847,9 @@ the last opening tag. To get the line number, set the line_numbers-option
 
 =item HTML_TEMPLATE_ROOT
 
-=item ESCAPE=(HTML|URI)
+=item ESCAPE=(HTML|URL)
+
+=item DEFAULT=...
 
 =item C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>
 
@@ -740,7 +857,7 @@ the last opening tag. To get the line number, set the line_numbers-option
 
 =item case insensitive var names
 
-use option case_insensitive => 1 to use this feature
+use option case_sensitive => 0 to use this feature
 
 =back
 
@@ -765,7 +882,7 @@ see L<"RENDERING OBJECTS">
 =item asp/jsp-like templates
 
 For those who like it (i like it because it is shorter than TMPL_), you
-can use <% %> tags and the <%= tag instead of <%VAR (which will work, too):
+can use E<lt>% %E<gt> tags and the E<lt>%= tag instead of E<lt>%VAR (which will work, too):
 
  <%IF blah%>  <%= VARIABLE%>  <%/IF>
 
@@ -790,6 +907,13 @@ I don't think I'll implement that in the near future.
 
 =back
 
+=head2 ESCAPING
+
+Like in HTML::Template, you have C<ESCAPE=HTML> and C<ESCAPE=URL>. (C<ESCAPE=1> will follow.)
+Additionally you have C<ESCAPE=DUMP>, which by default will generate a Data::Dumper output.
+You can change that output by setting a different dumper function, see L<"OPTIONS"> dumper.
+
+You can also chain different escapings, like C<ESCAPE=DUMP|HTML>.
 
 =head2 VARIABLE ACCESS
 
@@ -863,12 +987,14 @@ And please don't set deref and method call to the same value - this won't work.
 For printing out the contents of all the parameters you can do:
 
   <TMPL_LOOP ALBUMS>
-  Dump: <TMPL_VAR _>
+  Dump: <TMPL_VAR _ ESCAPE=DUMP|HTML>
   </TMPL_LOOP>
 
-The special name C<_> will give you a Data::Dumper output of the
+The special name C<_> gives you the current parameter and C<ESCAPE=DUMP>
+will by default generate a Data::Dumper output of the
 current variable, in this case it will dump out the contents of every
-album in a loop.
+album in a loop. To correctly display that in html C<|HTML> will escape html
+entities.
 
 =head2 TMPL_WITH
 
@@ -883,7 +1009,7 @@ then you need only one level. Compare:
   <TMPL_VAR DEEP.PATH.TO.HASH.NAME>: <TMPL_VAR DEEP.PATH.TO.HASH.AGE>
 
 
-=head2 Options
+=head2 OPTIONS
 
 =over 4
 
@@ -922,11 +1048,23 @@ the moment:
 For debugging: prints the line number of the wrong tag, e.g. if you have
 a /TMPL_IF that does not have an opening tag.
 
-=item case_insensitive
+=item case_sensitive
 
-default is 0, set it to 1 to use this feature like in HTML::Template. Note that
-this can slow down your program
+default is 1, set it to 0 to use this feature like in HTML::Template. Note that
+this can slow down your program.
 
+=item dumper
+
+  my $t = HTML::Template::Compiled->new(
+    ...
+    dumper = sub { my_cool_dumper($_[0]) },
+  );
+  ---
+  <TMPL_VAR var ESCAPE=DUMP>
+ 
+
+This will call C<my_cool_dumper()> on C<var>.
+ 
 =back
 
 =head1 EXPORT
@@ -937,7 +1075,7 @@ None.
 
 You create a template almost like in HTML::Template:
 
-  my $t1 = HTML::Template::Compiled->new(
+  my $t = HTML::Template::Compiled->new(
     path => 'templates',
     loop_context_vars => 1,
     filename => 'test.html',
@@ -960,11 +1098,12 @@ code.
 =head1 TODO
 
 Better access to cached perl files,
-scalarref, filehandle, debugging option, filters, query, using
-File::Spec for portability, fixing HTC-Main.pm, maybe implement
-expressions, ...
+scalarref, filehandle, filters, query, using
+File::Spec for portability, maybe implement expressions, ...
 
 =head1 BUGS
+
+At the moment files with no newline at the end of the last line aren't correctly parsed.
 
 Probably many more bugs I don't know yet =)
 
@@ -996,7 +1135,7 @@ Tina Mueller
 
 =head1 CREDITS
 
-Bjoern Kriews (Original Idea)
+Bjoern Kriews for original idea and contributions
 
 Ronnie Neumann, Martin Fabiani for ideas and beta-testing
 
