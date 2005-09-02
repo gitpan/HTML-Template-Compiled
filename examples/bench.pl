@@ -1,11 +1,18 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.9 2005/08/22 20:26:48 tina Exp $
+# $Id: bench.pl,v 1.12 2005/09/02 00:02:04 tina Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
 my $count = 0;
 my $ht_file = 'test.htc';
+#$ht_file = 'test.htc.10';
 #$ht_file = 'test.htc.20';
+my $tt_file = "examples/test.tt";
+#$tt_file = "examples/test.tt.10";
+#$tt_file = "examples/test.tt.20";
+mkdir "cache";
+mkdir "cache/htc";
+mkdir "cache/jit";
 my %use = (
 	'HTML::Template' => 0,
 	'HTML::Template::Compiled' => 0,
@@ -53,7 +60,7 @@ sub new_htj {
 		#path => 'examples',
 		filename => $ht_file,
 		cache => 1,
-		jit_path => '/tmp/jit',
+		jit_path => 'cache/jit',
 	);
 	return $t2;
 }
@@ -85,6 +92,7 @@ my %params = (
 	if3 => 0,
 	blubber => "html <test>",
 );
+open OUT, ">>/dev/null";
 sub output {
 	my $t = shift;
 	return unless defined $t;
@@ -92,15 +100,16 @@ sub output {
 	$t->param(%params);
 	#print $t->{code} if exists $t->{code};
 	my $out = $t->output;
+	print OUT $out;
 	#print "\nOUT: $out";
 }
-open TT_OUT, ">>/dev/null";
 #open TT_OUT, ">&STDOUT";
 sub output_tt {
 	my $t = shift;
 	return unless defined $t;
-	my $filett = "examples/test.tt";
-	$t->process($filett, \%params, \*TT_OUT);
+	my $filett = $tt_file;
+	$t->process($filett, \%params, \*OUT);
+	#$t->process($filett, \%params) or die $t->error();
 	#print $t->{code} if exists $t->{code};
 	#my $out = $t->output;
 	#print "\nOUT: $out";

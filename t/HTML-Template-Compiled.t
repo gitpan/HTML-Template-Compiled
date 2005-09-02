@@ -1,13 +1,13 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: HTML-Template-Compiled.t,v 1.16 2005/08/27 10:08:26 tina Exp $
+# $Id: HTML-Template-Compiled.t,v 1.18 2005/09/01 23:25:28 tina Exp $
 
 #########################
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use lib 'blib/lib';
-use Test::More tests => 7;
+use Test::More tests => 8;
 BEGIN { use_ok('HTML::Template::Compiled') };
 $HTML::Template::Compiled::NEW_CHECK = 2;
 use Fcntl qw(:seek);
@@ -44,7 +44,8 @@ my $hash = {
 };
 sub HTC::Test::key { return $_[0]->{"_key"} }
 
-mkdir "cache" or die "could not create cache dir: $!";
+my $cache = File::Spec->catfile('t', 'cache');
+mkdir $cache unless -d $cache;
 my %args = (
 	path => 't',
 	#case_insensitive => 1,
@@ -56,7 +57,7 @@ my %args = (
 	deref => '.',
 	debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
 	# for testing without cache comment out
-	cache_dir => "cache",
+	cache_dir => $cache,
 	dumper => sub {Data::Dumper->Dump([$_[0]],['DUMP'])},
 );
 sleep 2;
@@ -67,7 +68,8 @@ eval { require HTML::Entities };
 my $entities = $@ ? 0 : 1;
 eval { require URI::Escape };
 my $uri = $@ ? 0 : 1;
-if ($entities && $uri) {
+SKIP: {
+	skip "no HTML::Entities and URI::Escape installed", 3, unless ($entities && $uri);
 	my $out = $htc->output;
 	my $exp = <<EOM;
 <a href="/path/to/script.pl?lang=de">Start</a><br>
@@ -125,18 +127,27 @@ EOM
 	print $fh $txt;
 	close $fh;
 }
-else {
-	# we don't have the escaping modules, can't test
-	ok(1, "dummy test");
+eval { require HTML::Template::Compiled::Plugin::DHTML };
+my $dhtml = $@ ? 0 : 1;
+SKIP: {
+	skip "no DHTML installed", 1 unless $dhtml;
+	my $htc = HTML::Template::Compiled->new(
+		filename => "t/dhtml.htc",
+		dumper => 'DHTML',
+	);
+	$htc->param(%$hash);
+	my $out = $htc->output;
+	print $out;
+	ok($out =~ m/data_treedumper_dhtml/);
 }
 my $wrong;
 eval {
-$wrong = HTML::Template::Compiled->new(
-	path => 't',
-	line_numbers => 1,
-	filename => 'wrong.html',
-	debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
-	);
+	$wrong = HTML::Template::Compiled->new(
+		path => 't',
+		line_numbers => 1,
+		filename => 'wrong.html',
+		debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
+		);
 };
 print "err: $@\n" unless $ENV{HARNESS_ACTIVE};
 ok($@, "wrong template");

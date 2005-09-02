@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.34 2005/08/27 10:08:38 tina Exp $
+# $Id: Compiled.pm,v 1.36 2005/09/01 23:50:08 tina Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,18 +9,20 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.41";
+our $VERSION = "0.42";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.41";
+our $VERSION = "0.42";
 use Data::Dumper; $Data::Dumper::Indent = 1; $Data::Dumper::Sortkeys = 1;
 use strict;
 use warnings;
 
 use Fcntl qw(:seek :flock);
 use File::Spec;
+use HTML::Template::Compiled::Utils qw(:walkpath);
+# TODO
 eval {
 	require HTML::Entities;
 	require URI::Escape;
@@ -44,6 +46,7 @@ use constant TELSE => 'ELSE';
 use constant TLOOP => 'LOOP';
 use constant TWITH => 'WITH';
 
+# TODO
 my $start_re = $ENABLE_ASP ? '(?i:<TMPL_|<!--\s*TMPL_|<%)' : '(?i:<TMPL_|<!--\s*TMPL_)';
 my $end_re = $ENABLE_ASP ? '(?:>|\s*-->|%>)' : '(?:>|\s*-->)';
 my $tmpl_re = $ENABLE_ASP ?
@@ -51,9 +54,6 @@ my $tmpl_re = $ENABLE_ASP ?
 	'(?i:</?TMPL.*?>|<!--\s*/?TMPL_.*?\s*-->)';
 my $close_re = $ENABLE_ASP ? '(?i:</TMPL_|<!--\s*/TMPL_|<%/)' : '(?i:</TMPL_|<!--\s*/TMPL_)';
 my $var_re = '(?:[\w./]+|->)+';
-
-use constant PATH_METHOD => 1;
-use constant PATH_DEREF => 2;
 
 # options / object attributes
 use constant PARAM => 14;
@@ -141,8 +141,9 @@ sub fromCache {
 		my ($self, %args) = @_;
 		my $dir = $self->getCache_dir;
 		$dir = '' unless defined $dir;
-		my $cached = $cache->{$dir}->{$self->getFilename};
-		my $times = $times->{$dir}->{$self->getFilename};
+		my $fname = $self->getFilename;
+		my $cached = $cache->{$dir}->{$fname};
+		my $times = $times->{$dir}->{$fname};
 		if ($cached && $self->uptodate($times)) {
 			return $cached;
 		}
@@ -153,9 +154,10 @@ sub fromCache {
 		my ($self, %times) = @_;
 		my $dir = $self->getCache_dir;
 		$dir = '' unless defined $dir;
-		D && $self->log("addCache ".$self->getFilename);
-		$cache->{$dir}->{$self->getFilename} = $self;
-		$times->{$dir}->{$self->getFilename} = \%times;
+		my $fname = $self->getFilename;
+		D && $self->log("addCache ".$fname);
+		$cache->{$dir}->{$fname} = $self;
+		$times->{$dir}->{$fname} = \%times;
 	}
 }
 sub compile {
@@ -273,6 +275,12 @@ sub uptodate {
 sub dump {
 	my ($self, $var) = @_;
 	if (my $sub = $self->getDumper()) {
+		unless (ref $sub) {
+			# we have a plugin
+			$sub =~ tr/0-9a-zA-Z//cd; # allow only words
+			my $class = "HTML::Template::Compiled::Plugin::$sub";
+			$sub = \&{$class . '::dumper'};
+		}
 		return $sub->($var);
 	}
 	else {
@@ -1064,7 +1072,20 @@ this can slow down your program.
  
 
 This will call C<my_cool_dumper()> on C<var>.
+
+Alternatevily you can use the DHTML plugin which is using C<Data::TreeDumper> and
+C<Data::TreeDumper::Renderer::DHTML>. You'll get a  dumper like output which you can
+collapse and expand, for example. See L<Data::TreeDumper> and L<Data::TreeDumper::Renderer::DHTML> for
+more information.
+Example:
+
+  my $t = HTML::Template::Compiled->new(
+    ...
+    dumper = 'DHTML',
+  );
  
+test.
+
 =back
 
 =head1 EXPORT
