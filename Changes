@@ -1,5 +1,9 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.43 Wed Sep  7 21:11:28 CEST 2005
+- scalarref
+- filehandle
+
 0.42 Fri Sep  2 01:51:14 CEST 2005
 - add: HTML::Template::Compiled::Plugin::DHTML
 

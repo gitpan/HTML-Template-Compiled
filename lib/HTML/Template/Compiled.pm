@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.36 2005/09/01 23:50:08 tina Exp $
+# $Id: Compiled.pm,v 1.41 2005/09/07 21:47:26 tina Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,13 +9,14 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.42";
+our $VERSION = "0.43";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.42";
+our $VERSION = "0.43";
 use Data::Dumper; $Data::Dumper::Indent = 1; $Data::Dumper::Sortkeys = 1;
+use constant D => 0;
 use strict;
 use warnings;
 
@@ -24,6 +25,7 @@ use File::Spec;
 use HTML::Template::Compiled::Utils qw(:walkpath);
 # TODO
 eval {
+	require Digest::MD5;
 	require HTML::Entities;
 	require URI::Escape;
 };
@@ -34,7 +36,6 @@ $NEW_CHECK = 60 * 10; # 10 minutes default
 $UNDEF = ''; # set for debugging
 $ENABLE_ASP = 1;
 
-use constant D => 0;
 use constant MTIME => 0;
 use constant CHECKED => 1;
 use constant LMTIME => 2;
@@ -56,12 +57,12 @@ my $close_re = $ENABLE_ASP ? '(?i:</TMPL_|<!--\s*/TMPL_|<%/)' : '(?i:</TMPL_|<!-
 my $var_re = '(?:[\w./]+|->)+';
 
 # options / object attributes
-use constant PARAM => 14;
+use constant PARAM => 15;
 
 {
 	my @map = qw(
-		filename debug file source perl cache_dir path loop_context
-	 	line_numbers case_sensitive dumper method_call deref cache);
+		filename debug file scalarref perl cache_dir path loop_context
+	 	line_numbers case_sensitive dumper method_call deref cache filehandle);
 	for my $i (0..$#map) {
 		my $method = ucfirst $map[$i];
 		my $get = sub { return $_[0]->[$i] };
@@ -79,6 +80,7 @@ sub new {
 	$args{path} ||= $ENV{'HTML_TEMPLATE_ROOT'} || '';
 	#print "PATH: $args{path}!!\n";
 	if ($args{perl}) {
+		D && $self->log("new(perl) filename: $args{filename}");
 		# we have perl code already!
 		$self->init(%args);
 		$self->setPerl($args{perl});
@@ -90,7 +92,8 @@ sub new {
 		$self->setFile($file);
 		return $self;
 	}
-	if (my $filename = $args{filename}) {
+	if (my $filename = $args{filename} or $args{scalarref} or $args{filehandle}) {
+		D && $self->log("new()");
 		my $t = $self->create(%args);
 		return $t;
 	}
@@ -98,39 +101,70 @@ sub new {
 
 sub create {
 	my ($self, %args) = @_;
+	#D && $self->log("create(filename=>$args{filename})");
 	D && $self->stack;
 	if (%args) {
 		$self->setCache(exists $args{cache}?$args{cache}:1);
-		$self->setFilename($args{filename});
 		$self->setCache_dir($args{cache_dir});
-		$self->setPath($args{path});
+		if ($args{filename}) {
+			$self->setFilename($args{filename});
+			D && $self->log("filename: ".$self->getFilename);
+			$self->setPath($args{path});
+		}
+		elsif ($args{scalarref}) {
+			$self->setScalarref($args{scalarref});
+			my $text = $self->getScalarref;
+			my $md5 = Digest::MD5::md5_base64($$text);
+			D && $self->log("md5: $md5");
+			$self->setFilename($md5);
+			$self->setPath(defined $args{path} ? $args{path} : '');
+		}
+		elsif ($args{filehandle}) {
+			$self->setFilehandle($args{filehandle});
+			$self->setCache(0);
+		}
 	}
 	else {
 		#my $file = $self->createFilename($self->getPath,$self->getFilename);
 		#$self->setFile($file);
 	}
+	D && $self->log("trying fromCache()");
 	my $t = $self->fromCache();
 	return $t if $t;
+	D && $self->log("tried fromCache()");
+	#D && $self->log("tried fromCache() filename=".$self->getFilename);
 	# ok, seems we have nothing in cache, so compile
-	my $file = $self->createFilename($self->getPath,$self->getFilename);
-	$self->setFile($file);
+	my $fname = $self->getFilename;
+	if (defined $fname and !$self->getScalarref and !$self->getFilehandle) {
+		#D && $self->log("tried fromCache() filename=".$fname);
+		my $file = $self->createFilename($self->getPath,$fname);
+		D && $self->log("setFile $file ($fname)");
+		$self->setFile($file);
+	}
+	elsif (defined $fname) {
+		$self->setFile($fname);
+	}
 	$self->init(%args) if %args;
+	D && $self->log("compiling... ".$self->getFilename);
 	$self->compile();
 	return $self;
 }
 sub fromCache {
 	my ($self) = @_;
 	my $t;
+	D && $self->log("fromCache() filename=".$self->getFilename);
 	# try to get memory cache
 	if ($self->getCache) {
 		$t = $self->fromMemCache();
 		return $t if $t;
 	}
+	D && $self->log("fromCache() 2 filename=".$self->getFilename);
 	# not in memory cache, try file cache
 	if ($self->getCache_dir) {
 		$t = $self->include();
 		return $t if $t;
 	}
+	D && $self->log("fromCache() 3 filename=".$self->getFilename);
 	return;
 }
 
@@ -163,24 +197,47 @@ sub fromCache {
 sub compile {
 	my ($self) = @_;
 	#my $file = $self->createFilename($self->getPath,$self->getFilename);
-	my $file = $self->getFile;
-	#$self->setFile($file);
-	#$self->log("compile $file");
-	my @times = $self->_checktimes($self->getFile);
-	my $text = $self->_readfile($file);
-	my ($source,$compiled) = $self->_compile($text,$file);
-	$self->setPerl($compiled);
-	$self->addCache(
-		checked=>time,
-		mtime => $times[MTIME],
-	);
-	D && $self->log("compiled $file");
-	if ($self->getCache_dir) {
-		D && $self->log("addFileCache($file)");
-		$self->addFileCache($source,
-			checked=>time,
+	my ($source, $compiled);
+	if (my $file = $self->getFile and !$self->getScalarref) {
+		D && $self->log("compile from file ".$self->getFile);
+		#$self->setFile($file);
+		#$self->log("compile $file");
+		my @times = $self->_checktimes($file);
+		my $text = $self->_readfile($file);
+		my ($source,$compiled) = $self->_compile($text,$file);
+		$self->setPerl($compiled);
+		$self->addCache(
+			checked => time,
 			mtime => $times[MTIME],
 		);
+		D && $self->log("compiled $file");
+		if ($self->getCache_dir) {
+			D && $self->log("addFileCache($file)");
+			$self->addFileCache($source,
+				checked => time,
+				mtime => $times[MTIME],
+			);
+		}
+	}
+	elsif (my $text = $self->getScalarref) {
+		my $md5 = $self->getFilename; # yeah, weird
+		D && $self->log("compiled $md5");
+		my ($source,$compiled) = $self->_compile($$text,$md5);
+		$self->setPerl($compiled);
+		if ($self->getCache_dir) {
+			D && $self->log("addFileCache($file)");
+			$self->addFileCache($source,
+				checked => time,
+				mtime => time,
+			);
+		}
+	}
+	elsif (my $fh = $self->getFilehandle) {
+		local $/;
+		my $data = <$fh>;
+		my ($source,$compiled) = $self->_compile($data,'');
+		$self->setPerl($compiled);
+		
 	}
 }
 sub addFileCache {
@@ -191,6 +248,7 @@ sub addFileCache {
 	my $filename = $self->getFilename;
 	my $lmtime = localtime $times{mtime};
 	my $lchecked = localtime $times{checked};
+	D && $self->log("addFileCache() $cache/$plfile");
 	open my $fh, ">$cache/$plfile.pl" or die $!; # TODO File::Spec
 	print $fh <<EOM;
 		package HTML::Template::Compiled;
@@ -245,16 +303,19 @@ sub include {
 sub createFilename {
 	my ($self,$path,$filename) = @_;
 	D && $self->log("createFilename($path,$filename)");
+	D && $self->stack;
 	if (!length $path or File::Spec->file_name_is_absolute($filename)) {
 		return $filename;
 	}
 	else {
+		D && $self->log("file: ".File::Spec->catfile($path, $filename));
 		return File::Spec->catfile($path, $filename);
 	}
 }
 
 sub uptodate {
 	my ($self, $times) = @_;
+	return 1 if $self->getScalarref;
 	my $now = time;
 	if ($now - $times->{checked} < $NEW_CHECK) {
 		return 1;
@@ -333,10 +394,11 @@ sub _compile {
 	my $level = 1;
 	my $code = '';
 	my $stack = [];
+	my $anon = D ? qq{local *__ANON__ = "htc_$fname";\n} : '';
 	$code .= <<"EOM";
 sub {
-	#local *__ANON__ = "htc_$fname";
 	my (\$t, \$p) = \@_;
+$anon
 	my \$OUT;
 	my \$sp = \\\$p;
 EOM
@@ -628,7 +690,6 @@ sub _walkpath {
 	);
 	sub _checkstack {
 		my ($self, $fname,$line, $stack, $check) = @_;
-		#print "_checkstack(@$stack, $check)\n";
 		my @allowed = @{ $map{$check} } or return 1;
 		die "Closing tag 'TMPL_$check' does not have opening tag at $fname line $line\n" unless @$stack;
 		for (@allowed) {
@@ -649,8 +710,8 @@ sub cache {
 
 sub _checktimes {
 	my	$self = shift;
+	D && $self->stack;
 	my $filename = shift;
-	#print STDERR "_checktimes($filename)\n";
 	my $mtime = (stat $filename)[9];
 	#print STDERR "stat $filename = $mtime\n";
 	my $checked = time;
@@ -665,8 +726,10 @@ sub clone {
 	$new;
 }
 sub clone_init {
-	my ($self, $path,$filename,$file,$cache) = @_;
+	#my ($self, $path,$filename,$file,$cache) = @_;
+	my ($self, $path,$filename,$cache) = @_;
 	my $new = bless [@$self], ref $self;
+	D && $self->log("clone_init($path,$filename,$cache)");
 	$new->setFilename($filename);
 	$new->setPath($path);
 	#$new->setFile($new->createFilename($path,$filename));
@@ -762,10 +825,10 @@ sub __test_version {
 sub stack {
 	return unless D;
 	my ($self) = @_;
-	my $i = 0;
+	my $i = 1;
 	my $out;
 	while(my @c = caller($i)) {
-		$out .= "$i\t$c[0] l .$c[2] $c[3]\n";
+		$out .= "$i\t$c[0] l. $c[2] $c[3]\n";
 		$i++;
 	}
 	print STDERR $out;
@@ -1033,6 +1096,17 @@ Path to caching directory (you have to create it before)
 
 Template to parse
 
+=item scalarref
+
+Reference to a scalar with your template content. It's possible to cache
+scalarrefs, too, if you have Digest::MD5 installed. Note that your cache directory
+might get filled with files from earlier versions. Clean the cache regularly.
+
+=item filehandle
+
+Filehandle which contains the template content. Note that HTC will not cache
+templates created like this.
+
 =item loop_context_vars
 
 Vars like C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>
@@ -1084,8 +1158,6 @@ Example:
     dumper = 'DHTML',
   );
  
-test.
-
 =back
 
 =head1 EXPORT
@@ -1118,9 +1190,8 @@ code.
 
 =head1 TODO
 
-Better access to cached perl files,
-scalarref, filehandle, filters, query, using
-File::Spec for portability, maybe implement expressions, ...
+Better access to cached perl files, filters, query, using
+File::Spec for portability, implement expressions, ...
 
 =head1 BUGS
 

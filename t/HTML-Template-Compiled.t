@@ -1,13 +1,13 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: HTML-Template-Compiled.t,v 1.18 2005/09/01 23:25:28 tina Exp $
+# $Id: HTML-Template-Compiled.t,v 1.21 2005/09/07 21:59:10 tina Exp $
 
 #########################
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use lib 'blib/lib';
-use Test::More tests => 8;
+use Test::More tests => 11;
 BEGIN { use_ok('HTML::Template::Compiled') };
 $HTML::Template::Compiled::NEW_CHECK = 2;
 use Fcntl qw(:seek);
@@ -64,6 +64,7 @@ sleep 2;
 my $htc = HTML::Template::Compiled->new(%args);
 ok($htc, "template created");
 $htc->param(%$hash);
+
 eval { require HTML::Entities };
 my $entities = $@ ? 0 : 1;
 eval { require URI::Escape };
@@ -127,7 +128,7 @@ EOM
 	print $fh $txt;
 	close $fh;
 }
-eval { require HTML::Template::Compiled::Plugin::DHTML };
+eval { require HTML::Template::Compiled::Plugin::DHTML; require Data::TreeDumper::Renderer::DHTML; };
 my $dhtml = $@ ? 0 : 1;
 SKIP: {
 	skip "no DHTML installed", 1 unless $dhtml;
@@ -137,8 +138,35 @@ SKIP: {
 	);
 	$htc->param(%$hash);
 	my $out = $htc->output;
-	print $out;
-	ok($out =~ m/data_treedumper_dhtml/);
+	ok($out =~ m/data_treedumper_dhtml/, 'DHTML plugin');
+}
+
+{
+	my $tmpl = File::Spec->catfile('t', 'include.html');
+	open my $fh, '<', $tmpl or die $!;
+	my $htc = HTML::Template::Compiled->new(
+		filehandle => $fh,
+	);
+	$htc->param(%$hash);
+	my $out = $htc->output;
+	#print STDERR "out: '$out'\n";
+	ok($out eq "INCLUDED: Hair of the Dog\n", "filehandle output");
+
+}
+
+eval { require Digest::MD5 };
+my $md5 = $@ ? 0 : 1;
+SKIP: {
+	skip "no Digest::MD5", 1 unless $md5;
+	my $text = qq{<TMPL_VAR .URITEST ESCAPE=URL>\n};
+	my $htc = HTML::Template::Compiled->new(
+		scalarref => \$text,
+		cache_dir => $cache,
+	);
+	ok($htc, "scalarref template");
+	$htc->param(%$hash);
+	my $out = $htc->output;
+	ok($out eq 'a%20b%20c%20%26%20d'.$/, "scalarref output");
 }
 my $wrong;
 eval {
