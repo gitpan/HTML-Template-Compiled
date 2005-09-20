@@ -1,5 +1,24 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.48 Tue Sep 20 23:54:56 CEST 2005
+- compatible via use statement
+
+0.47 Tue Sep 20 00:43:37 CEST 2005
+- output($fh)
+- filter
+
+0.46 Sat Sep 17 17:01:01 CEST 2005
+- minor internal issues
+- enable subref vars
+- fixed __odd__
+- recursive include limit, thanks sam
+
+0.45 Fri Sep 16 00:20:07 CEST 2005
+- param("var")
+
+0.44 Thu Sep  8 20:56:53 CEST 2005
+- arrayref
+
 0.43 Wed Sep  7 21:11:28 CEST 2005
 - scalarref
 - filehandle

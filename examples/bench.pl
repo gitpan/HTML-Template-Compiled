@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.12 2005/09/02 00:02:04 tina Exp $
+# $Id: bench.pl,v 1.3 2005/09/19 20:44:26 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -7,7 +7,7 @@ my $count = 0;
 my $ht_file = 'test.htc';
 #$ht_file = 'test.htc.10';
 #$ht_file = 'test.htc.20';
-my $tt_file = "examples/test.tt";
+my $tt_file = "test.tt";
 #$tt_file = "examples/test.tt.10";
 #$tt_file = "examples/test.tt.20";
 mkdir "cache";
@@ -41,6 +41,7 @@ sub new_htc {
 		# note that you have to create the cachedir
 		# first, otherwise it will run without cache
 		cache_dir => "cache/htc",
+		out_fh => 1,
 	);
 	return $t1;
 }
@@ -68,6 +69,7 @@ sub new_tt {
 	my $tt= Template->new(
 		COMPILE_EXT => '.ttc',
 		COMPILE_DIR => 'cache/tt',
+		INCLUDE_PATH => 'examples',
 	);
 }
 
@@ -93,13 +95,14 @@ my %params = (
 	blubber => "html <test>",
 );
 open OUT, ">>/dev/null";
+#open OUT, ">&STDOUT";
 sub output {
 	my $t = shift;
 	return unless defined $t;
 	$params{name} = (ref $t).' '.$count++;
 	$t->param(%params);
 	#print $t->{code} if exists $t->{code};
-	my $out = $t->output;
+	my $out = $t=~m/Compiled/?$t->output(\*OUT):$t->output;
 	print OUT $out;
 	#print "\nOUT: $out";
 }
@@ -108,8 +111,8 @@ sub output_tt {
 	my $t = shift;
 	return unless defined $t;
 	my $filett = $tt_file;
-	$t->process($filett, \%params, \*OUT);
-	#$t->process($filett, \%params) or die $t->error();
+	#$t->process($filett, \%params, \*OUT);
+	$t->process($filett, \%params, \*OUT) or die $t->error();
 	#print $t->{code} if exists $t->{code};
 	#my $out = $t->output;
 	#print "\nOUT: $out";

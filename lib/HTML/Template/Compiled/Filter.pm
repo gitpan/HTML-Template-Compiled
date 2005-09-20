@@ -1,0 +1,61 @@
+package HTML::Template::Compiled::Filter;
+# $Id: Filter.pm,v 1.2 2005/09/19 22:43:02 tinita Exp $
+$VERSION = "0.01";
+use strict;
+use warnings;
+
+use constant SUBS => 0;
+
+sub new {
+	my ($class, $spec) = @_;
+	if (ref $spec eq __PACKAGE__) {
+		return $spec;
+	}
+	my $self = [];
+	bless $self, $class;
+	$self->init($spec);
+	return $self;
+}
+
+sub init {
+	my ($self, $spec) = @_;
+	if (ref $spec eq 'CODE') {
+		$self->[SUBS] = [$spec];
+	}
+	elsif (ref $spec eq 'ARRAY') {
+		for my $filter (@$spec) {
+			push @{ $self->[SUBS] }, {
+				format => $filter->{format} || 'scalar',
+				code => $filter->{'sub'},
+			};
+		}
+	}
+}
+
+sub filter {
+	my ($self, $data) = @_;
+	for my $filter (@{ $self->[SUBS] }) {
+		if ($filter->{format} eq 'scalar') {
+			$filter->{code}->(\$data);
+		}
+		else {
+			my $lines = [split /(?:\n)/, $data];
+			$filter->{code}->($lines);
+			$data = join '', @$lines;
+		}
+	}
+	# inplace edit
+	$_[1] = $data;
+}
+
+1;
+__END__
+
+=pod
+
+=head1 NAME
+
+HTML::Template::Compiled::Filter - Filter functions for HTML::Template::Compiled
+
+=cut
+

@@ -1,20 +1,14 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: HTML-Template-Compiled.t,v 1.21 2005/09/07 21:59:10 tina Exp $
-
-#########################
-
-# change 'tests => 1' to 'tests => last_test_to_print';
+# $Id: 01_HTML-Template-Compiled.t,v 1.2 2005/09/19 20:55:24 tinita Exp $
 
 use lib 'blib/lib';
-use Test::More tests => 11;
+use Test::More tests => 12;
+use Data::Dumper;
+local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 BEGIN { use_ok('HTML::Template::Compiled') };
 $HTML::Template::Compiled::NEW_CHECK = 2;
 use Fcntl qw(:seek);
-
-ok(HTML::Template::Compiled->__test_version, "version ok");
-
-#########################
 
 # Insert your test code below, the Test::More module is use()ed here so read
 # its man page ( perldoc Test::More ) for help writing this test script.
@@ -168,15 +162,31 @@ SKIP: {
 	my $out = $htc->output;
 	ok($out eq 'a%20b%20c%20%26%20d'.$/, "scalarref output");
 }
-my $wrong;
-eval {
-	$wrong = HTML::Template::Compiled->new(
-		path => 't',
-		line_numbers => 1,
-		filename => 'wrong.html',
-		debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
-		);
-};
-print "err: $@\n" unless $ENV{HARNESS_ACTIVE};
-ok($@, "wrong template");
+{
+	my $text = [qq(<TMPL_VAR .URITEST),qq( ESCAPE=URL >\n)];
+	my $htc = HTML::Template::Compiled->new(
+		arrayref => $text,
+		cache_dir => $cache,
+	);
+	ok($htc, "arrayref template");
+	$htc->param(%$hash);
+	my $out = $htc->output;
+	ok($out eq 'a%20b%20c%20%26%20d'.$/, "arrayref output");
+}
+
+{
+	# test wrong balanced tag
+	my $wrong;
+	eval {
+		$wrong = HTML::Template::Compiled->new(
+			path => 't',
+			line_numbers => 1,
+			filename => 'wrong.html',
+			debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
+			);
+	};
+	print "err: $@\n" unless $ENV{HARNESS_ACTIVE};
+	ok($@ =~ m/does not match opening tag/ , "wrong template");
+}
+
 

@@ -2,17 +2,26 @@ Changes
 Makefile.PL
 MANIFEST
 README
-t/HTML-Template-Compiled.t
 lib/HTML/Template/Compiled.pm
 lib/HTML/Template/Compiled/Utils.pm
+lib/HTML/Template/Compiled/Filter.pm
 lib/HTML/Template/Compiled/Plugin/DHTML.pm
 examples/test.htc
 examples/test.htc.20
 examples/included.htc
+examples/included.html
 examples/bench.pl
+examples/bench_mem.pl
 examples/test.tt
+t/01_HTML-Template-Compiled.t
+t/02_version.t
+t/03_param.t
+t/04_out_fh.t
+t/05_filter.t
 t/songs.html
 t/wrong.html
 t/include.html
 t/dhtml.htc
+t/out_fh.htc
+t/filter.htc
 META.yml                                 Module meta-data (added by MakeMaker)

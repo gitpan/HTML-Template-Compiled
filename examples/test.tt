@@ -1,7 +1,7 @@
 ===test.html 1==========================================
 name: [% name %] look ma: ~
 name with "": [% name %]
-INCLUDE: (((<TMPL_INCLUDE included.html>)))
+INCLUDE: ((([% INCLUDE included.html %])))
 ---------------
 loop a:
 [% FOREACH var = loopa %]first?[% loop.first() %] or last?[% loop.last() %]
