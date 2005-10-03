@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.29 2005/09/20 21:56:56 tinita Exp $
+# $Id: Compiled.pm,v 1.54 2005/10/03 16:38:17 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.48";
+our $VERSION = "0.52";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.48";
+our $VERSION = "0.52";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -81,10 +81,11 @@ use constant PARAM => 0;
 	my @map = (undef, qw(
 		filename file scalar filehandle
 	 	cache_dir path cache
-	 	loop_context line_numbers case_sensitive dumper
-	 	method_call deref
+	 	loop_context line_numbers case_sensitive dumper global_vars
+	 	method_call deref formatter_path
 		debug perl out_fh
-		filter
+		filter formatter
+		globalstack
 	));
 	for my $i (1..@map) {
 		my $method = ucfirst $map[$i];
@@ -211,7 +212,9 @@ sub from_cache {
 		$dir = '' unless defined $dir;
 		my $fname = $self->getFilename;
 		D && $self->log("add_mem_cache ".$fname);
-		$cache->{$dir}->{$fname} = $self;
+		my $clone = $self->clone;
+		$clone->clear_param();
+		$cache->{$dir}->{$fname} = $clone;
 		$times->{$dir}->{$fname} = \%times;
 	}
 	sub clear_cache {
@@ -221,6 +224,21 @@ sub from_cache {
 		# only specific directory
 		$cache->{$dir} = {};
 		$times->{$dir} = {};
+	}
+	sub clear_filecache {
+		my ($self, $dir) = @_;
+		defined $dir or
+			$dir = $self->getCache_dir;
+		return unless -d $dir;
+		ref $self and $self->lock;
+		opendir my $dh, $dir or die "Could not open '$dir': $!";
+		my @files = grep { m/\.pl$/ } readdir $dh;
+		for my $file (@files) {
+			my $file = File::Spec->catfile($dir, $file);
+			unlink $file or die "Could not delete '$file': $!";
+		}
+		ref $self and $self->unlock;
+		return 1;
 	}
 }
 
@@ -234,6 +252,7 @@ sub compile {
 		# don't recursively include
 		my $recursed = ++$FILESTACK{$file};
 		D && $self->log("compile from file ".$file);
+		die "Could not open '$file': $!" unless -f $file;
 		my @times = $self->_checktimes($file);
 		my $text = $self->_readfile($file);
 		die "HTML::Template: recursive include of "
@@ -285,6 +304,10 @@ sub add_file_cache {
 	my $lchecked = localtime $times{checked};
 	D && $self->log("add_file_cache() $cache/$plfile");
 	open my $fh, ">$cache/$plfile.pl" or die $!; # TODO File::Spec
+	my $path = $self->getPath;
+	my $path_str = ref $path eq 'ARRAY'
+		? (join ' ', map { qq/'$_'/ } @$path)
+		: qq/'$path'/;
 	print $fh <<"EOM";
 		package HTML::Template::Compiled;
 # file date $lmtime
@@ -299,7 +322,7 @@ my \$args = {
 		cache_dir => '$cache',
 		filename => '@{[$self->getFilename]}',
 		file => '@{[$self->getFile]}',
-		path => '@{[$self->getPath]}',
+		path => $path_str,
 		method_call => '@{[$self->getMethod_call]}',
 		deref => '@{[$self->getDeref]}',
 		out_fh => @{[$self->getOut_fh]},
@@ -324,7 +347,12 @@ sub include {
 	my $escaped = $self->escape_filename($file);
 	my $req = File::Spec->catfile($dir, "$escaped.pl");
 	return unless -f $req;
-	D && $self->log("require $req");
+	return $self->include_file($req);
+}
+
+sub include_file {
+	my ($self, $req) = @_;
+	D && $self->log("do $req");
 	my $r = do "$req";
 	my $args = $r->{htc};
 	my $t = HTML::Template::Compiled->new(%$args);
@@ -346,7 +374,12 @@ sub createFilename {
 	}
 	else {
 		D && $self->log("file: ".File::Spec->catfile($path, $filename));
-		return File::Spec->catfile($path, $filename);
+		for (ref $path ? @$path : $path) {
+			my $fp = File::Spec->catfile($path, $filename);
+			return $fp if -f $fp;
+		}
+		# TODO - bug with scalarref
+		die "'$filename' not found";
 	}
 }
 
@@ -360,6 +393,7 @@ sub uptodate {
 	else {
 		my $file = $self->createFilename($self->getPath,$self->getFilename);
 		$self->setFile($file);
+		#print STDERR "uptodate($file)\n";
 		my @times = $self->_checktimes($file);
 		if ($times[MTIME] <= $times->{mtime}) {
 			D && $self->log("uptodate template old");
@@ -390,29 +424,34 @@ sub dump {
 
 sub init {
 	my ($self, %args) = @_;
-	my %values = (
+	my %defaults = (
 		# defaults
 		method_call => '->',
 		deref => '.',
+		formatter_path => '/',
 		line_numbers => 0,
 		loop_context_vars => 0,
 		case_sensitive => $CASE_SENSITIVE_DEFAULT,,
 		debug => $DEBUG_DEFAULT,
 		out_fh => 0,
+		global_vars => 0,
 		%args,
 	);
-	$self->setMethod_call($values{method_call});
-	$self->setDeref($values{deref});
+	$self->setMethod_call($defaults{method_call});
+	$self->setDeref($defaults{deref});
 	$self->setLine_numbers(1) if $args{line_numbers};
 	$self->setLoop_context(1) if $args{loop_context_vars};
-	$self->setCase_sensitive($values{case_sensitive});
+	$self->setCase_sensitive($defaults{case_sensitive});
 	$self->setDumper($args{dumper}) if $args{dumper};
+	$self->setFormatter($args{formatter}) if $args{formatter};
 	if ($args{filter}) {
 		require HTML::Template::Compiled::Filter;
 		$self->setFilter(HTML::Template::Compiled::Filter->new($args{filter}));
 	}
-	$self->setDebug($values{debug});
-	$self->setOut_fh($values{out_fh});
+	$self->setDebug($defaults{debug});
+	$self->setOut_fh($defaults{out_fh});
+	$self->setGlobal_vars($defaults{global_vars});
+	$self->setFormatter_path($defaults{formatter_path});
 }
 
 sub _readfile {
@@ -469,10 +508,11 @@ EOM
 
 		my $line = 0;
 		if ($self->getLine_numbers && s#__(\d+)__($tmpl_re)#$2#) {
-			$line = $1;
+			$line = $1+1;
 		}
 		my $meth = $self->getMethod_call;
 		my $deref = $self->getDeref;
+		my $format = $self->getFormatter_path;
 		# --------- TMPL_VAR
 		if (m#$start_re(VAR|=)\s+(?:NAME=)?(['"]?)($var_re)\2.*$end_re#i) {
 			my $type = uc $1;
@@ -491,6 +531,7 @@ EOM
 			my $varstr = $self->_make_path(
 				deref => $deref,
 				method_call => $meth,
+				formatter_path => $format,
 				var => $var,
 				final => 1,
 			);
@@ -549,6 +590,7 @@ EOM
 			my $varstr = $self->_make_path(
 				deref => $deref,
 				method_call => $meth,
+				formatter_path => $format,
 				var => $var,
 				final => 0,
 			);
@@ -563,14 +605,21 @@ EOM
 			my $varstr = $self->_make_path(
 				deref => $deref,
 				method_call => $meth,
+				formatter_path => $format,
 				var => $var,
 				final => 0,
 			);
 			$level+=2;
 			my $ind = INDENT;
-			$code .= <<EOM;
+			my $global = $self->getGlobal_vars ? <<"EOM" : '';
+${indent}my \$stack = \$t->getGlobalstack;
+${indent}push \@\$stack, \$\$C;
+${indent}\$t->setGlobalstack(\$stack);
+EOM
+			$code .= <<"EOM";
 ${indent}if (UNIVERSAL::isa(my \$array = $varstr, 'ARRAY') )\{
 ${indent}${ind}my \$size = \$#{ \$array };
+$global
 
 ${indent}${ind}# loop over $var
 ${indent}${ind}for my \$ix (\$[..\$size) {
@@ -578,7 +627,7 @@ ${indent}${ind}${ind}my \$C = \\ (\$array->[\$ix]);
 EOM
 			if ($self->getLoop_context) {
 				my $indent = INDENT x $level;
-			$code .= <<EOM;
+			$code .= <<"EOM";
 ${indent}local \$__counter__ = \$ix+1;
 ${indent}local \$__first__   = \$ix == \$[;
 ${indent}local \$__last__    = \$ix == \$size;
@@ -612,25 +661,36 @@ EOM
 			$level--;
 			$level--;
 			my $indent = INDENT x $level;
-			$code .= <<EOM;
+			my $global = $self->getGlobal_vars ? <<"EOM" : '';
+${indent}my \$stack = \$t->getGlobalstack;
+${indent}pop \@\$stack;
+${indent}\$t->setGlobalstack(\$stack);
+EOM
+			$code .= <<"EOM";
 ${indent}@{[INDENT()]}}
 ${indent}} # end loop
+$global
 EOM
 		}
 		# --------- TMPL_IF TMPL UNLESS TMPL_ELSE
-		elsif (m#$start_re(ELSIF|IF|UNLESS)\s+(?:NAME=)?(['"]?)($var_re)\2\s*$end_re#i) {
-			my $type = $1;
-			my $var = $3;
+		elsif (m#$start_re(ELSIF|IF|UNLESS)\s+(DEFINED\s+)?(?:NAME=)?(['"]?)($var_re)\3\s*$end_re#i) {
+			my $type = uc $1;
+			my $def = $2;
+			my $var = $4;
 			my $indent = INDENT x $level;
 			my $varstr = $self->_make_path(
 				deref => $deref,
 				method_call => $meth,
+				formatter_path => $format,
 				var => $var,
 				final => 1,
 			);
 			#my $if = (lc $1 eq 'IF'? 'if' : "unless ");
 			my $if = {IF => 'if', UNLESS => 'unless', ELSIF => 'elsif'}->{uc $1};
-			my $elsif = uc $1 eq 'ELSIF' ? 1 : 0;
+			my $elsif = $type eq 'ELSIF' ? 1 : 0;
+			if ($def) {
+				$varstr = "defined( $varstr )";
+			}
 			if ($elsif) {
 				$code .= qq#${indent}\}\n#;
 				$self->_checkstack($fname,$line,$stack, TELSIF);
@@ -639,19 +699,37 @@ EOM
 				push @$stack, $type;
 				$level++;
 			}
-			$code .= <<EOM
+			$code .= <<"EOM"
 ${indent}$if($varstr) {
 EOM
 		}
-		elsif (m#${start_re}INCLUDE\s+(?:NAME=)?(['"]?)([^'">]+)\1\s*$end_re#i) {
-			my $filename = $2;
-			#$filename = $self->getPath().'/'.$filename;
+		elsif (m#${start_re}INCLUDE\s+(.+?)$end_re#is) {
+			my $match = $1;
+			my $filename;
+			my $varstr;
 			my $path = $self->getPath();
-			# generate included template
-			{
-				D && $self->log("compile include $filename!!");
-				my $cached_or_new = $self->clone_init($path, $filename, $self->getCache_dir);
+			if ($match =~ m/(?:VAR=)(['"]?)($var_re)\1/i) {
+				# dynamic filename
+				my $dfilename = $2;
+				$varstr = $self->_make_path(
+					deref => $deref,
+					method_call => $meth,
+					formatter_path => $format,
+					var => $dfilename,
+					final => 0,
+				);
 			}
+			elsif ($match =~ m/(?:NAME=)?(['"]?)([^'">]+)\1/i) {
+				# static filename
+				$filename = $2;
+				$varstr = qq{'$filename'};
+				# generate included template
+				{
+					D && $self->log("compile include $filename!!");
+					my $cached_or_new = $self->clone_init($path, $filename, $self->getCache_dir);
+				}
+			}
+			#print STDERR "include $varstr\n";
 			my $cache = $self->getCache_dir;
 			$path = defined $path
 				? !ref $path
@@ -662,7 +740,7 @@ EOM
 			$cache = defined $cache ? qq/'$cache'/ : 'undef';
 			$code .= <<"EOM";
 ${indent}\{
-${indent}  my \$new = \$t->clone_init($path,'$filename', $cache);
+${indent}  my \$new = \$t->clone_init($path,$varstr,$cache);
 ${indent}  $output \$new->getPerl()->(\$new,\$\$C@{[$out_fh ? ",\$OFH" : '']});
 ${indent}}
 EOM
@@ -693,10 +771,10 @@ sub _make_path {
 	if ($args{var} =~ s/^_//) {
 		$root = 0;
 	}
-	elsif ($args{var} =~ m/^(?:\Q$args{deref}\E|\Q$args{method_call}\E)/) {
+	elsif ($args{var} =~ m/^(?:\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)/) {
 		$root = 1;
 	}
-	my @split = split m/(?=\Q$args{deref}\E|\Q$args{method_call}\E)/, $args{var};
+	my @split = split m/(?=\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)/, $args{var};
 	my @paths;
 	for my $p (@split) {
 		if ($p =~ s/^\Q$args{method_call}//) {
@@ -705,6 +783,9 @@ sub _make_path {
 		elsif ($p =~ s/^\Q$args{deref}//) {
 			push @paths, '['.PATH_DEREF.",'".($self->getCase_sensitive?$p:uc$p)."']";
 		}
+		elsif ($p =~ s/^\Q$args{formatter_path}//) {
+			push @paths, '['.PATH_FORMATTER.",'".($self->getCase_sensitive?$p:uc$p)."']";
+		}
 		else {
 			push @paths, '['.PATH_DEREF.", '".($self->getCase_sensitive?$p:uc$p)."']";
 		}
@@ -712,12 +793,31 @@ sub _make_path {
 	local $" = ",";
 	my $final = $args{final} ? 1 : 0;
 	my $getvar = $ENABLE_SUB ? '_get_var_sub' : '_get_var';
+	$getvar .= $self->getGlobal_vars ? '_global' : '';
 	my $varstr = "\$t->$getvar(" .($root?'$P':'$$C').",$final,@paths)";
 	return $varstr;
 	return ($root, \@paths);
 }
 
-sub _get_var {
+
+# -------- warning, ugly code
+# i'm trading maintainability for efficiency here
+
+sub try_global {
+	my ($self, $walk, $path) = @_;
+	my $stack = $self->getGlobalstack||[];
+	for my $item ($walk, reverse @$stack) {
+		next unless exists $item->{$path};
+		return $item->{$path};
+	}
+	return $walk;
+}
+
+{
+	# ----------- still ugly code
+	# generating different code depending on global_vars
+	my $code = <<'EOM';
+sub {
 	my ($self, $ref, $final, @paths) = @_;
 	my $walk = $ref;
 	for my $path (@paths) {
@@ -727,45 +827,61 @@ sub _get_var {
 				$walk = $walk->[$path->[1]];
 			}
 			else {
-				$walk = $walk->{$path->[1]};
+*** walk ***
 			}
 		}
-		else {
+		elsif ($path->[0] == PATH_METHOD) {
 			my $key = $path->[1];
 			$walk = $walk->$key;
 		}
+		elsif ($path->[0] == PATH_FORMATTER) {
+			my $key = $path->[1];
+			my $sub = $self->getFormatter()->{ref $walk}->{$key};
+			$walk = defined $sub
+				? $sub->($walk)
+				: $walk->{$key};
+		}
 	}
 	return $walk;
-	#return $var;
 }
+EOM
+	my $global = <<'EOM';
+	$walk = $self->try_global($walk, $path->[1]);
+EOM
+	my $walk = <<'EOM';
+	$walk = $walk->{$path->[1]};
+EOM
+	my $sub = $code;
+	$sub =~ s/^\Q*** walk ***\E$/$walk/m;
+	my $subref = eval $sub;
+	no strict 'refs';
+	*{'_get_var'} = $subref;
+	$sub = $code;
+	$sub =~ s/^\Q*** walk ***\E$/$global/m;
+	$subref = eval $sub;
+	*{'_get_var_global'} = $subref;
+}
+
+# and another two ugly subroutines
+
 sub _get_var_sub {
 	my ($self, $ref, $final, @paths) = @_;
-	my $var = _walkpath($ref, $final, @paths);
+	my $var = $self->_get_var($ref, $final, @paths);
 	if ($ENABLE_SUB and $final and ref $var eq 'CODE') {
 		return $var->();
 	}
 	return $var;
 }
-sub _walkpath {
-	my ($ref, $final, @paths) = @_;
-	my $walk = $ref;
-	for my $path (@paths) {
-		#print STDERR "ref: $walk, key: $key\n";
-		if ($path->[0] == PATH_DEREF) {
-			if (ref $walk eq 'ARRAY') {
-				$walk = $walk->[$path->[1]];
-			}
-			else {
-				$walk = $walk->{$path->[1]};
-			}
-		}
-		else {
-			my $key = $path->[1];
-			$walk = $walk->$key;
-		}
+sub _get_var_sub_global {
+	my ($self, $ref, $final, @paths) = @_;
+	my $var = $self->_get_var_global($ref, $final, @paths);
+	if ($ENABLE_SUB and $final and ref $var eq 'CODE') {
+		return $var->();
 	}
-	return $walk;
+	return $var;
 }
+
+# end ugly code, phooey
 
 {
 	my %map = (
@@ -818,11 +934,26 @@ sub clone_init {
 	my $new = bless [@$self], ref $self;
 	D && $self->log("clone_init($path,$filename,$cache)");
 	$new->setFilename($filename);
+	$new->setScalar();
+	$new->setFilehandle();
 	$new->setPath($path);
-	$new = $new->create;
+	$new = $new->create();
 	$new;
 }
 
+sub preload {
+	my ($class, $dir) = @_;
+	open my $dh, $dir or die "Could not open '$dir': $!";
+	my @files = grep { m/\.pl$/ } readdir $dh;
+	closedir $dh;
+	for my $file (@files) {
+		$class->include_file(File::Spec->catfile($dir, $file));
+	}
+}
+
+sub clear_param {
+	$_[0]->[PARAM] = ();
+}
 sub param {
 	my $self = shift;
 	unless (@_) {
@@ -1007,7 +1138,8 @@ HTC will use a lot of memory because it keeps all template objects in memory.
 If you are on mod_perl, and have a lot of templates, you should preload them at server
 startup to be sure that it is in shared memory. At the moment HTC is not tested for
 keeping all data in shared memory (e.g. when a copy-on-write occurs), but i'll test
-that soon and i'll add a handy function like maybe HTML::Template::Compiled->preload($dir).
+that soon. For preloading you can now use
+  HTML::Template::Compiled->preload($dir).
 
 HTC does not implement all features of HTML::Template (yet), and
 it has got some additional features which are explained below.
@@ -1015,6 +1147,15 @@ it has got some additional features which are explained below.
 HTC will complain if you have a closing tag that does not fit
 the last opening tag. To get the line number, set the line_numbers-option
 (See L<"OPTIONS"> below)
+
+NOTE: If you don't need any of the additional features listed below and if you don't
+need the speed (in many cases it's probably not worth trading speed for memory), then
+you might be better off with just using HTML::Template.
+
+NOTE2: If you have any questions, bug reports, send them to me and not to Sam Tregar.
+This module is developed by me at the moment, independently from HTML::Template, although
+I try to get most of the tests from it passing for HTC. See L<"RESOURCES"> for
+current information.
 
 =head2 FEATURES FROM HTML::TEMPLATE
 
@@ -1046,7 +1187,11 @@ use option case_sensitive => 0 to use this feature
 
 =item vars that are subrefs
 
-=scalarref, arrayref, filehandle
+=item scalarref, arrayref, filehandle
+
+=item C<global_vars>
+
+new (roughly tested)
 
 =back
 
@@ -1070,6 +1215,15 @@ see L<"RENDERING OBJECTS">
 
 =item output to filehandle
 
+=item Dynamic includes
+
+see L<"INCLUDE">
+
+=item TMPL_IF DEFINED
+
+Check for definedness instead of truth:
+  <TMPL_IF DEFINED NAME="var">
+
 =item asp/jsp-like templates
 
 For those who like it (i like it because it is shorter than TMPL_), you
@@ -1085,12 +1239,6 @@ There are some features of H::T that are missing and that I don't plan
 to implement. I'll try to list them here.
 
 =over 4
-
-=item C<global_vars>
-
-No, I don't want to look in the whole
-hash for a var name. If you want to use a variable, you should
-know where it is.
 
 =item C<die_on_bad_params>
 
@@ -1127,6 +1275,19 @@ You can change that output by setting a different dumper function, see L<"OPTION
 
 You can also chain different escapings, like C<ESCAPE=DUMP|HTML>.
 
+=head2 INCLUDE
+
+Additionally to
+
+  <TMPL_INCLUDE NAME="file.htc">
+
+you can do an include of a template variable:
+
+  <TMPL_INCLUDE VAR="file_include_var">
+  $htc->param(file_include_var => "file.htc");
+
+Here the C<VAR=> part is necessary to distinguish from a static include.
+  
 =head2 VARIABLE ACCESS
 
 With HTC, you have more control over how you access your template
@@ -1293,7 +1454,7 @@ this can slow down your program.
 
 This will call C<my_cool_dumper()> on C<var>.
 
-Alternatevily you can use the DHTML plugin which is using C<Data::TreeDumper> and
+Alternatively you can use the DHTML plugin which is using C<Data::TreeDumper> and
 C<Data::TreeDumper::Renderer::DHTML>. You'll get a  dumper like output which you can
 collapse and expand, for example. See L<Data::TreeDumper> and L<Data::TreeDumper::Renderer::DHTML> for
 more information.
@@ -1304,9 +1465,9 @@ Example:
     dumper = 'DHTML',
   );
  
-=item out_fh
+For an example see C<examples/dhtml.html>.
 
-Warning: this is new and might not be working with file cache at the moment
+=item out_fh
 
   my $t = HTML::Template::Compiled->new(
     ...
@@ -1316,7 +1477,7 @@ Warning: this is new and might not be working with file cache at the moment
   $t->output($fh); # or output(\*STDOUT) or even output()
 
 This option is fixed, so if you create a template with C<out_fh>, every
-output will print to a specified (or default C<STDOUT>) filehandle.
+output of this template will print to a specified (or default C<STDOUT>) filehandle.
 
 =item filter
 
@@ -1334,9 +1495,33 @@ Filter template code before parsing.
     ],
   );
 
+=item formatter
+
+my $htc = HTML::Template::Compiled->new(
+  ...
+  formatter => {
+    'Your::Class' => {
+      fullname => sub {
+        $_[0]->first . ' ' . $_[0]->last
+      },
+      first => Your::Class->can('first'),
+      last => Your::Class->can('last'),
+      },
+    },
+    formatter_path => '/', # default '/'
+  );
+  # $obj is a Your::Class object
+  $htc->param(obj => $obj);
+  # Template:
+  # Fullname: <tmpl_var obj/fullname>
+
+=item formatter_path
+
+see formatter. Defaults to '/'
+
 =back
 
-=head2 METHDOS
+=head2 METHODS
 
 =over 4
 
@@ -1349,6 +1534,26 @@ Class method. It will clear the memory cache either of a specified cache directo
 or all memory caches:
 
   HTML::Template::Compiled->clear_cache();
+
+=item clear_filecache
+
+Class- or object-method. Removes all generated perl files from a given directory.
+
+  # clear a directory
+  HTML::Template::Compiled->clear_filecache('cache_directory');
+  # clear this template's cache directory (and not one template file only!)
+  $htc->clear_filecache();
+
+=item preload
+
+Class method. Will preload all template files from a given cachdir into memory. Should
+be done, for example in a mod_perl environment, at server startup, so all templates
+go into shared memory
+
+  HTML::Template::Compiled->preload($cache_dir);
+
+If you don't do preloading in mod_perl, memory usage might go up if you have a lot
+of templates.
 
 =back
 
@@ -1382,8 +1587,7 @@ code.
 
 =head1 TODO
 
-Better access to cached perl files, filters, query, using
-File::Spec for portability, implement expressions, ...
+fix C<path> option and search_path_on_include, query, implement expressions, ...
 
 =head1 BUGS
 
@@ -1431,9 +1635,11 @@ Sam Tregar big thanks for ideas and letting me use his L<HTML::Template> test su
 
 Bjoern Kriews for original idea and contributions
 
-Ronnie Neumann, Martin Fabiani for ideas and beta-testing
+Ronnie Neumann, Martin Fabiani, pKai from perl-community.de for ideas and beta-testing
 
 perlmonks.org and perl-community.de for everyday learning
+
+Limbic~Region, tye, runrig and others from perlmonks.org 
 
 =head1 COPYRIGHT AND LICENSE
 

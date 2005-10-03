@@ -1,6 +1,6 @@
 package HTML::Template::Compiled::Filter;
-# $Id: Filter.pm,v 1.2 2005/09/19 22:43:02 tinita Exp $
-$VERSION = "0.01";
+# $Id: Filter.pm,v 1.3 2005/10/02 23:28:39 tinita Exp $
+$VERSION = "0.02";
 use strict;
 use warnings;
 
@@ -20,7 +20,12 @@ sub new {
 sub init {
 	my ($self, $spec) = @_;
 	if (ref $spec eq 'CODE') {
-		$self->[SUBS] = [$spec];
+		$self->[SUBS] = [
+			{
+				code => $spec,
+				format => 'scalar',
+			},
+		];
 	}
 	elsif (ref $spec eq 'ARRAY') {
 		for my $filter (@$spec) {

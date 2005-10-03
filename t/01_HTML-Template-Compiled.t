@@ -1,9 +1,9 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.2 2005/09/19 20:55:24 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.5 2005/10/03 16:29:24 tinita Exp $
 
 use lib 'blib/lib';
-use Test::More tests => 12;
+use Test::More tests => 10;
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -105,6 +105,7 @@ EOM
 	$htc->param(%$hash);
 	$out = $htc->output;
 	$out =~ s/^\s+//mg; $out =~ tr/\n//s;
+	print "($exp)\n($out)\n" unless $ENV{HARNESS_ACTIVE};
 	ok($exp eq $out, "output after update ok");
 	$exp =~ s/INCLUDED/INCLUDED_NEW/;
 	sleep 2;
@@ -121,18 +122,6 @@ EOM
 	truncate $fh, 0;
 	print $fh $txt;
 	close $fh;
-}
-eval { require HTML::Template::Compiled::Plugin::DHTML; require Data::TreeDumper::Renderer::DHTML; };
-my $dhtml = $@ ? 0 : 1;
-SKIP: {
-	skip "no DHTML installed", 1 unless $dhtml;
-	my $htc = HTML::Template::Compiled->new(
-		filename => "t/dhtml.htc",
-		dumper => 'DHTML',
-	);
-	$htc->param(%$hash);
-	my $out = $htc->output;
-	ok($out =~ m/data_treedumper_dhtml/, 'DHTML plugin');
 }
 
 {
@@ -173,20 +162,4 @@ SKIP: {
 	my $out = $htc->output;
 	ok($out eq 'a%20b%20c%20%26%20d'.$/, "arrayref output");
 }
-
-{
-	# test wrong balanced tag
-	my $wrong;
-	eval {
-		$wrong = HTML::Template::Compiled->new(
-			path => 't',
-			line_numbers => 1,
-			filename => 'wrong.html',
-			debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
-			);
-	};
-	print "err: $@\n" unless $ENV{HARNESS_ACTIVE};
-	ok($@ =~ m/does not match opening tag/ , "wrong template");
-}
-
 
