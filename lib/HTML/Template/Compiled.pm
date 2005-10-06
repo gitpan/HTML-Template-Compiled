@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.54 2005/10/03 16:38:17 tinita Exp $
+# $Id: Compiled.pm,v 1.59 2005/10/06 20:15:39 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.52";
+our $VERSION = "0.53";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.52";
+our $VERSION = "0.53";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -357,7 +357,7 @@ sub include_file {
 	my $args = $r->{htc};
 	my $t = HTML::Template::Compiled->new(%$args);
 	D && $self->log("include",$t,"$args->{perl}");
-	return unless $self->uptodate($r->{times});
+	return unless $t->uptodate($r->{times});
 	$t->add_mem_cache(
 		checked=>$r->{times}->{checked},
 		mtime => $r->{times}->{mtime},
@@ -943,7 +943,7 @@ sub clone_init {
 
 sub preload {
 	my ($class, $dir) = @_;
-	open my $dh, $dir or die "Could not open '$dir': $!";
+	opendir my $dh, $dir or die "Could not open '$dir': $!";
 	my @files = grep { m/\.pl$/ } readdir $dh;
 	closedir $dh;
 	for my $file (@files) {
@@ -1314,7 +1314,7 @@ your script, stored in $hash{SELF}. in HTML::Template you have to set
 the option C<global_vars>, so you can access C<$hash{SELF}> from
 everywhere. Unfortunately, now C<NAME> is also global, which isn't
 a problem in this simple example, but in a more complicated template
-this is impossible. With HTC, you don't have C<global_vars>, but
+this is impossible. With HTC, you wouldn't use C<global_vars> here, but
 you can say:
 
   <TMPL_VAR .SELF>
@@ -1418,6 +1418,10 @@ templates created like this.
 
 Vars like C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>
 
+=item global_vars
+
+If set to 1, every outer variable can be accessed from anywhere in the enclosing scope.
+
 =item deref
 
 Define the string you want to use for dereferencing, default is C<.> at the
@@ -1497,7 +1501,11 @@ Filter template code before parsing.
 
 =item formatter
 
-my $htc = HTML::Template::Compiled->new(
+With formatter you can spcify how an object should be rendered. This is useful
+if you don't want object methods to be called, but only a given subset of
+methods.
+
+  my $htc = HTML::Template::Compiled->new(
   ...
   formatter => {
     'Your::Class' => {
@@ -1546,7 +1554,7 @@ Class- or object-method. Removes all generated perl files from a given directory
 
 =item preload
 
-Class method. Will preload all template files from a given cachdir into memory. Should
+Class method. Will preload all template files from a given cachedir into memory. Should
 be done, for example in a mod_perl environment, at server startup, so all templates
 go into shared memory
 
@@ -1573,7 +1581,7 @@ You create a template almost like in HTML::Template:
     cache_dir => "cache",
   );
 
-The next time you start your application, HTC will read all generated
+The next time you start your application and create a new template, HTC will read all generated
 perl files, and a call to the constructor like above won't parse
 the template, but just use the loaded code. If your template
 file has changed, though, then it will be parsed again.
@@ -1635,11 +1643,11 @@ Sam Tregar big thanks for ideas and letting me use his L<HTML::Template> test su
 
 Bjoern Kriews for original idea and contributions
 
-Ronnie Neumann, Martin Fabiani, pKai from perl-community.de for ideas and beta-testing
+Ronnie Neumann, Martin Fabiani, Kai Sengpiel from perl-community.de for ideas and beta-testing
 
 perlmonks.org and perl-community.de for everyday learning
 
-Limbic~Region, tye, runrig and others from perlmonks.org 
+Corion, Limbic~Region, tye, runrig and others from perlmonks.org 
 
 =head1 COPYRIGHT AND LICENSE
 

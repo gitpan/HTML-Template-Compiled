@@ -1,5 +1,9 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.53 Thu Oct  6 22:12:53 CEST 2005
+- fixed another issue with filter
+- bugfix preload
+
 0.52 Mon Oct  3 18:34:19 CEST 2005
 - bugfix with nonexistant templates and deep recursion
 - bugfix path and filecache

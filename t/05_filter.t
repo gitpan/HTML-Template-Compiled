@@ -1,6 +1,6 @@
-# $Id: 05_filter.t,v 1.3 2005/10/02 23:29:38 tinita Exp $
+# $Id: 05_filter.t,v 1.4 2005/10/03 21:43:49 tinita Exp $
 use lib 'blib/lib';
-use Test::More tests => 3;
+use Test::More tests => 4;
 BEGIN { use_ok('HTML::Template::Compiled') };
 
 my $filter = sub {
@@ -10,13 +10,12 @@ my $filter = sub {
 		s#{{{ end of iterate }}}#</tmpl_loop>#gi;
 	};
 };
-my $filters = [
-	{
-		'sub' => $filter,
-	},
-];
-test($filters, 1);
-test($filter, 2);
+my $filters = {
+	'sub' => $filter,
+};
+test($filter, 1);
+test([$filters], 2);
+test($filters, 3);
 
 sub test {
 	my ($f, $i) = @_;
