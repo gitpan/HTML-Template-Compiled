@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.59 2005/10/06 20:15:39 tinita Exp $
+# $Id: Compiled.pm,v 1.71 2005/11/23 21:37:54 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.53";
+our $VERSION = "0.55";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.53";
+our $VERSION = "0.55";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -23,6 +23,8 @@ use warnings;
 
 use Fcntl qw(:seek :flock);
 use File::Spec;
+use File::Basename qw(dirname);
+use Carp;
 use HTML::Template::Compiled::Utils qw(:walkpath);
 # TODO
 eval {
@@ -34,7 +36,7 @@ eval {
 use vars qw(
 	$__first__ $__last__ $__inner__ $__odd__ $__counter__
 	$NEW_CHECK $UNDEF $ENABLE_ASP $ENABLE_SUB
-	$CASE_SENSITIVE_DEFAULT $DEBUG_DEFAULT
+	$CASE_SENSITIVE_DEFAULT $DEBUG_DEFAULT $SEARCHPATH
 	%FILESTACK %SUBSTACK
 );
 $DEBUG_DEFAULT = 0;
@@ -43,6 +45,7 @@ $NEW_CHECK = 60 * 10; # 10 minutes default
 $UNDEF = ''; # set for debugging
 $ENABLE_ASP = 1;
 $CASE_SENSITIVE_DEFAULT = 1; # set to 0 for H::T compatibility
+$SEARCHPATH = 1;
 
 use constant MTIME => 0;
 use constant CHECKED => 1;
@@ -52,6 +55,7 @@ use constant TIF => 'IF';
 use constant TUNLESS => 'UNLESS';
 use constant TELSIF => 'ELSIF';
 use constant TELSE => 'ELSE';
+use constant T_END => '__EOT__';
 use constant TLOOP => 'LOOP';
 use constant TWITH => 'WITH';
 use constant INDENT => '    ';
@@ -80,7 +84,7 @@ use constant PARAM => 0;
 {
 	my @map = (undef, qw(
 		filename file scalar filehandle
-	 	cache_dir path cache
+	 	cache_dir path cache search_path_on_include
 	 	loop_context line_numbers case_sensitive dumper global_vars
 	 	method_call deref formatter_path
 		debug perl out_fh
@@ -213,7 +217,7 @@ sub from_cache {
 		my $fname = $self->getFilename;
 		D && $self->log("add_mem_cache ".$fname);
 		my $clone = $self->clone;
-		$clone->clear_param();
+		$clone->clear_params();
 		$cache->{$dir}->{$fname} = $clone;
 		$times->{$dir}->{$fname} = \%times;
 	}
@@ -305,9 +309,11 @@ sub add_file_cache {
 	D && $self->log("add_file_cache() $cache/$plfile");
 	open my $fh, ">$cache/$plfile.pl" or die $!; # TODO File::Spec
 	my $path = $self->getPath;
-	my $path_str = ref $path eq 'ARRAY'
-		? (join ' ', map { qq/'$_'/ } @$path)
-		: qq/'$path'/;
+	my $path_str = '['.
+    ( ref $path eq 'ARRAY'
+		? (join ', ', map { $self->quote_file($_) } @$path)
+		: $self->quote_file($path))
+    . ']';
 	print $fh <<"EOM";
 		package HTML::Template::Compiled;
 # file date $lmtime
@@ -374,12 +380,17 @@ sub createFilename {
 	}
 	else {
 		D && $self->log("file: ".File::Spec->catfile($path, $filename));
-		for (ref $path ? @$path : $path) {
-			my $fp = File::Spec->catfile($path, $filename);
+		my $sp = $self->getSearch_path_on_include;
+		for (ref $path
+		   	? $sp
+			? @$path
+			: $path->[0]
+		   	: $path) {
+			my $fp = File::Spec->catfile($_, $filename);
 			return $fp if -f $fp;
 		}
 		# TODO - bug with scalarref
-		die "'$filename' not found";
+		croak "'$filename' not found";
 	}
 }
 
@@ -429,6 +440,7 @@ sub init {
 		method_call => '->',
 		deref => '.',
 		formatter_path => '/',
+		search_path_on_include => $SEARCHPATH,
 		line_numbers => 0,
 		loop_context_vars => 0,
 		case_sensitive => $CASE_SENSITIVE_DEFAULT,,
@@ -444,6 +456,7 @@ sub init {
 	$self->setCase_sensitive($defaults{case_sensitive});
 	$self->setDumper($args{dumper}) if $args{dumper};
 	$self->setFormatter($args{formatter}) if $args{formatter};
+	$self->setSearch_path_on_include($defaults{search_path_on_include});
 	if ($args{filter}) {
 		require HTML::Template::Compiled::Filter;
 		$self->setFilter(HTML::Template::Compiled::Filter->new($args{filter}));
@@ -480,7 +493,7 @@ sub _compile {
 	my @p = split $re, $text;
 	my $level = 1;
 	my $code = '';
-	my $stack = [];
+	my $stack = [T_END];
 
 	# got this trick from perlmonks.org
 	my $anon = D || $self->getDebug ? qq{local *__ANON__ = "htc_$fname";\n} : '';
@@ -500,16 +513,16 @@ $anon
 	my \$C = \\\$P;
 EOM
 
+	my $line = 0;
 	for (@p) {
 		my $indent = INDENT x $level;
 		s/~/\\~/g;
-		
-		#$code .= qq#\# line 1000\n#;
-
-		my $line = 0;
 		if ($self->getLine_numbers && s#__(\d+)__($tmpl_re)#$2#) {
 			$line = $1+1;
 		}
+		
+		#$code .= qq#\# line 1000\n#;
+
 		my $meth = $self->getMethod_call;
 		my $deref = $self->getDeref;
 		my $format = $self->getFormatter_path;
@@ -708,6 +721,8 @@ EOM
 			my $filename;
 			my $varstr;
 			my $path = $self->getPath();
+			my $dir;
+			$path = [$path] unless ref $path eq 'ARRAY';
 			if ($match =~ m/(?:VAR=)(['"]?)($var_re)\1/i) {
 				# dynamic filename
 				my $dfilename = $2;
@@ -722,7 +737,12 @@ EOM
 			elsif ($match =~ m/(?:NAME=)?(['"]?)([^'">]+)\1/i) {
 				# static filename
 				$filename = $2;
-				$varstr = qq{'$filename'};
+				$varstr = $self->quote_file($filename);
+				$dir = dirname $fname;
+				if (defined $dir and !grep { $dir eq $_ } @$path) {
+					# add the current directory to top of paths
+					$path = [$dir, @$path]; # create new $path, don't alter original ref
+				}
 				# generate included template
 				{
 					D && $self->log("compile include $filename!!");
@@ -733,11 +753,11 @@ EOM
 			my $cache = $self->getCache_dir;
 			$path = defined $path
 				? !ref $path
-					? qq/'$path'/
+					? $self->quote_file($path)
 					# support path => arrayref soon
-					: '['.join(',',@$path).']'
+					: '['.join(',',map { $self->quote_file($_) } @$path).']'
 				: 'undef';
-			$cache = defined $cache ? qq/'$cache'/ : 'undef';
+			$cache = defined $cache ? $self->quote_file($cache) : 'undef';
 			$code .= <<"EOM";
 ${indent}\{
 ${indent}  my \$new = \$t->clone_init($path,$varstr,$cache);
@@ -753,8 +773,8 @@ EOM
 				$code .= qq#$indent$output '$_';\n#;
 			}
 		}
-		
 	}
+		$self->_checkstack($fname,$line,$stack, T_END);
 	$code .= "\n} # end of sub\n";
 	print STDERR "# ----- code \n$code\n# end code\n" if $self->getDebug;
 	my $sub = eval $code;
@@ -762,6 +782,13 @@ EOM
 	return $code, $sub;
 	
 }
+
+sub quote_file {
+	my $f = $_[1];
+	$f =~ s/'/\\'/g;
+	return qq/'$f'/;
+}
+
 sub _make_path {
 	my ($self, %args) = @_;
 	my $root = 0;
@@ -891,12 +918,18 @@ sub _get_var_sub_global {
 		ELSE => [TIF,TUNLESS,TELSIF],
 		LOOP => [TLOOP],
 		WITH => [TWITH],
+		T_END() => [T_END],
 	);
 	sub _checkstack {
 		my ($self, $fname,$line, $stack, $check) = @_;
 		# $self->stack(1);
-		my @allowed = @{ $map{$check} } or return 1;
+		my @allowed = @{ $map{$check} };
+		return 1 if @$stack == 0 and @allowed == 0;
 		die "Closing tag 'TMPL_$check' does not have opening tag at $fname line $line\n" unless @$stack;
+		if ($allowed[0] eq T_END and $stack->[-1] ne T_END) {
+			# we hit the end of the template but still have an opening tag to close
+			die "Missing closing tag for '$stack->[-1]' at end of $fname line $line\n";
+		}
 		for (@allowed) {
 			return 1 if $_ eq $stack->[-1];
 		}
@@ -951,7 +984,7 @@ sub preload {
 	}
 }
 
-sub clear_param {
+sub clear_params {
 	$_[0]->[PARAM] = ();
 }
 sub param {
@@ -960,7 +993,7 @@ sub param {
 		return UNIVERSAL::can($self->[PARAM],'can') ?
 			$self->[PARAM] :
 			$self->[PARAM] ?
-				%{$self->[PARAM]} :
+				keys %{$self->[PARAM]} :
 				();
 	}
 	if (@_ == 1) {
@@ -1006,7 +1039,7 @@ sub uchash {
 
 sub output {
 	my ($self, $fh) = @_;
-	my %p = $self->param;
+	my %p = %{$self->[PARAM]||{}};
 	my $f = $self->getFile;
 	$fh = \*STDOUT unless $fh;
 	$self->getPerl()->($self,\%p,$fh);
@@ -1017,6 +1050,7 @@ sub import {
 	if ($args{compatible}) {
 		$ENABLE_SUB = 1;
 		$CASE_SENSITIVE_DEFAULT = 0;
+		$SEARCHPATH = 0;
 	}
 }
 
@@ -1068,7 +1102,7 @@ sub stack {
 	print STDERR $out;
 }
 sub log {
-	return unless D;
+	#return unless D;
 	my ($self, @msg) = @_;
 	my @c = caller();
 	my @c2 = caller(1);
@@ -1229,7 +1263,7 @@ Check for definedness instead of truth:
 For those who like it (i like it because it is shorter than TMPL_), you
 can use E<lt>% %E<gt> tags and the E<lt>%= tag instead of E<lt>%VAR (which will work, too):
 
- <%IF blah%>  <%= VARIABLE%>  <%/IF>
+ <%IF blah%>  <%= VARIABLE%>  <%/IF%>
 
 =back
 
@@ -1260,6 +1294,10 @@ default is 1. Set it via C<$HTML::Template::Compiled::CASE_SENSITIVE_DEFAULT = 0
 =item subref variables
 
 default is 0. Set it via C<$HTML::Template::Compiled::ENABLE_SUB = 1>
+
+=item search_path_on_include
+
+default is 1.
 
 =back
 
@@ -1381,6 +1419,13 @@ then you need only one level. Compare:
 
   <TMPL_VAR DEEP.PATH.TO.HASH.NAME>: <TMPL_VAR DEEP.PATH.TO.HASH.AGE>
 
+=head2 TMPL_LOOP
+
+The special name C<_> gives you the current paramater. In loops you can use it like this:
+
+ <tmpl_loop foo>
+  Current item: <tmpl_var _ >
+ </tmpl_loop>
 
 =head2 OPTIONS
 
@@ -1389,6 +1434,11 @@ then you need only one level. Compare:
 =item path
 
 Path to template files
+
+=item search_path_on_include
+
+Search the list of paths spcified with C<path> when including a tmplate.
+Default is 1 (different from HTML::Template).
 
 =item cache_dir
 
@@ -1527,6 +1577,10 @@ methods.
 
 see formatter. Defaults to '/'
 
+=item debug
+
+If set to 1 you will get the generated perl code on standard error
+
 =back
 
 =head2 METHODS
@@ -1562,6 +1616,10 @@ go into shared memory
 
 If you don't do preloading in mod_perl, memory usage might go up if you have a lot
 of templates.
+
+=item clear_params
+
+Empty all parameters.
 
 =back
 
@@ -1643,7 +1701,7 @@ Sam Tregar big thanks for ideas and letting me use his L<HTML::Template> test su
 
 Bjoern Kriews for original idea and contributions
 
-Ronnie Neumann, Martin Fabiani, Kai Sengpiel from perl-community.de for ideas and beta-testing
+Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Sascha Kiefer from perl-community.de for ideas and beta-testing
 
 perlmonks.org and perl-community.de for everyday learning
 

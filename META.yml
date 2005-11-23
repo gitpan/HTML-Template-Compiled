@@ -1,10 +1,12 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         HTML-Template-Compiled
-version:      0.53
+version:      0.55
 version_from: lib/HTML/Template/Compiled.pm
 installdirs:  site
 requires:
+    Carp:                          0
+    File::Basename:                0
     File::Spec:                    0
     Test::More:                    0
 

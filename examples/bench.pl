@@ -1,8 +1,9 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.3 2005/09/19 20:44:26 tinita Exp $
+# $Id: bench.pl,v 1.4 2005/11/01 18:44:48 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
+#use Devel::Size qw(size total_size);
 my $count = 0;
 my $ht_file = 'test.htc';
 #$ht_file = 'test.htc.10';
@@ -43,6 +44,8 @@ sub new_htc {
 		cache_dir => "cache/htc",
 		out_fh => 1,
 	);
+	#my $size = total_size($t1);
+	#print "size htc = $size\n";
 	return $t1;
 }
 sub new_ht {
@@ -53,6 +56,8 @@ sub new_ht {
 		filename => $ht_file,
 		cache => 1,
 	);
+	#my $size = total_size($t2);
+	#print "size ht  = $size\n";
 	return $t2;
 }
 sub new_htj {
@@ -71,6 +76,9 @@ sub new_tt {
 		COMPILE_DIR => 'cache/tt',
 		INCLUDE_PATH => 'examples',
 	);
+	#my $size = total_size($tt);
+	#print "size tt  = $size\n";
+	return $tt;
 }
 
 sub new_st {
@@ -104,6 +112,8 @@ sub output {
 	#print $t->{code} if exists $t->{code};
 	my $out = $t=~m/Compiled/?$t->output(\*OUT):$t->output;
 	print OUT $out;
+	#my $size = total_size($t);
+	#print "size $t = $size\n";
 	#print "\nOUT: $out";
 }
 #open TT_OUT, ">&STDOUT";
@@ -113,6 +123,8 @@ sub output_tt {
 	my $filett = $tt_file;
 	#$t->process($filett, \%params, \*OUT);
 	$t->process($filett, \%params, \*OUT) or die $t->error();
+	#my $size = total_size($t);
+	#print "size $t = $size\n";
 	#print $t->{code} if exists $t->{code};
 	#my $out = $t->output;
 	#print "\nOUT: $out";

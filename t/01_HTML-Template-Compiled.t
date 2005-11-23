@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.5 2005/10/03 16:29:24 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.6 2005/11/21 21:19:21 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 10;
@@ -41,7 +41,7 @@ sub HTC::Test::key { return $_[0]->{"_key"} }
 my $cache = File::Spec->catfile('t', 'cache');
 mkdir $cache unless -d $cache;
 my %args = (
-	path => 't',
+	path => 't/templates',
 	#case_insensitive => 1,
 	case_sensitive => 0,
 	loop_context_vars => 1,
@@ -93,7 +93,7 @@ EOM
 	for ($exp, $out) { s/^\s+//mg; tr/\n//s; }
 	print "($exp)\n($out)\n" unless $ENV{HARNESS_ACTIVE};
 	ok($exp eq $out, "output ok");
-	open my $fh, '+<', 't/include.html' or die $!;
+	open my $fh, '+<', 't/templates/include.html' or die $!;
 	local $/;
 	my $txt = <$fh>;
 	$txt =~ s/INCLUDED/INCLUDED_NEW/;
@@ -114,7 +114,7 @@ EOM
 	$out = $htc->output;
 	$out =~ s/^\s+//mg; $out =~ tr/\n//s;
 	ok($exp eq $out, "output after update & sleep ok");
-	open $fh, '+<', 't/include.html' or die $!;
+	open $fh, '+<', 't/templates/include.html' or die $!;
 	local $/;
 	$txt = <$fh>;
 	$txt =~ s/INCLUDED_NEW/INCLUDED/;
@@ -123,9 +123,8 @@ EOM
 	print $fh $txt;
 	close $fh;
 }
-
 {
-	my $tmpl = File::Spec->catfile('t', 'include.html');
+	my $tmpl = File::Spec->catfile('t', 'templates', 'include.html');
 	open my $fh, '<', $tmpl or die $!;
 	my $htc = HTML::Template::Compiled->new(
 		filehandle => $fh,

@@ -1,4 +1,4 @@
-# $Id: 05_filter.t,v 1.4 2005/10/03 21:43:49 tinita Exp $
+# $Id: 05_filter.t,v 1.5 2005/11/21 21:19:21 tinita Exp $
 use lib 'blib/lib';
 use Test::More tests => 4;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -21,7 +21,7 @@ sub test {
 	my ($f, $i) = @_;
 	# test filter
 	my $htc = HTML::Template::Compiled->new(
-		path => 't',
+		path => 't/templates',
 		filename => 'filter.htc',
 		filter => $f,
 	);

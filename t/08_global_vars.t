@@ -1,13 +1,13 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 08_global_vars.t,v 1.1 2005/09/30 23:03:38 tinita Exp $
+# $Id: 08_global_vars.t,v 1.2 2005/11/21 21:19:21 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 2;
 BEGIN { use_ok('HTML::Template::Compiled') };
 
 my $htc = HTML::Template::Compiled->new(
-	path => 't',
+	path => 't/templates',
 	filehandle => \*DATA,
 	global_vars => 1,
 	#debug => 1,

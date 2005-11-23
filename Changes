@@ -1,5 +1,12 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.55 Wed Nov 23 22:36:58 CET 2005
+- search_path_on_include
+
+0.54 Wed Nov 23 21:21:49 CET 2005
+- fixed path issues
+- better handling of unbalanced tags
+
 0.53 Thu Oct  6 22:12:53 CEST 2005
 - fixed another issue with filter
 - bugfix preload

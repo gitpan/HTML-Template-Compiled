@@ -1,4 +1,4 @@
-# $Id: 10_if_else.t,v 1.1 2005/10/03 00:54:02 tinita Exp $
+# $Id: 10_if_else.t,v 1.2 2005/11/21 21:19:21 tinita Exp $
 use lib 'blib/lib';
 use Test::More tests => 2;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -16,7 +16,7 @@ sub test {
 <tmpl_if defined true>RIGHT<tmpl_elsif true>RIGHT<tmpl_else>WRONG</tmpl_if>
 EOM
 	my $htc = HTML::Template::Compiled->new(
-		path => 't',
+		path => 't/templates',
 		scalarref => \$str,
 		#debug => 1,
 	);
