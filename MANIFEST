@@ -26,6 +26,10 @@ t/09_wrong.t
 t/10_if_else.t
 t/11_dhtml.t
 t/12_path.t
+t/13_loop.t
+t/14_scalarref.t
+t/15_comment.t
+t/16_switch.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html

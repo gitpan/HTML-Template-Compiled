@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.71 2005/11/23 21:37:54 tinita Exp $
+# $Id: Compiled.pm,v 1.79 2005/12/07 00:43:55 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,22 +9,22 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.55";
+our $VERSION = "0.56";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.55";
+our $VERSION = "0.56";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
 use strict;
 use warnings;
 
+use Carp;
 use Fcntl qw(:seek :flock);
 use File::Spec;
 use File::Basename qw(dirname);
-use Carp;
 use HTML::Template::Compiled::Utils qw(:walkpath);
 # TODO
 eval {
@@ -58,9 +58,11 @@ use constant TELSE => 'ELSE';
 use constant T_END => '__EOT__';
 use constant TLOOP => 'LOOP';
 use constant TWITH => 'WITH';
+use constant T_SWITCH => 'SWITCH';
+use constant T_CASE => 'CASE';
 use constant INDENT => '    ';
 
-my ($start_re,$end_re,$tmpl_re,$close_re,$var_re);
+my ($start_re,$end_re,$tmpl_re,$close_re,$var_re,$comment_re);
 use vars qw($EXPR);
 my $asp_re =     ['<%'          ,'%>',    '<%/',          '<%/?.*?%>'];
 my $comm_re =    ['<!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','<!--\s*/?TMPL_.*?\s*-->'];
@@ -75,6 +77,7 @@ my $classic_re = ['<TMPL_'      ,'>',     '</TMPL_',      '</?TMPL.*?>'];
 		$tmpl_re  = '(?i:' . ($ENABLE_ASP ? "$asp_re->[3]|" : '') . "$classic_re->[3]|$comm_re->[3])";
 		$close_re = '(?i:' . ($ENABLE_ASP ? "$asp_re->[2]|" : '') . "$classic_re->[2]|$comm_re->[2])";
 		$var_re = '(?:[\w./]+|->)+';
+		$comment_re = '(?:COMMENT)\s*(?:\s+(\w+)\s*)?' . $end_re;
 		$init = 1;
 	}
 }
@@ -117,8 +120,11 @@ sub new {
 		$self->setFilename($args{filename});
 		$self->setCache_dir($args{cache_dir});
 		$self->setPath($args{path});
-		my $file = $self->createFilename($self->getPath,$self->getFilename);
-		$self->setFile($file);
+		$self->setScalar($args{scalarref});
+		unless ($self->getScalar) {
+			my $file = $self->createFilename($self->getPath,$self->getFilename);
+			$self->setFile($file);
+		}
 		return $self;
 	}
 	if (defined $args{filename} or $args{scalarref} or $args{arrayref} or $args{filehandle}) {
@@ -156,6 +162,13 @@ sub create {
 	}
 	D && $self->log("trying from_cache()");
 	my $t = $self->from_cache();
+    if ($t and my $fm = $args{formatter} || $self->getFormatter) {
+        #print STDERR "-------------args $fm\n";
+        unless ($t->getFormatter) {
+			#print STDERR "no t formatter\n";
+            $t->setFormatter($fm);
+        }
+    }
 	return $t if $t;
 	D && $self->log("tried from_cache()");
 	#D && $self->log("tried from_cache() filename=".$self->getFilename);
@@ -314,6 +327,16 @@ sub add_file_cache {
 		? (join ', ', map { $self->quote_file($_) } @$path)
 		: $self->quote_file($path))
     . ']';
+	my $isScalar = $self->getScalar ? 1 : 0;
+	my $file_args = $isScalar
+		? <<"EOM"
+        scalarref => $isScalar,
+        filename => '@{[$self->getFilename]}',
+EOM
+		: <<"EOM";
+        filename => '@{[$self->getFilename]}',
+        file => '@{[$self->getFile]}',
+EOM
 	print $fh <<"EOM";
 		package HTML::Template::Compiled;
 # file date $lmtime
@@ -326,8 +349,10 @@ my \$args = {
 	htc => {
 		case_sensitive => @{[$self->getCase_sensitive]},
 		cache_dir => '$cache',
-		filename => '@{[$self->getFilename]}',
-		file => '@{[$self->getFile]}',
+$file_args
+		#filename => '@{[$self->getFilename]}',
+		#file => '@{[$self->getFile]}',
+		#scalarref => $isScalar,
 		path => $path_str,
 		method_call => '@{[$self->getMethod_call]}',
 		deref => '@{[$self->getDeref]}',
@@ -374,7 +399,7 @@ sub include_file {
 sub createFilename {
 	my ($self,$path,$filename) = @_;
 	D && $self->log("createFilename($path,$filename)");
-	D && $self->stack;
+	D && $self->stack(1);
 	if (!length $path or File::Spec->file_name_is_absolute($filename)) {
 		return $filename;
 	}
@@ -504,124 +529,135 @@ sub _compile {
 	if ($out_fh) {
 		$output = 'print $OFH ';
 	}
-	$code .= <<"EOM";
+	my $header = <<"EOM";
 sub {
 	no warnings;
 $anon
-	my (\$t, \$P, \$OFH) = \@_;
+	my (\$t, \$P, \$C, \$OFH) = \@_;
 	my \$OUT;
-	my \$C = \\\$P;
+    #my \$C = \\\$P;
 EOM
 
 	my $line = 0;
+	my @lexicals;
+	my @switches;
+	my $comment = 0;
 	for (@p) {
 		my $indent = INDENT x $level;
 		s/~/\\~/g;
 		if ($self->getLine_numbers && s#__(\d+)__($tmpl_re)#$2#) {
 			$line = $1+1;
 		}
-		
-		#$code .= qq#\# line 1000\n#;
-
 		my $meth = $self->getMethod_call;
 		my $deref = $self->getDeref;
 		my $format = $self->getFormatter_path;
+		my %var_args = (
+			deref => $deref,
+			method_call => $meth,
+			formatter_path => $format,
+			lexicals => \@lexicals,
+		);
 		# --------- TMPL_VAR
-		if (m#$start_re(VAR|=)\s+(?:NAME=)?(['"]?)($var_re)\2.*$end_re#i) {
-			my $type = uc $1;
-			$type = "VAR" if $type eq '=';
-			my $var = $3;
-			my $escape = '';
-			if (m/\s+ESCAPE=(['"]?)(\w+(?:\|\w+)*)\1/i) {
-				$escape = $2;
-			}
-			my $default;
-			if (($default)=m/\s+DEFAULT=('([^']*)'|"([^"]*)"|(\S+))/i) {
-				$default =~ s/^['"]//;
-				$default =~ s/['"]$//;
-				$default =~ s/'/\\'/g;
-			}
-			my $varstr = $self->_make_path(
-				deref => $deref,
-				method_call => $meth,
-				formatter_path => $format,
-				var => $var,
-				final => 1,
-			);
-			#print "line: $_ var: $var\n";
-			my $root = 0;
-			my $path = 0;
-			if ($var =~ s/^\.//) {
-				# we have NAME=.ROOT
-				$root++;
-			}
-			if ($var =~ tr/.//) {
-				# we have NAME=BLAH.BLUBB
-				$path++;
-			}
-			if ($root || $path) {
-				$code .= qq#${indent}\{\n${indent}  my \$C = \$C;\n#;
-			}
-			if ($root) {
-				$code .= qq#${indent}  \$C = \\\$P;\n#;
-			}
-			if (defined $default) {
-				$varstr = qq#defined $varstr ? $varstr : '$default'#;
-			}
-			if (uc $type eq 'VAR') {
-				if ($escape) {
-					$escape = uc $escape;
-					my @escapes = split m/\|/, $escape;
-					for (@escapes) {
-						if ($_ eq 'HTML') {
-							$varstr = qq#\$t->escape_html($varstr)#;
+		unless ($comment) {
+			if (m#$start_re(VAR|=)\s+(?:NAME=)?(['"]?)($var_re)\2.*$end_re#i) {
+				my $type = uc $1;
+				$type = "VAR" if $type eq '=';
+				my $var = $3;
+				my $escape = '';
+				if (m/\s+ESCAPE=(['"]?)(\w+(?:\|\w+)*)\1/i) {
+					$escape = $2;
+				}
+				my $default;
+				if (($default)=m/\s+DEFAULT=('([^']*)'|"([^"]*)"|(\S+))/i) {
+					$default =~ s/^['"]//;
+					$default =~ s/['"]$//;
+					$default =~ s/'/\\'/g;
+				}
+				my $varstr = $self->_make_path(
+					%var_args,
+					var => $var,
+					final => 1,
+				);
+				#print "line: $_ var: $var\n";
+				my $root = 0;
+				my $path = 0;
+				if ($var =~ s/^\.//) {
+					# we have NAME=.ROOT
+					$root++;
+				}
+				if ($var =~ tr/.//) {
+					# we have NAME=BLAH.BLUBB
+					$path++;
+				}
+				if ($root || $path) {
+					$code .= qq#${indent}\{\n${indent}  my \$C = \$C;\n#;
+				}
+				if ($root) {
+					$code .= qq#${indent}  \$C = \\\$P;\n#;
+				}
+				if (defined $default) {
+					$varstr = qq#defined $varstr ? $varstr : '$default'#;
+				}
+				if (uc $type eq 'VAR') {
+					if ($escape) {
+						$escape = uc $escape;
+						my @escapes = split m/\|/, $escape;
+						for (@escapes) {
+							if ($_ eq 'HTML') {
+								$varstr = qq#\$t->escape_html($varstr)#;
+							}
+							elsif ($_ eq 'URL') {
+								$varstr = qq#\$t->escape_uri($varstr)#;
+							}
+							elsif ($_ eq 'DUMP') {
+								$varstr = qq#\$t->dump($varstr)#;
+							}
 						}
-						elsif ($_ eq 'URL') {
-							$varstr = qq#\$t->escape_uri($varstr)#;
-						}
-						elsif ($_ eq 'DUMP') {
-							$varstr = qq#\$t->dump($varstr)#;
-						}
+						$code .= qq#${indent}$output $varstr;\n#;
 					}
-					$code .= qq#${indent}$output $varstr;\n#;
+					else {
+						#$code .= qq#print STDERR "<<<<<<<<<<< $var\\n";\n\# line 1000\n#;
+						$code .= qq#${indent}$output $varstr;\n#;
+					}
 				}
-				else {
-					#$code .= qq#print STDERR "<<<<<<<<<<< $var\\n";\n\# line 1000\n#;
-					$code .= qq#${indent}$output $varstr;\n#;
+				if ($root || $path) {
+					$code .= qq#\n${indent}\}\n#;
 				}
 			}
-			if ($root || $path) {
-				$code .= qq#\n${indent}}\n#;
+
+			# --------- TMPL_WITH
+			elsif (m#${start_re}WITH\s+(?:NAME=)?(['"]?)($var_re)\1\s*$end_re#i) {
+				push @$stack, TWITH;
+				$level++;
+				my $var = $2;
+				my $varstr = $self->_make_path(
+					%var_args,
+					var => $var,
+					final => 0,
+				);
+				$code .= qq#${indent}\{ \# WITH $var\n#;
+				$code .= qq#${indent}  my \$C = \\$varstr;\n#;
 			}
-		}
 
-		# --------- TMPL_WITH
-		elsif (m#${start_re}WITH\s+(?:NAME=)?(['"]?)($var_re)\1\s*$end_re#i) {
-			push @$stack, TWITH;
-			$level++;
-			my $var = $2;
-			my $varstr = $self->_make_path(
-				deref => $deref,
-				method_call => $meth,
-				formatter_path => $format,
-				var => $var,
-				final => 0,
-			);
-			$code .= qq#${indent}\{ \# WITH $var\n#;
-			$code .= qq#${indent}  my \$C = \\$varstr;\n#;
-		}
-
-		# --------- TMPL_LOOP
-		elsif (m#${start_re}LOOP\s+(?:NAME=)?(['"]?)($var_re)\1\s*$end_re#i) {
-			push @$stack, TLOOP;
-			my $var = $2;
-			my $varstr = $self->_make_path(
-				deref => $deref,
-				method_call => $meth,
-				formatter_path => $format,
-				var => $var,
-				final => 0,
-			);
+			# --------- TMPL_LOOP
+			elsif (m{ $start_re
+					(?:LOOP|FOR) \s+
+					(?:NAME=)?
+					(['"]?)   # $1 "'
+					($var_re) # $2
+					\1
+					(?: \s+ AS \s+ (\w+) ) ? # $3
+					\s* $end_re }ix) {
+				push @$stack, TLOOP;
+				my $var = $2;
+				my $lexical = $3;
+				push @lexicals, $lexical;
+				my $lexi = defined $lexical ? "${indent}my \$$lexical = \$\$C;\n" : "";
+				my $varstr = $self->_make_path(
+					%var_args,
+					var => $var,
+					final => 0,
+				);
 			$level+=2;
 			my $ind = INDENT;
 			my $global = $self->getGlobal_vars ? <<"EOM" : '';
@@ -637,145 +673,220 @@ $global
 ${indent}${ind}# loop over $var
 ${indent}${ind}for my \$ix (\$[..\$size) {
 ${indent}${ind}${ind}my \$C = \\ (\$array->[\$ix]);
+$lexi
 EOM
-			if ($self->getLoop_context) {
-				my $indent = INDENT x $level;
-			$code .= <<"EOM";
+				if ($self->getLoop_context) {
+					my $indent = INDENT x $level;
+					$code .= <<"EOM";
 ${indent}local \$__counter__ = \$ix+1;
 ${indent}local \$__first__   = \$ix == \$[;
 ${indent}local \$__last__    = \$ix == \$size;
 ${indent}local \$__odd__     = !(\$ix & 1);
 ${indent}local \$__inner__   = !\$__first__ && !\$__last__;
 EOM
+				}
 			}
-		}
 
-		# --------- TMPL_ELSE
-		elsif (m#${start_re}ELSE\s*$end_re#i) {
-			# we can only have an open if or unless
-			$self->_checkstack($fname,$line,$stack, TELSE);
-			my $indent = INDENT x ($level-1);
-			$code .= qq#${indent}}\n${indent}else {\n#;
-		}
+			# --------- TMPL_ELSE
+			elsif (m#${start_re}ELSE\s*$end_re#i) {
+				# we can only have an open if or unless
+				$self->_checkstack($fname,$line,$stack, TELSE);
+				my $indent = INDENT x ($level-1);
+				$code .= qq#${indent}\}\n${indent}else {\n#;
+			}
 
-		# --------- / TMPL_IF TMPL UNLESS TMPL_WITH
-		elsif (m#$close_re(IF|UNLESS|WITH)(?:\s+$var_re)?\s*$end_re#i) {
-			$self->_checkstack($fname,$line,$stack, uc "$1");
-			pop @$stack;
-			$level--;
-			my $indent = INDENT x $level;
-			$code .= qq#${indent}\} \# end $1\n#;
-		}
+			# --------- / TMPL_IF TMPL UNLESS TMPL_WITH
+			elsif (m#$close_re(IF|UNLESS|WITH)(?:\s+$var_re)?\s*$end_re#i) {
+				$self->_checkstack($fname,$line,$stack, uc "$1");
+				pop @$stack;
+				$level--;
+				my $indent = INDENT x $level;
+				$code .= qq#${indent}\} \# end $1\n#;
+			}
 
-		# --------- / TMPL_LOOP
-		elsif (m#${close_re}LOOP(?:\s*$var_re\s*)?\s*$end_re#i) {
-			$self->_checkstack($fname,$line,$stack, TLOOP);
-			pop @$stack;
-			$level--;
-			$level--;
-			my $indent = INDENT x $level;
-			my $global = $self->getGlobal_vars ? <<"EOM" : '';
+			# --------- / TMPL_LOOP
+			elsif (m{ $close_re
+				(?:LOOP|FOR) (?:\s*$var_re\s*)?
+				\s* $end_re}ix) {
+				$self->_checkstack($fname,$line,$stack, TLOOP);
+				pop @$stack;
+				pop @lexicals;
+				$level--;
+				$level--;
+				my $indent = INDENT x $level;
+				my $global = $self->getGlobal_vars ? <<"EOM" : '';
 ${indent}my \$stack = \$t->getGlobalstack;
 ${indent}pop \@\$stack;
 ${indent}\$t->setGlobalstack(\$stack);
 EOM
-			$code .= <<"EOM";
-${indent}@{[INDENT()]}}
-${indent}} # end loop
+				$code .= <<"EOM";
+${indent}@{[INDENT()]}\}
+${indent}\} # end loop
 $global
 EOM
-		}
-		# --------- TMPL_IF TMPL UNLESS TMPL_ELSE
-		elsif (m#$start_re(ELSIF|IF|UNLESS)\s+(DEFINED\s+)?(?:NAME=)?(['"]?)($var_re)\3\s*$end_re#i) {
-			my $type = uc $1;
-			my $def = $2;
-			my $var = $4;
-			my $indent = INDENT x $level;
-			my $varstr = $self->_make_path(
-				deref => $deref,
-				method_call => $meth,
-				formatter_path => $format,
-				var => $var,
-				final => 1,
-			);
-			#my $if = (lc $1 eq 'IF'? 'if' : "unless ");
-			my $if = {IF => 'if', UNLESS => 'unless', ELSIF => 'elsif'}->{uc $1};
-			my $elsif = $type eq 'ELSIF' ? 1 : 0;
-			if ($def) {
-				$varstr = "defined( $varstr )";
 			}
-			if ($elsif) {
-				$code .= qq#${indent}\}\n#;
-				$self->_checkstack($fname,$line,$stack, TELSIF);
-			}
-			else {
-				push @$stack, $type;
-				$level++;
-			}
-			$code .= <<"EOM"
-${indent}$if($varstr) {
+			# --------- TMPL_IF TMPL UNLESS TMPL_ELSE
+			elsif (m#$start_re(ELSIF|IF|UNLESS)\s+(DEFINED\s+)?(?:NAME=)?(['"]?)($var_re)\3\s*$end_re#i) {
+				my $type = uc $1;
+				my $def = $2;
+				my $var = $4;
+				my $indent = INDENT x $level;
+				my $varstr = $self->_make_path(
+					%var_args,
+					var => $var,
+					final => 1,
+				);
+				my $if = {IF => 'if', UNLESS => 'unless', ELSIF => 'elsif'}->{uc $1};
+				my $elsif = $type eq 'ELSIF' ? 1 : 0;
+				if ($def) {
+					$varstr = "defined( $varstr )";
+				}
+				if ($elsif) {
+					$code .= qq#${indent}\}\n#;
+					$self->_checkstack($fname,$line,$stack, TELSIF);
+				}
+				else {
+					push @$stack, $type;
+					$level++;
+				}
+				$code .= <<"EOM"
+${indent}$if($varstr) \{
 EOM
-		}
-		elsif (m#${start_re}INCLUDE\s+(.+?)$end_re#is) {
-			my $match = $1;
-			my $filename;
-			my $varstr;
-			my $path = $self->getPath();
-			my $dir;
-			$path = [$path] unless ref $path eq 'ARRAY';
-			if ($match =~ m/(?:VAR=)(['"]?)($var_re)\1/i) {
-				# dynamic filename
-				my $dfilename = $2;
-				$varstr = $self->_make_path(
-					deref => $deref,
-					method_call => $meth,
-					formatter_path => $format,
-					var => $dfilename,
+			}
+			elsif (m# $start_re SWITCH \s+ (?:NAME=)?(['"]?)($var_re)\1\s* $end_re #xi) {
+				my $var = $2;
+				push @$stack, T_SWITCH;
+				push @switches, 0;
+				$level++;
+				my $varstr = $self->_make_path(
+					%var_args,
+					var => $var,
 					final => 0,
 				);
+				$code .= <<"EOM";
+${indent}SWITCH: for my \$_switch ($varstr) \{
+EOM
 			}
-			elsif ($match =~ m/(?:NAME=)?(['"]?)([^'">]+)\1/i) {
-				# static filename
-				$filename = $2;
-				$varstr = $self->quote_file($filename);
-				$dir = dirname $fname;
-				if (defined $dir and !grep { $dir eq $_ } @$path) {
-					# add the current directory to top of paths
-					$path = [$dir, @$path]; # create new $path, don't alter original ref
+			elsif (m# $close_re SWITCH (?:\s+$var_re)?\s*$end_re#xi) {
+				$self->_checkstack($fname,$line,$stack, T_SWITCH);
+				pop @$stack;
+				$level--;
+				if ($switches[$#switches]) {
+					# we had at least one CASE, so we close the last if
+					$code .= qq#${indent}\} \# last case\n#;
 				}
-				# generate included template
-				{
-					D && $self->log("compile include $filename!!");
-					my $cached_or_new = $self->clone_init($path, $filename, $self->getCache_dir);
+				$code .= qq#${indent}\}\n#;
+				pop @switches;
+			}
+			elsif (m# $start_re CASE (\s+\w+(?:,\s*\w+)?)? \s* $end_re #xi) {
+				my $val = $1;
+				$val =~ s/^\s+//;
+				$self->_checkstack($fname,$line,$stack, T_CASE);
+				if ($switches[$#switches]) {
+					# we aren't the first case
+					$code .= qq#${indent}last SWITCH;\n${indent}\}\n#;
+				}
+				else {
+					$switches[$#switches] = 1;
+					$level++;
+				}
+				if (!length $val or uc $val eq 'DEFAULT') {
+					$code .= qq#${indent}if (1) \{\n#;
+				}
+				else {
+					my $values = join ",", map { qq#'$_'# } split ",", $val;
+					$code .= qq#${indent}if (grep \{ \$_switch eq \$_ \} $values) \{\n#;
 				}
 			}
-			#print STDERR "include $varstr\n";
-			my $cache = $self->getCache_dir;
-			$path = defined $path
-				? !ref $path
-					? $self->quote_file($path)
-					# support path => arrayref soon
-					: '['.join(',',map { $self->quote_file($_) } @$path).']'
-				: 'undef';
-			$cache = defined $cache ? $self->quote_file($cache) : 'undef';
-			$code .= <<"EOM";
+			elsif (m# $start_re INCLUDE\s+(.+?) $end_re #ixs) {
+				my $match = $1;
+				my $filename;
+				my $varstr;
+				my $path = $self->getPath();
+				my $dir;
+				$path = [$path] unless ref $path eq 'ARRAY';
+				if ($match =~ m/(?:VAR=)(['"]?)($var_re)\1/i) {
+					# dynamic filename
+					my $dfilename = $2;
+					$varstr = $self->_make_path(
+						%var_args,
+						var => $dfilename,
+						final => 0,
+					);
+				}
+				elsif ($match =~ m/(?:NAME=)?(['"]?)([^'">]+)\1/i) {
+					# static filename
+					$filename = $2;
+					$varstr = $self->quote_file($filename);
+					$dir = dirname $fname;
+					if (defined $dir and !grep { $dir eq $_ } @$path) {
+						# add the current directory to top of paths
+						$path = [$dir, @$path]; # create new $path, don't alter original ref
+					}
+					# generate included template
+					{
+						D && $self->log("compile include $filename!!");
+						my $cached_or_new = $self->clone_init($path, $filename, $self->getCache_dir);
+					}
+				}
+				#print STDERR "include $varstr\n";
+				my $cache = $self->getCache_dir;
+				$path = defined $path
+					? !ref $path
+						? $self->quote_file($path)
+						# support path => arrayref soon
+						: '['.join(',',map { $self->quote_file($_) } @$path).']'
+					: 'undef';
+				$cache = defined $cache ? $self->quote_file($cache) : 'undef';
+				$code .= <<"EOM";
 ${indent}\{
 ${indent}  my \$new = \$t->clone_init($path,$varstr,$cache);
-${indent}  $output \$new->getPerl()->(\$new,\$\$C@{[$out_fh ? ",\$OFH" : '']});
-${indent}}
+${indent}  $output \$new->getPerl()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
+${indent}\}
 EOM
 
+			}
+			elsif (m#$start_re$comment_re#i) {
+				my $name = $1;
+				$comment++;
+				$code .= qq{ # comment $name (level $comment)\n};
+			}
+			elsif (m#$close_re$comment_re#i) {
+				my $name = $1;
+				$code .= qq{ # end comment $name (level $comment)\n};
+				$comment--;
+			}
+			else {
+				if (length $_) {
+					s/\\/\\\\/g;
+					s/'/\\'/g;
+					$code .= qq#$indent$output '$_';\n#;
+				}
+			}
 		}
 		else {
-			if (length $_) {
-				s/\\/\\\\/g;
-				s/'/\\'/g;
-				$code .= qq#$indent$output '$_';\n#;
+			if (m#$start_re$comment_re#i) {
+				my $name = $1;
+				$comment++;
+				$code .= qq{ # comment $name (level $comment)\n};
+			}
+			elsif (m#$close_re$comment_re#i) {
+				my $name = $1;
+				$code .= qq{ # end comment $name (level $comment)\n};
+				$comment--;
+			}
+			else {
+				if (length $_) {
+					s/\\/\\\\/g;
+					s/'/\\'/g;
+					$code .= qq#$indent$output '$_';\n#;
+				}
 			}
 		}
 	}
-		$self->_checkstack($fname,$line,$stack, T_END);
-	$code .= "\n} # end of sub\n";
+	$self->_checkstack($fname,$line,$stack, T_END);
+	$code = $header . $code . "\n} # end of sub\n";
+	#$code .= "\n} # end of sub\n";
 	print STDERR "# ----- code \n$code\n# end code\n" if $self->getDebug;
 	my $sub = eval $code;
 	die "code: $@" if $@;
@@ -791,6 +902,10 @@ sub quote_file {
 
 sub _make_path {
 	my ($self, %args) = @_;
+	my $lexicals = $args{lexicals};
+	if (grep { defined $_ && $args{var} eq $_ } @$lexicals) {
+		return "\$$args{var}";
+	}
 	my $root = 0;
 	if ($args{var} =~ m/^__(\w+)__$/) {
 		return "\$\L$args{var}\E";
@@ -821,7 +936,7 @@ sub _make_path {
 	my $final = $args{final} ? 1 : 0;
 	my $getvar = $ENABLE_SUB ? '_get_var_sub' : '_get_var';
 	$getvar .= $self->getGlobal_vars ? '_global' : '';
-	my $varstr = "\$t->$getvar(" .($root?'$P':'$$C').",$final,@paths)";
+	my $varstr = "\$t->$getvar(\$P," .($root?'$P':'$$C').",$final,@paths)";
 	return $varstr;
 	return ($root, \@paths);
 }
@@ -845,9 +960,10 @@ sub try_global {
 	# generating different code depending on global_vars
 	my $code = <<'EOM';
 sub {
-	my ($self, $ref, $final, @paths) = @_;
+	my ($self, $P, $ref, $final, @paths) = @_;
 	my $walk = $ref;
 	for my $path (@paths) {
+        last unless defined $walk;
 		#print STDERR "ref: $walk, key: $key\n";
 		if ($path->[0] == PATH_DEREF) {
 			if (ref $walk eq 'ARRAY') {
@@ -882,7 +998,7 @@ EOM
 	$sub =~ s/^\Q*** walk ***\E$/$walk/m;
 	my $subref = eval $sub;
 	no strict 'refs';
-	*{'_get_var'} = $subref;
+	*{'HTML::Template::Compiled::_get_var'} = $subref;
 	$sub = $code;
 	$sub =~ s/^\Q*** walk ***\E$/$global/m;
 	$subref = eval $sub;
@@ -892,16 +1008,16 @@ EOM
 # and another two ugly subroutines
 
 sub _get_var_sub {
-	my ($self, $ref, $final, @paths) = @_;
-	my $var = $self->_get_var($ref, $final, @paths);
+	my ($self, $P, $ref, $final, @paths) = @_;
+	my $var = $self->_get_var($P, $ref, $final, @paths);
 	if ($ENABLE_SUB and $final and ref $var eq 'CODE') {
 		return $var->();
 	}
 	return $var;
 }
 sub _get_var_sub_global {
-	my ($self, $ref, $final, @paths) = @_;
-	my $var = $self->_get_var_global($ref, $final, @paths);
+	my ($self, $P, $ref, $final, @paths) = @_;
+	my $var = $self->_get_var_global($P, $ref, $final, @paths);
 	if ($ENABLE_SUB and $final and ref $var eq 'CODE') {
 		return $var->();
 	}
@@ -918,6 +1034,8 @@ sub _get_var_sub_global {
 		ELSE => [TIF,TUNLESS,TELSIF],
 		LOOP => [TLOOP],
 		WITH => [TWITH],
+		T_SWITCH() => [T_SWITCH],
+		T_CASE() => [T_SWITCH],
 		T_END() => [T_END],
 	);
 	sub _checkstack {
@@ -933,7 +1051,7 @@ sub _get_var_sub_global {
 		for (@allowed) {
 			return 1 if $_ eq $stack->[-1];
 		}
-		die "'TMPL_$check' does not match opening tag ($stack->[-1]) at $fname line $line\n";
+		croak "'TMPL_$check' does not match opening tag ($stack->[-1]) at $fname line $line\n";
 	}
 }
 sub escape_filename {
@@ -1042,7 +1160,7 @@ sub output {
 	my %p = %{$self->[PARAM]||{}};
 	my $f = $self->getFile;
 	$fh = \*STDOUT unless $fh;
-	$self->getPerl()->($self,\%p,$fh);
+	$self->getPerl()->($self,\%p,\\%p,$fh);
 }
 
 sub import {
@@ -1093,7 +1211,7 @@ sub __test_version {
 sub stack {
 	my ($self,$force) = @_;
 	return if !D and !$force;
-	my $i = 1;
+	my $i = 0;
 	my $out;
 	while(my @c = caller($i)) {
 		$out .= "$i\t$c[0] l. $c[2] $c[3]\n";
@@ -1237,6 +1355,14 @@ new (roughly tested)
 
 =item TMPL_WITH
 
+=item TMPL_COMMENT
+
+see L<"TMPL_COMMENT">
+
+=item TMPL_SWITCH, TMPL_CASE
+
+see L<"TMPL_SWITCH">
+
 =item Generating perl code
 
 =item more variable access
@@ -1283,7 +1409,7 @@ I don't think I'll implement that in the near future.
 =head2 DIFFERENT DEFAULTS
 
 
-At the moment there are two defaults that differ from L<HTML::Template>:
+At the moment there are three defaults that differ from L<HTML::Template>:
 
 =over 4
 
@@ -1426,6 +1552,47 @@ The special name C<_> gives you the current paramater. In loops you can use it l
  <tmpl_loop foo>
   Current item: <tmpl_var _ >
  </tmpl_loop>
+
+=head2 TMPL_COMMENT
+
+For debugging purposes you can temporarily comment out regions:
+
+  <tmpl_var wanted>
+    <tmpl_comment outer>
+      <tmpl_comment inner>
+        <tmpl_var unwanted>
+      </tmpl_comment inner>
+      <tmpl_var unwanted>
+  </tmpl_comment outer>
+
+  $htc->param(unwanted => "no thanks", wanted => "we want this");
+
+The output is (whitespaces stripped):
+ we want this
+ <tmpl_var unwanted>
+ <tmpl_var unwanted>
+
+So HTC will happily display everything between the comment tags, but it won't parse
+it for template tags.
+I might add an option that prevents the content between those tags from being outputted.
+This could be useful for documenting templates but don't let the person who sees the
+rendered template see the comments.
+
+=head2 TMPL_SWITCH
+
+The SWITCH directive has the same syntax as VAR, IF etc.
+The CASE directive takes a simple string or a comma separated list of strings.
+Yes, without quotes. I might add that if someone finds it useful.
+
+ <tmpl_switch language>(or <tmpl_case name=language>)
+  <tmpl_case de>echt cool
+  <tmpl_case en>very cool
+  <tmpl_case es>superculo
+  <tmpl_case fr,se>don't speak french or swedish
+  <tmpl_case default>sorry, no translation for cool available
+  <tmpl_case>(same as default)
+ </tmpl_switch>
+
 
 =head2 OPTIONS
 
@@ -1653,7 +1820,7 @@ code.
 
 =head1 TODO
 
-fix C<path> option and search_path_on_include, query, implement expressions, ...
+fix C<path> option, query, implement expressions, ...
 
 =head1 BUGS
 

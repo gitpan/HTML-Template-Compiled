@@ -1,5 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.56 Wed Dec  7 01:46:21 CET 2005
+- some include and scalarref  issues fixed
+- <tmpl_comment>
+- <tmpl_switch>, <tmpl_case>
+
 0.55 Wed Nov 23 22:36:58 CET 2005
 - search_path_on_include
 
