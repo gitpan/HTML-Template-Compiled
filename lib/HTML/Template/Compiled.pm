@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.79 2005/12/07 00:43:55 tinita Exp $
+# $Id: Compiled.pm,v 1.85 2005/12/07 14:55:12 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.56";
+our $VERSION = "0.57";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.56";
+our $VERSION = "0.57";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -77,7 +77,7 @@ my $classic_re = ['<TMPL_'      ,'>',     '</TMPL_',      '</?TMPL.*?>'];
 		$tmpl_re  = '(?i:' . ($ENABLE_ASP ? "$asp_re->[3]|" : '') . "$classic_re->[3]|$comm_re->[3])";
 		$close_re = '(?i:' . ($ENABLE_ASP ? "$asp_re->[2]|" : '') . "$classic_re->[2]|$comm_re->[2])";
 		$var_re = '(?:[\w./]+|->)+';
-		$comment_re = '(?:COMMENT)\s*(?:\s+(\w+)\s*)?' . $end_re;
+		$comment_re = '(COMMENT|NOPARSE)\s*(?:\s+(\w+)\s*)?' . $end_re;
 		$init = 1;
 	}
 }
@@ -542,6 +542,7 @@ EOM
 	my @lexicals;
 	my @switches;
 	my $comment = 0;
+	my $noparse = 0;
 	for (@p) {
 		my $indent = INDENT x $level;
 		s/~/\\~/g;
@@ -558,7 +559,7 @@ EOM
 			lexicals => \@lexicals,
 		);
 		# --------- TMPL_VAR
-		unless ($comment) {
+		if (!$comment && !$noparse) {
 			if (m#$start_re(VAR|=)\s+(?:NAME=)?(['"]?)($var_re)\2.*$end_re#i) {
 				my $type = uc $1;
 				$type = "VAR" if $type eq '=';
@@ -847,14 +848,14 @@ EOM
 
 			}
 			elsif (m#$start_re$comment_re#i) {
-				my $name = $1;
-				$comment++;
+				my $name = $2;
+				uc $1 eq 'COMMENT' ? $comment++ : $noparse++;
 				$code .= qq{ # comment $name (level $comment)\n};
 			}
 			elsif (m#$close_re$comment_re#i) {
-				my $name = $1;
+				my $name = $2;
 				$code .= qq{ # end comment $name (level $comment)\n};
-				$comment--;
+				uc $1 eq 'COMMENT' ? $comment-- : $noparse--;
 			}
 			else {
 				if (length $_) {
@@ -866,17 +867,19 @@ EOM
 		}
 		else {
 			if (m#$start_re$comment_re#i) {
-				my $name = $1;
-				$comment++;
+				my $name = $2;
+				uc $1 eq 'COMMENT' ? $comment++ : $noparse++;
 				$code .= qq{ # comment $name (level $comment)\n};
 			}
 			elsif (m#$close_re$comment_re#i) {
-				my $name = $1;
+				my $name = $2;
 				$code .= qq{ # end comment $name (level $comment)\n};
-				$comment--;
+				uc $1 eq 'COMMENT' ? $comment-- : $noparse--;
 			}
 			else {
-				if (length $_) {
+				# don't output anything if we are in a comment
+				# but output if we are in noparse
+				if (!$comment && length $_) {
 					s/\\/\\\\/g;
 					s/'/\\'/g;
 					$code .= qq#$indent$output '$_';\n#;
@@ -1359,6 +1362,10 @@ new (roughly tested)
 
 see L<"TMPL_COMMENT">
 
+=item TMPL_NOPARSE
+
+see L<"TMPL_NOPARSE">
+
 =item TMPL_SWITCH, TMPL_CASE
 
 see L<"TMPL_SWITCH">
@@ -1416,6 +1423,7 @@ At the moment there are three defaults that differ from L<HTML::Template>:
 =item case_sensitive
 
 default is 1. Set it via C<$HTML::Template::Compiled::CASE_SENSITIVE_DEFAULT = 0>
+Note (again): this will slow down templating a lot.
 
 =item subref variables
 
@@ -1423,7 +1431,7 @@ default is 0. Set it via C<$HTML::Template::Compiled::ENABLE_SUB = 1>
 
 =item search_path_on_include
 
-default is 1.
+default is 1. Set it via C<$HTML::Template::Compiled::SEARCHPATH = 0>
 
 =back
 
@@ -1568,15 +1576,23 @@ For debugging purposes you can temporarily comment out regions:
   $htc->param(unwanted => "no thanks", wanted => "we want this");
 
 The output is (whitespaces stripped):
- we want this
- <tmpl_var unwanted>
- <tmpl_var unwanted>
 
-So HTC will happily display everything between the comment tags, but it won't parse
-it for template tags.
-I might add an option that prevents the content between those tags from being outputted.
-This could be useful for documenting templates but don't let the person who sees the
-rendered template see the comments.
+  we want this
+  <tmpl_var unwanted>
+  <tmpl_var unwanted>
+
+HTC will ignore anything between COMMENT directives.
+This is useful for debugging, and also for documentation inside the
+template which should not be outputted.
+
+=head2 TMPL_NOPARSE
+
+Anything between
+
+  <tmpl_noparse>...</tmpl_noparse>
+
+will not be recognized as template directives. Same syntax as TMPL_COMMENT.
+It will output the content, though.
 
 =head2 TMPL_SWITCH
 
@@ -1584,12 +1600,12 @@ The SWITCH directive has the same syntax as VAR, IF etc.
 The CASE directive takes a simple string or a comma separated list of strings.
 Yes, without quotes. I might add that if someone finds it useful.
 
- <tmpl_switch language>(or <tmpl_case name=language>)
+ <tmpl_switch language>(or <tmpl_switch name=language>)
   <tmpl_case de>echt cool
   <tmpl_case en>very cool
   <tmpl_case es>superculo
   <tmpl_case fr,se>don't speak french or swedish
-  <tmpl_case default>sorry, no translation for cool available
+  <tmpl_case default>sorry, no translation for cool in language <%=lang%> available
   <tmpl_case>(same as default)
  </tmpl_switch>
 
@@ -1620,6 +1636,13 @@ Template to parse
 Reference to a scalar with your template content. It's possible to cache
 scalarrefs, too, if you have Digest::MD5 installed. Note that your cache directory
 might get filled with files from earlier versions. Clean the cache regularly.
+
+Don't cache scalarrefs if you have dynamic strings. Your memory might get filled up fast!
+Use the (still undocumented) option
+
+  cache => 0
+
+to disable memory caching.
 
 =item arrayref
 
@@ -1661,7 +1684,7 @@ a /TMPL_IF that does not have an opening tag.
 =item case_sensitive
 
 default is 1, set it to 0 to use this feature like in HTML::Template. Note that
-this can slow down your program.
+this can slow down your program a lot.
 
 =item dumper
 

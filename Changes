@@ -1,5 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.57 Wed Dec  7 15:54:05 CET 2005
+- tmpl_comment doesn't output
+- tmpl_noparse does, though
+- various pod- and test-fixes
+
 0.56 Wed Dec  7 01:46:21 CET 2005
 - some include and scalarref  issues fixed
 - <tmpl_comment>

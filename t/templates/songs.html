@@ -1,24 +1,24 @@
-<a href="<%= .SELF%>?lang=<TMPL_VAR .LANGUAGE>">Start</a><br>
-Band: <tmpl_var bAND><br>
+<%= .SELF%>?lang=<TMPL_VAR .LANGUAGE>
+Band: <tmpl_var bAND>
 Albums:
 <TMPL_LOOP ALBUMS>
 <!--
-TMPL_IF __first__ -->(first)<!-- /TMPL_IF -->
-	<!--TMPL_UNLESS NAME=__last__ -->(not last)<!--TMPL_ELSE-->(last)<!-- /TMPL_UNLESS -->
-	<b><TMPL_VAR NAME></b>(<TMPL_IF SINGLE>Single<TMPL_ELSIF ALBUM>Album<TMPL_ELSE>Other</TMPL_IF>)<br>
+TMPL_IF __first__ -->(first)<!-- /TMPL_IF --> <!--TMPL_UNLESS
+NAME=__last__ -->(not last)<!--TMPL_ELSE-->(last)<!-- /TMPL_UNLESS -->
+	<TMPL_VAR NAME> (<TMPL_IF SINGLE>Single<TMPL_ELSIF ALBUM>Album<TMPL_ELSE>Other</TMPL_IF>)
 	<%LOOP SONGS%>
-		<%= __counter__%>. <TMPL_VAR NAME><br>
+		<%= __counter__%>. <TMPL_VAR NAME>
 	<%/LOOP%>
-	<TMPL_IF __last__><hr></TMPL_IF>
+	<TMPL_IF __last__>---</TMPL_IF>
 </TMPL_LOOP>
-Bio: <p><TMPL_VAR .INFO.BIOGRAPHY DEFAULT="No bio available"></p>
-Homepage: <a href="<!-- TMPL_VAR INFO.LINK -->">Start</a>
+Bio: <TMPL_VAR .INFO.BIOGRAPHY DEFAULT="No bio available">
+Homepage: <!-- TMPL_VAR INFO.LINK -->
 <TMPL_WITH INFO>
 <TMPL_VAR _ ESCAPE=DUMP|HTML>
-Bio: <p><TMPL_VAR BIOGRAPHY DEFAULT='No bio available'></p>
-Homepage: <a href="<TMPL_VAR LINK>">Start</a>
+Bio: <TMPL_VAR BIOGRAPHY DEFAULT='No bio available'>
+Homepage: <TMPL_VAR LINK>
 </TMPL_WITH>
-<TMPL_VAR NAME="ALBUMS.0.SONGS.0.NAME">
+Song 0: <TMPL_VAR NAME="ALBUMS.0.SONGS.0.NAME">
 <!-- TMPL_VAR URITEST ESCAPE=URL -->
 <TMPL_INCLUDE NAME="include.html">
 <TMPL_WITH NAME="OBJECT"><TMPL_VAR NAME="_/key"></TMPL_WITH>
