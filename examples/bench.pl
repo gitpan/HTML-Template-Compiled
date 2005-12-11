@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.4 2005/11/01 18:44:48 tinita Exp $
+# $Id: bench.pl,v 1.5 2005/12/11 20:59:34 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -11,16 +11,17 @@ my $ht_file = 'test.htc';
 my $tt_file = "test.tt";
 #$tt_file = "examples/test.tt.10";
 #$tt_file = "examples/test.tt.20";
+my $tst_file = "examples/test.tst";
 mkdir "cache";
 mkdir "cache/htc";
 mkdir "cache/jit";
 my %use = (
-	'HTML::Template' => 0,
+	'HTML::Template'           => 0,
 	'HTML::Template::Compiled' => 0,
-	'HTML::Template::JIT' => 0,
-	'Template' => 0,
+	'HTML::Template::JIT'      => 0,
+	'Template'                 => 0,
 	# not yet
-#	'Text::ScriptTemplate' => 0,
+	'Text::ScriptTemplate'     => 0,
 );
 for my $key (keys %use) {
 	eval "require $key";
@@ -41,12 +42,19 @@ sub new_htc {
 		debug => $debug,
 		# note that you have to create the cachedir
 		# first, otherwise it will run without cache
-		cache_dir => "cache/htc",
+		#cache_dir => "cache/htc",
 		out_fh => 1,
 	);
 	#my $size = total_size($t1);
 	#print "size htc = $size\n";
 	return $t1;
+}
+sub new_tst {
+	my $t = Text::ScriptTemplate->new();
+	$t->load($tst_file);
+	#my $size = total_size($t1);
+	#print "size htc = $size\n";
+	return $t;
 }
 sub new_ht {
 	my $t2 = HTML::Template->new(
@@ -112,11 +120,21 @@ sub output {
 	#print $t->{code} if exists $t->{code};
 	my $out = $t=~m/Compiled/?$t->output(\*OUT):$t->output;
 	print OUT $out;
+	#print "output():$out\n";
 	#my $size = total_size($t);
 	#print "size $t = $size\n";
 	#print "\nOUT: $out";
 }
 #open TT_OUT, ">&STDOUT";
+sub output_tst {
+	my $t = shift;
+	return unless defined $t;
+	#warn Data::Dumper->Dump([\%params], ['params']);
+	$t->setq(%params,tmpl=>$t);
+	my $out = $t->fill;
+	#print "output_tst():$out\n";
+	print OUT $out;
+}
 sub output_tt {
 	my $t = shift;
 	return unless defined $t;
@@ -134,6 +152,7 @@ my $gobal_htc = $use{'HTML::Template::Compiled'} ? new_htc : undef;
 my $gobal_ht = $use{'HTML::Template'} ? new_ht : undef;
 my $gobal_htj = $use{'HTML::Template::JIT'} ? new_htj : undef;
 my $gobal_tt = $use{'Template'} ? new_tt : undef;
+my $gobal_tst = $use{'Tex::ScriptTemplate'} ? new_tst : undef;
 if(1) {
 timethese ($ARGV[0]||-1, {
 		$use{'HTML::Template::Compiled'} ? (
@@ -158,6 +177,11 @@ timethese ($ARGV[0]||-1, {
 					#new_tt => sub {my $t = new_tt();},
 					#output_tt => sub {output_tt($gobal_tt)},
 						all_tt => sub {my $t = new_tt();output_tt($t)},
+        ): (),
+        $use{'Text::ScriptTemplate'} ? (
+					#new_tst => sub {my $t = new_tt();},
+					#output_tst => sub {output_tt($gobal_tt)},
+						all_tst => sub {my $t = new_tst();output_tst($t)},
         ): (),
 	});
 }

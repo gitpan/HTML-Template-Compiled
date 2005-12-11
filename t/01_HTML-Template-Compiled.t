@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.10 2005/12/07 02:38:52 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.11 2005/12/11 17:34:52 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 6;
@@ -66,7 +66,14 @@ my $uri = $@ ? 0 : 1;
 SKIP: {
 	skip "no HTML::Entities and URI::Escape installed", 3, unless ($entities && $uri);
 	my $out = $htc->output;
-	my $exp = <<'EOM';
+	my $dump = <<'EOM';
+$DUMP = {
+'BIOGRAPHY' => undef,
+'LINK' => 'http://...'
+};
+EOM
+	HTML::Entities::encode_entities($dump);
+	my $exp = <<'EOM' . $dump . <<'EOM';
 /path/to/script.pl?lang=de
 Band: Bauhaus
 Albums:
@@ -77,10 +84,7 @@ Mask (Album)
 ---
 Bio: No bio available
 Homepage: http://...
-$DUMP = {
-'BIOGRAPHY' =&gt; undef,
-'LINK' =&gt; 'http://...'
-};
+EOM
 Bio: No bio available
 Homepage: http://...
 Song 0: Hair of the Dog

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.85 2005/12/07 14:55:12 tinita Exp $
+# $Id: Compiled.pm,v 1.90 2005/12/11 22:16:10 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.57";
+our $VERSION = "0.58";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.57";
+our $VERSION = "0.58";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -162,12 +162,22 @@ sub create {
 	}
 	D && $self->log("trying from_cache()");
 	my $t = $self->from_cache();
-    if ($t and my $fm = $args{formatter} || $self->getFormatter) {
-        #print STDERR "-------------args $fm\n";
-        unless ($t->getFormatter) {
-			#print STDERR "no t formatter\n";
-            $t->setFormatter($fm);
-        }
+    if ($t) {
+		if(my $fm = $args{formatter} || $self->getFormatter) {
+			unless ($t->getFormatter) {
+				$t->setFormatter($fm);
+			}
+		}
+		if(my $dumper = $args{dumper} || $self->getDumper) {
+			unless ($t->getDumper) {
+				$t->setDumper($dumper);
+			}
+		}
+		if(my $filter = $args{filter} || $self->getFilter) {
+			unless ($t->getFilter) {
+				$t->setDumper($filter);
+			}
+		}
     }
 	return $t if $t;
 	D && $self->log("tried from_cache()");
@@ -640,6 +650,16 @@ EOM
 				$code .= qq#${indent}  my \$C = \\$varstr;\n#;
 			}
 
+			elsif (m{ $start_re LOOP_CONTEXT \s* $end_re }ix) {
+				my $indent = INDENT x $level;
+				$code .= <<"EOM";
+${indent}local \$__counter__ = \$ix+1;
+${indent}local \$__first__   = \$ix == \$[;
+${indent}local \$__last__    = \$ix == \$size;
+${indent}local \$__odd__     = !(\$ix & 1);
+${indent}local \$__inner__   = !\$__first__ && !\$__last__;
+EOM
+			}
 			# --------- TMPL_LOOP
 			elsif (m{ $start_re
 					(?:LOOP|FOR) \s+
@@ -799,14 +819,18 @@ EOM
 					$code .= qq#${indent}if (grep \{ \$_switch eq \$_ \} $values) \{\n#;
 				}
 			}
-			elsif (m# $start_re INCLUDE\s+(.+?) $end_re #ixs) {
-				my $match = $1;
+			elsif (m# $start_re INCLUDE(_VAR)?\s+(.+?) $end_re #ixs) {
+				my $match = $2;
 				my $filename;
 				my $varstr;
 				my $path = $self->getPath();
 				my $dir;
 				$path = [$path] unless ref $path eq 'ARRAY';
+				my $dynamic = $1 ? 1 : 0;
+				# deprecated 'INCLUDE VAR='
+				# use 'INCLUDE_VAR NAME=' instead
 				if ($match =~ m/(?:VAR=)(['"]?)($var_re)\1/i) {
+					carp "use of INCLUDE VAR=... is deprecated. use INCLUDE_VAR NAME=... instead";
 					# dynamic filename
 					my $dfilename = $2;
 					$varstr = $self->_make_path(
@@ -816,36 +840,46 @@ EOM
 					);
 				}
 				elsif ($match =~ m/(?:NAME=)?(['"]?)([^'">]+)\1/i) {
-					# static filename
-					$filename = $2;
-					$varstr = $self->quote_file($filename);
-					$dir = dirname $fname;
-					if (defined $dir and !grep { $dir eq $_ } @$path) {
-						# add the current directory to top of paths
-						$path = [$dir, @$path]; # create new $path, don't alter original ref
+					if ($dynamic) {
+						# dynamic filename
+						my $dfilename = $2;
+						$varstr = $self->_make_path(
+							%var_args,
+							var => $dfilename,
+							final => 0,
+						);
 					}
-					# generate included template
-					{
-						D && $self->log("compile include $filename!!");
-						my $cached_or_new = $self->clone_init($path, $filename, $self->getCache_dir);
+					else {
+						# static filename
+						$filename = $2;
+						$varstr = $self->quote_file($filename);
+						$dir = dirname $fname;
+						if (defined $dir and !grep { $dir eq $_ } @$path) {
+							# add the current directory to top of paths
+							$path = [$dir, @$path]; # create new $path, don't alter original ref
+						}
+						# generate included template
+						{
+							D && $self->log("compile include $filename!!");
+							my $cached_or_new = $self->clone_init($path, $filename, $self->getCache_dir);
+						}
 					}
-				}
-				#print STDERR "include $varstr\n";
-				my $cache = $self->getCache_dir;
-				$path = defined $path
-					? !ref $path
-						? $self->quote_file($path)
-						# support path => arrayref soon
-						: '['.join(',',map { $self->quote_file($_) } @$path).']'
-					: 'undef';
-				$cache = defined $cache ? $self->quote_file($cache) : 'undef';
-				$code .= <<"EOM";
+					#print STDERR "include $varstr\n";
+					my $cache = $self->getCache_dir;
+					$path = defined $path
+						? !ref $path
+							? $self->quote_file($path)
+							# support path => arrayref soon
+							: '['.join(',',map { $self->quote_file($_) } @$path).']'
+						: 'undef';
+					$cache = defined $cache ? $self->quote_file($cache) : 'undef';
+					$code .= <<"EOM";
 ${indent}\{
 ${indent}  my \$new = \$t->clone_init($path,$varstr,$cache);
 ${indent}  $output \$new->getPerl()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
 ${indent}\}
 EOM
-
+				}
 			}
 			elsif (m#$start_re$comment_re#i) {
 				my $name = $2;
@@ -1173,6 +1207,12 @@ sub import {
 		$CASE_SENSITIVE_DEFAULT = 0;
 		$SEARCHPATH = 0;
 	}
+	elsif ($args{speed}) {
+		# default at the moment
+		$ENABLE_SUB = 0;
+		$CASE_SENSITIVE_DEFAULT = 1;
+		$SEARCHPATH = 1;
+	}
 }
 
 {
@@ -1258,7 +1298,9 @@ __END__
 
 =head1 SYNOPSIS
 
-  use HTML::Template::Compiled;
+  use HTML::Template::Compiled speed => 1;
+  # or for compatibility with HTML::Template
+  # use HTML::Template::Compiled compatible => 1;
   my $htc = HTML::Template::Compiled->new(filename => 'test.tmpl');
   $htc->param(
     BAND => $name,
@@ -1278,7 +1320,8 @@ __END__
 =head1 DESCRIPTION
 
 HTML::Template::Compiled (HTC) is a template system which uses the same
-template syntax as HTML::Template and the same perl API. Internally
+template syntax as HTML::Template and the same perl API (see L<"COMPATIBILITY">
+for what you need to know if you want the same behaviour). Internally
 it works different, because it turns the template into perl code,
 and once that is done, generating the output is much faster than with
 HTML::Template (4-5 times at the moment, at least with my tests). It also
@@ -1291,9 +1334,10 @@ bit faster than Template-Toolkit. See the C<examples/bench.pl>.
 
 HTC will use a lot of memory because it keeps all template objects in memory.
 If you are on mod_perl, and have a lot of templates, you should preload them at server
-startup to be sure that it is in shared memory. At the moment HTC is not tested for
+startup to be sure that it is in shared memory. At the moment HTC is not fully tested for
 keeping all data in shared memory (e.g. when a copy-on-write occurs), but i'll test
-that soon. For preloading you can now use
+that soon. It seems like it's behaving well, but still no guarantee.
+For preloading you can now use
   HTML::Template::Compiled->preload($dir).
 
 HTC does not implement all features of HTML::Template (yet), and
@@ -1336,7 +1380,7 @@ current information.
 
 =item case insensitive var names
 
-use option case_sensitive => 0 to use this feature
+use option case_sensitive => 0 to use this feature (slow down)
 
 =item filters
 
@@ -1358,6 +1402,8 @@ new (roughly tested)
 
 =item TMPL_WITH
 
+see L<"TMPL_WITH">
+
 =item TMPL_COMMENT
 
 see L<"TMPL_COMMENT">
@@ -1365,6 +1411,10 @@ see L<"TMPL_COMMENT">
 =item TMPL_NOPARSE
 
 see L<"TMPL_NOPARSE">
+
+=item TMPL_LOOP_CONTEXT
+
+turn on loop_context in template, see L<"TMPL_LOOP_CONTEXT">
 
 =item TMPL_SWITCH, TMPL_CASE
 
@@ -1402,19 +1452,22 @@ can use E<lt>% %E<gt> tags and the E<lt>%= tag instead of E<lt>%VAR (which will 
 
 =head2 MISSING FEATURES
 
-There are some features of H::T that are missing and that I don't plan
-to implement. I'll try to list them here.
+There are some features of H::T that are missing.
+I'll try to list them here.
 
 =over 4
 
 =item C<die_on_bad_params>
 
-I don't think I'll implement that in the near future.
+I don't think I'll implement that.
+
+=item C<query>
+
+I will implement that as soon as possible.
 
 =back
 
-=head2 DIFFERENT DEFAULTS
-
+=head2 COMPATIBILITY
 
 At the moment there are three defaults that differ from L<HTML::Template>:
 
@@ -1423,7 +1476,7 @@ At the moment there are three defaults that differ from L<HTML::Template>:
 =item case_sensitive
 
 default is 1. Set it via C<$HTML::Template::Compiled::CASE_SENSITIVE_DEFAULT = 0>
-Note (again): this will slow down templating a lot.
+Note (again): this will slow down templating a lot (50%).
 
 =item subref variables
 
@@ -1439,9 +1492,16 @@ To be compatible with all use:
 
   use HTML::Template::Compiled compatible => 1;
 
+If you don't care about these options you should use
+
+  use HTML::Template::Compiled speed => 1;
+
+which is the default but depending on user wishes that might change.
+
 =head2 ESCAPING
 
-Like in HTML::Template, you have C<ESCAPE=HTML> and C<ESCAPE=URL>. (C<ESCAPE=1> will follow.)
+Like in HTML::Template, you have C<ESCAPE=HTML> and C<ESCAPE=URL>. (C<ESCAPE=1> won't follow!
+It's old and ugly...)
 Additionally you have C<ESCAPE=DUMP>, which by default will generate a Data::Dumper output.
 You can change that output by setting a different dumper function, see L<"OPTIONS"> dumper.
 
@@ -1455,10 +1515,10 @@ Additionally to
 
 you can do an include of a template variable:
 
-  <TMPL_INCLUDE VAR="file_include_var">
+  <TMPL_INCLUDE_VAR NAME=="file_include_var">
   $htc->param(file_include_var => "file.htc");
 
-Here the C<VAR=> part is necessary to distinguish from a static include.
+Using C<INCLUDE VAR="..."> is deprecated.
   
 =head2 VARIABLE ACCESS
 
@@ -1496,7 +1556,7 @@ or C<ALBUMS.0.SONGS.0.NAME>
 
 =head2 RENDERING OBJECTS
 
-This is still experimental. You have been warned.
+This is still in development, so I might change the API here.
 
 Additionally to feeding a simple hash do HTC, you can feed it objects.
 To do method calls you can use '->' in the template or define a different string
@@ -1561,6 +1621,25 @@ The special name C<_> gives you the current paramater. In loops you can use it l
   Current item: <tmpl_var _ >
  </tmpl_loop>
 
+=head2 TMPL_LOOP_CONTEXT
+
+With the directive
+
+ <TMPL_LOOP_CONTEXT>
+
+you can turn on loop_context_vars directly in the template. You usually would do that
+directly after the loop tag (but you can do it anywhere in a loop):
+
+ <tmpl_loop foo><tmpl_loop_context>
+   <tmpl_var __counter__>
+ </tmpl_loop foo>
+ <tmpl_loop bar>
+   <tmpl_if need_count>
+     <tmpl_loop_context>
+     <tmpl_var __counter__>
+   </tmpl_if>
+ </tmpl_loop bar>
+
 =head2 TMPL_COMMENT
 
 For debugging purposes you can temporarily comment out regions:
@@ -1578,8 +1657,6 @@ For debugging purposes you can temporarily comment out regions:
 The output is (whitespaces stripped):
 
   we want this
-  <tmpl_var unwanted>
-  <tmpl_var unwanted>
 
 HTC will ignore anything between COMMENT directives.
 This is useful for debugging, and also for documentation inside the
@@ -1605,7 +1682,7 @@ Yes, without quotes. I might add that if someone finds it useful.
   <tmpl_case en>very cool
   <tmpl_case es>superculo
   <tmpl_case fr,se>don't speak french or swedish
-  <tmpl_case default>sorry, no translation for cool in language <%=lang%> available
+  <tmpl_case default>sorry, no translation for cool in language <%=language%> available
   <tmpl_case>(same as default)
  </tmpl_switch>
 
@@ -1627,6 +1704,11 @@ Default is 1 (different from HTML::Template).
 
 Path to caching directory (you have to create it before)
 
+=item cache
+
+Is 1 by default. If set to 0, no memory cacheing is done. Only recommendable if
+you have a dynamic template content (with scalarref, arrayre for example).
+
 =item filename
 
 Template to parse
@@ -1638,7 +1720,7 @@ scalarrefs, too, if you have Digest::MD5 installed. Note that your cache directo
 might get filled with files from earlier versions. Clean the cache regularly.
 
 Don't cache scalarrefs if you have dynamic strings. Your memory might get filled up fast!
-Use the (still undocumented) option
+Use the option
 
   cache => 0
 
@@ -1657,6 +1739,8 @@ templates created like this.
 =item loop_context_vars
 
 Vars like C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>
+
+See L<"LOOP_CONTEXT"> for special features.
 
 =item global_vars
 
@@ -1684,7 +1768,7 @@ a /TMPL_IF that does not have an opening tag.
 =item case_sensitive
 
 default is 1, set it to 0 to use this feature like in HTML::Template. Note that
-this can slow down your program a lot.
+this can slow down your program a lot (50%).
 
 =item dumper
 
@@ -1892,6 +1976,8 @@ Sam Tregar big thanks for ideas and letting me use his L<HTML::Template> test su
 Bjoern Kriews for original idea and contributions
 
 Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Sascha Kiefer from perl-community.de for ideas and beta-testing
+
+Mark Stosberg for ideas and contributions
 
 perlmonks.org and perl-community.de for everyday learning
 

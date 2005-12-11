@@ -1,5 +1,11 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.58 Sun Dec 11 23:20:35 CET 2005
+- fixed test with html entities
+- use H::T::C speed => 1
+- tmpl_include_var
+- TMPL_LOOP_CONTEXT
+
 0.57 Wed Dec  7 15:54:05 CET 2005
 - tmpl_comment doesn't output
 - tmpl_noparse does, though

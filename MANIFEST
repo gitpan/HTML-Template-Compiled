@@ -13,6 +13,7 @@ examples/included.tt
 examples/bench.pl
 examples/bench_mem.pl
 examples/test.tt
+examples/test.tst
 examples/dhtml.html
 t/01_HTML-Template-Compiled.t
 t/02_version.t

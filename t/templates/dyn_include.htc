@@ -1,2 +1,2 @@
 Dynamic include:
-<tmpl_include VAR=.file>
+<tmpl_include_var .file>
