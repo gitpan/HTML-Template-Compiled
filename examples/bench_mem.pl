@@ -1,4 +1,5 @@
 #!/usr/bin/perl
+# $Id: bench_mem.pl,v 1.9 2005/12/30 17:26:08 tinita Exp $
 use strict;
 use warnings;
 use lib "blib/lib";
@@ -6,7 +7,7 @@ $|=1;
 use File::Copy;
 # call perl examples/bench_mem.pl htc 1000
 my ($mod, $count) = @ARGV;
-exit unless $mod;
+usage() unless $mod;
 mkdir "examples/mem";
 mkdir "examples/memcache";
 mkdir "examples/memcache/htc";
@@ -57,14 +58,15 @@ sub new_htj {
 	);
 	return $t;
 }
-sub new_tt {
-	my $t = Template->new(
+my $tt;
+if ($mod eq 'tt') {
+	$tt = Template->new(
 		COMPILE_EXT => '.ttc',
 		COMPILE_DIR => 'examples/memcache/tt',
 		INCLUDE_PATH => 'examples/mem',
 	);
-	return $t;
 }
+sub new_tt { return $tt }
 my %params = (
 name => '',
 loopa => [{a=>3},{a=>4},{a=>5}],
@@ -84,11 +86,12 @@ blubber => "html <test>",
 );
 open OUT, ">>/dev/null";
 #open OUT, ">&STDOUT";
+my $cparam = $count;
 
 my $ht_out = sub {
 	my $t = shift;
 	return unless defined $t;
-	$params{name} = (ref $t).' '.$count++;
+	$params{name} = (ref $t).' '.$cparam++;
 	$t->param(%params);
 	my $out = $t->output;
 	$t->param({});
@@ -112,31 +115,72 @@ my $news = {
 	htj => \&new_htj,
 };
 {
-	my $cache = 0;
 	my $file = $files{$mod};
 	print "File $file\n";
+	-f "examples/mem/included.tt" or
+	copy "examples/included.tt", "examples/mem/included.tt" or die $!;
 	-f "examples/mem/included.htc" or
 	copy "examples/included.htc", "examples/mem/included.htc" or die $!;
 	-f "examples/mem/included.html" or
 	copy "examples/included.html", "examples/mem/included.html" or die $!;
-	my @t;
-	for my $i(1..$count) {
-		my $dup = sprintf "%s.%02d",$file,$i;
-		-f "examples/mem/$dup" or
-		copy "examples/$file", "examples/mem/$dup" or die $!;
-		my $t = $news->{$mod}->("$dup") or die $!;
-		print STDERR "$mod '$t' loop '$i'\r";
-		$outputs->{$mod}->($t,$dup) or die $t->error;
-		if ($cache) {
-			push @t, $t;
-		}
-		#select undef, undef, undef, 1/($count/5);
-	}
-	my $top = qx{top -b -n 1 |grep perl};
-	chomp $top;
-	print "\ntop: $top\n";
+    # preprocess half of the templates
+    my $t = process($count/1, $mod, $file);
+    print_top("root");
+    for my $i (1..2) {
+        if (my $pid = fork) {
+        }
+        else {
+            print "Starting loop $i\n";
+            my $t = process($count, $mod, $file);
+            print_top($i);
+            print "End loop $i\n";
+            exit;
+        }
+    }
+    print "Waiting for child processes to finish\n";
+    wait;
+    print "Still waiting for child processes to finish\n";
+    wait;
+    print "Finished child processes\n";
+    print_top("root");
 	#<STDIN>;
 }
+
+sub print_top {
+	my $top = qx{top -b -n 1 |grep $$};
+    #my $top = qx{top -b -n 1 |grep perl};
+	chomp $top;
+	print "\ntop($_[0]) PID $$:\n$top\n";
+}
+sub process {
+    my ($count, $mod, $file) = @_;
+    for my $i ( 1 .. $count ) {
+        my $dup = sprintf "%s.%02d", $file, $i;
+        -f "examples/mem/$dup"
+          or copy "examples/$file", "examples/mem/$dup"
+          or die $!;
+        my $t;
+        if ($mod eq 'tt') {
+            $t = $tt;
+        }
+        else {
+            $t = $news->{$mod}->("$dup") or die $!;
+        }
+        #print STDERR "$mod '$t' loop '$i'\r";
+        $outputs->{$mod}->( $t, $dup ) or die $t->error;
+        #select undef, undef, undef, 1/($count/5);
+    }
+}
+
+sub usage {
+    print <<"EOM";
+Usage: $0 (tt|ht|htc) num
+Example: 100 iterations for TT:
+  $0 tt 100
+EOM
+    exit;
+}
+
 __END__
 -- with caching the template objects extra
 

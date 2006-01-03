@@ -31,6 +31,8 @@ t/13_loop.t
 t/14_scalarref.t
 t/15_comment.t
 t/16_switch.t
+t/17_escape.t
+t/18_objects.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html

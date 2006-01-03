@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.5 2005/12/11 20:59:34 tinita Exp $
+# $Id: bench.pl,v 1.8 2006/01/03 18:28:19 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -43,7 +43,9 @@ sub new_htc {
 		# note that you have to create the cachedir
 		# first, otherwise it will run without cache
 		#cache_dir => "cache/htc",
+		#cache => 0,
 		out_fh => 1,
+        #global_vars => 1,
 	);
 	#my $size = total_size($t1);
 	#print "size htc = $size\n";
@@ -63,6 +65,7 @@ sub new_ht {
 		#path => 'examples',
 		filename => $ht_file,
 		cache => 1,
+        #global_vars => 1,
 	);
 	#my $size = total_size($t2);
 	#print "size ht  = $size\n";
@@ -75,6 +78,7 @@ sub new_htj {
 		filename => $ht_file,
 		cache => 1,
 		jit_path => 'cache/jit',
+        #global_vars => 1,
 	);
 	return $t2;
 }
@@ -82,6 +86,7 @@ sub new_tt {
 	my $tt= Template->new(
 		COMPILE_EXT => '.ttc',
 		COMPILE_DIR => 'cache/tt',
+		#CACHE_SIZE => 0,
 		INCLUDE_PATH => 'examples',
 	);
 	#my $size = total_size($tt);
@@ -148,11 +153,11 @@ sub output_tt {
 	#print "\nOUT: $out";
 }
 
-my $gobal_htc = $use{'HTML::Template::Compiled'} ? new_htc : undef;
-my $gobal_ht = $use{'HTML::Template'} ? new_ht : undef;
-my $gobal_htj = $use{'HTML::Template::JIT'} ? new_htj : undef;
-my $gobal_tt = $use{'Template'} ? new_tt : undef;
-my $gobal_tst = $use{'Tex::ScriptTemplate'} ? new_tst : undef;
+my $global_htc = $use{'HTML::Template::Compiled'} ? new_htc : undef;
+my $global_ht = $use{'HTML::Template'} ? new_ht : undef;
+my $global_htj = $use{'HTML::Template::JIT'} ? new_htj : undef;
+my $global_tt = $use{'Template'} ? new_tt : undef;
+my $global_tst = $use{'Text::ScriptTemplate'} ? new_tst : undef;
 if(1) {
 timethese ($ARGV[0]||-1, {
 		$use{'HTML::Template::Compiled'} ? (
@@ -160,27 +165,32 @@ timethese ($ARGV[0]||-1, {
             #new_htc_w_clear_cache => sub {my $t = new_htc();$t->clear_cache},
             # normal, with memory cache
 						#new_htc => sub {my $t = new_htc()},
-						#output_htc => sub {output($gobal_htc)},
+						#output_htc => sub {output($global_htc)},
 						all_htc => sub {my $t = new_htc();output($t)},
         ) : (),
 		$use{'HTML::Template'} ? (
 			#new_ht => sub {my $t = new_ht()},
-			#output_ht => sub {output($gobal_ht)},
+			#output_ht => sub {output($global_ht)},
 						all_ht => sub {my $t = new_ht();output($t)},
         ) : (),
         $use{'HTML::Template::JIT'} ? (
 					#new_htj => sub {my $t = new_htj();},
-					#output_htj => sub {output($gobal_htj)},
+					#output_htj => sub {output($global_htj)},
 						all_htj => sub {my $t = new_htj();output($t)},
         ) : (),
         $use{'Template'} ? (
 					#new_tt => sub {my $t = new_tt();},
-					#output_tt => sub {output_tt($gobal_tt)},
-						all_tt => sub {my $t = new_tt();output_tt($t)},
+					#output_tt => sub {output_tt($global_tt)},
+						process_tt => sub {output_tt($global_tt)},
         ): (),
+#        $use{'Template'} ? (
+#					#new_tt => sub {my $t = new_tt();},
+#					#output_tt => sub {output_tt($global_tt)},
+#						all_tt_new_object => sub {my $t = new_tt();output_tt($t)},
+#        ): (),
         $use{'Text::ScriptTemplate'} ? (
-					#new_tst => sub {my $t = new_tt();},
-					#output_tst => sub {output_tt($gobal_tt)},
+					#new_tst => sub {my $t = new_tst();},
+                    #output_tst => sub {output_tst($global_tst)},
 						all_tst => sub {my $t = new_tst();output_tst($t)},
         ): (),
 	});

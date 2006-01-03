@@ -1,5 +1,22 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.59 Tue Jan  3 19:40:46 CET 2006
+- $UNTAINT
+- All the "new_" constructor shortcuts were added from HTML::Template, with
+  tests for each. Also, the type/source option syntax to new() is now
+  supported. Tests were added for all these, which were generally missing from
+  the HTML::Template test suite. 
+
+- Bug Fix: Code and Tests were were added to make sure that calls to param()
+  accumulate data, like HTML::Template works.  
+
+- Bug Fix: embedded newlines
+- New Feature: new 'default_escape' option for compatibility with HTML::Template 2.8
+- Added query() tests from HTML::Template suite. (Currently TODO)
+- Change: use dot notation for mehtod calls and dereference
+- Change: literal dots in var names work now; you can't use -> for method calling
+  any more, just use the dot, just use the dot
+
 0.58 Sun Dec 11 23:20:35 CET 2005
 - fixed test with html entities
 - use H::T::C speed => 1

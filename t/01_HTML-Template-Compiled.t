@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.11 2005/12/11 17:34:52 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.12 2005/12/15 22:24:54 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 6;
@@ -77,7 +77,7 @@ EOM
 /path/to/script.pl?lang=de
 Band: Bauhaus
 Albums:
-(first)(last)
+(first) (last)
 Mask (Album)
 1. Hair of the Dog
 2. Passion of Lovers
