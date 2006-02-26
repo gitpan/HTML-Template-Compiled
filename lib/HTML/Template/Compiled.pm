@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.114 2006/01/03 18:35:16 tinita Exp $
+# $Id: Compiled.pm,v 1.129 2006/02/26 17:46:34 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.59";
+our $VERSION = "0.60";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.59";
+our $VERSION = "0.60";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -81,7 +81,9 @@ my $classic_re = ['<TMPL_'      ,'>',     '</TMPL_',      '</?TMPL.*?>'];
         $tmpl_re  = '(?is:' . ($ENABLE_ASP ? "$asp_re->[3]|" : '') . "$classic_re->[3]|$comm_re->[3])";
         $close_re = '(?i:'  . ($ENABLE_ASP ? "$asp_re->[2]|" : '') . "$classic_re->[2]|$comm_re->[2])";
         $var_re   = '(?:[\w./+-])+';
-        $comment_re = '(COMMENT|NOPARSE)\s*(?:\s+(\w+)\s*)?' . $end_re;
+        $comment_re
+            = '(COMMENT|NOPARSE|VERBATIM)\s*(?:\s+(\w+)\s*)?'
+            . $end_re;
         $init = 1;
     }
 }
@@ -108,7 +110,7 @@ use constant PATH => 1;
           path filename file scalar filehandle
           cache_dir cache search_path_on_include
           loop_context line_numbers case_sensitive dumper global_vars
-          method_call deref formatter_path
+          method_call deref formatter_path default_path
           debug perl out_fh default_escape
           filter formatter
           globalstack
@@ -613,6 +615,7 @@ sub init {
         out_fh                 => 0,
         global_vars            => 0,
         default_escape         => $DEFAULT_ESCAPE,
+        default_path           => PATH_DEREF,
         %args,
     );
     $self->setMethod_call( $defaults{method_call} );
@@ -623,6 +626,7 @@ sub init {
     $self->setDumper( $args{dumper} )       if $args{dumper};
     $self->setFormatter( $args{formatter} ) if $args{formatter};
     $self->setDefault_escape( $defaults{default_escape} );
+    $self->setDefault_path( $defaults{default_path} );
     $self->setSearch_path_on_include( $defaults{search_path_on_include} );
     if ( $args{filter} ) {
         require HTML::Template::Compiled::Filter;
@@ -689,6 +693,7 @@ EOM
     my @switches;
     my $comment = 0;
     my $noparse = 0;
+    my $verbatim = 0;
     for (@p) {
         my $indent = INDENT x $level;
         s/~/\\~/g;
@@ -705,7 +710,7 @@ EOM
             lexicals       => \@lexicals,
         );
         # --------- TMPL_VAR
-        if ( !$comment && !$noparse ) {
+        if ( !$comment && !$noparse && !$verbatim) {
             if (m#$start_re(VAR|=)\s+(?:NAME=)?(['"]?)($var_re)\2.*$end_re#i) {
                 my $type = uc $1;
                 $type = "VAR" if $type eq '=';
@@ -857,6 +862,8 @@ EOM
             elsif (m#${start_re}ELSE\s*$end_re#i) {
                 # we can only have an open if or unless
                 $self->_checkstack( $fname, $line, $stack, TELSE );
+                pop @$stack;
+                push @$stack, TELSE;
                 my $indent = INDENT x( $level - 1 );
                 $code .= qq#${indent}\}\n${indent}else {\n#;
             }
@@ -905,7 +912,7 @@ EOM
                 my $varstr = $self->_make_path(
                     %var_args,
                     var   => $var,
-                    final => 1,
+                    final => 0,
                 );
                 my $if =
                   { IF => 'if', UNLESS => 'unless', ELSIF => 'elsif' }
@@ -1054,18 +1061,20 @@ EOM
                 }
             }
 
-            # --------- TMPL_COMMENT
+            # --------- TMPL_COMMENT|NOPARSE|VERBATIM
             elsif (m#$start_re$comment_re#i) {
+                my $type = uc $1;
                 my $name = $2;
-                uc $1 eq 'COMMENT' ? $comment++ : $noparse++;
+                $type eq 'COMMENT' ? $comment++ : $type eq 'NOPARSE' ? $noparse++ : $verbatim++;
                 $code .= qq{ # comment $name (level $comment)\n};
             }
 
-            # --------- / TMPL_COMMENT
+            # --------- / TMPL_COMMENT|NOPARSE|VERBATIM
             elsif (m#$close_re$comment_re#i) {
+                my $type = uc $1;
                 my $name = $2;
                 $code .= qq{ # end comment $name (level $comment)\n};
-                uc $1 eq 'COMMENT' ? $comment-- : $noparse--;
+                $type eq 'COMMENT' ? $comment-- : $type eq 'NOPARSE' ? $noparse-- : $verbatim--;
             }
             else {
                 if ( length $_ ) {
@@ -1077,25 +1086,30 @@ EOM
         }
         else {
 
-            # --------- TMPL_COMMENT
+            # --------- TMPL_COMMENT|NOPARSE|VERBATIM
             if (m#$start_re$comment_re#i) {
+                my $type = uc $1;
                 my $name = $2;
-                uc $1 eq 'COMMENT' ? $comment++ : $noparse++;
+                $type eq 'COMMENT' ? $comment++ : $type eq 'NOPARSE' ? $noparse++ : $verbatim++;
                 $code .= qq{ # comment $name (level $comment)\n};
             }
 
-            # --------- / TMPL_COMMENT
+            # --------- / TMPL_COMMENT|NOPARSE|VERBATIM
             elsif (m#$close_re$comment_re#i) {
+                my $type = uc $1;
                 my $name = $2;
                 $code .= qq{ # end comment $name (level $comment)\n};
-                uc $1 eq 'COMMENT' ? $comment-- : $noparse--;
+                $type eq 'COMMENT' ? $comment-- : $type eq 'NOPARSE' ? $noparse-- : $verbatim--;
             }
             else {
                 # don't output anything if we are in a comment
-                # but output if we are in noparse
+                # but output if we are in noparse or verbatim
                 if ( !$comment && length $_ ) {
                     s/\\/\\\\/g;
                     s/'/\\'/g;
+                    if ($verbatim) {
+                        HTML::Entities::encode_entities($_);
+                    }
                     $code .= qq#$indent$output '$_';\n#;
                 }
             }
@@ -1150,8 +1164,8 @@ sub _make_path {
     if ( $args{var} =~ s/^_// ) {
         $root = 0;
     }
-    elsif ($args{var} =~ m/^(?:\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)/) {
-        $root = 1;
+    elsif ($args{var} =~ m/^(\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)(\1?)/) {
+        $root = 1 unless length $2;
     }
     my @split = split m/(?=\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)/, $args{var};
     my @paths;
@@ -1166,13 +1180,13 @@ sub _make_path {
             push @paths, '['.PATH_FORMATTER.",'".($self->getCase_sensitive?$p:uc$p)."']";
         }
         else {
-            push @paths, '['.PATH_DEREF.", '".($self->getCase_sensitive?$p:uc$p)."']";
+            push @paths, '['. $self->getDefault_path() .", '".($self->getCase_sensitive?$p:uc$p)."']";
         }
     }
     local $" = ",";
     my $final = $args{final} ? 1 : 0;
     my $getvar = $ENABLE_SUB ? '_get_var_sub' : '_get_var';
-    $getvar .= $self->getGlobal_vars ? '_global' : '';
+    $getvar .= $self->getGlobal_vars&1 ? '_global' : '';
     my $varstr =
       "\$t->$getvar(\$P," . ( $root ? '$P' : '$$C' ) . ",$final,@paths)";
     return $varstr;
@@ -1219,7 +1233,14 @@ sub {
 				$walk = $walk->[$path->[1]];
 			}
 			else {
+                unless (length $path->[1]) {
+                    my $stack = $self->getGlobalstack || [];
+                    # we have tmpl_var ..foo, get one level up the stack
+                    $walk = $stack->[-1];
+                }
+                else {
 *** walk ***
+                }
 			}
 		}
 		elsif ($path->[0] == PATH_METHOD) {
@@ -1234,6 +1255,12 @@ sub {
 				: $walk->{$key};
 		}
 	}
+    if (my $formatter = $self->getFormatter() and $final and my $ref = ref $walk) {
+        if (my $sub = $formatter->{$ref}->{''}) {
+            my $return = $sub->($walk,$self,$P);
+            return $return unless ref $return;
+        }
+    }
 	return $walk;
 }
 EOM
@@ -1253,11 +1280,13 @@ EOM
 	my $sub = $code;
 	$sub =~ s/^\Q*** walk ***\E$/$walk/m;
 	my $subref = eval $sub;
+    die "Compiling _get_var: $@" if $@;
 	no strict 'refs';
 	*{'HTML::Template::Compiled::_get_var'} = $subref;
 	$sub = $code;
 	$sub =~ s/^\Q*** walk ***\E$/$global/m;
 	$subref = eval $sub;
+    die "Compiling _get_var_global: $@" if $@;
 	*{'_get_var_global'} = $subref;
 }
 
@@ -1266,7 +1295,7 @@ EOM
 sub _get_var_sub {
     my ( $self, $P, $ref, $final, @paths ) = @_;
     my $var = $self->_get_var( $P, $ref, $final, @paths );
-    if ( $ENABLE_SUB and $final and ref $var eq 'CODE' ) {
+    if ( $ENABLE_SUB and ref $var eq 'CODE' ) {
         return $var->();
     }
     return $var;
@@ -1284,8 +1313,8 @@ sub _get_var_sub_global {
 
 {
     my %map = (
-        IF         => [ TIF, TUNLESS ],
-        UNLESS     => [TUNLESS],
+        IF         => [ TIF, TUNLESS, TELSE ],
+        UNLESS     => [TUNLESS, TELSE],
         ELSIF      => [ TIF, TUNLESS ],
         ELSE       => [ TIF, TUNLESS, TELSIF ],
         LOOP       => [TLOOP],
@@ -1362,6 +1391,7 @@ sub preload {
     for my $file (@files) {
         $class->include_file( File::Spec->catfile( $dir, $file ) );
     }
+    return scalar @files;
 }
 
 sub clear_params {
@@ -1437,10 +1467,14 @@ sub uchash {
 
 sub output {
     my ( $self, $fh ) = @_;
-    my %p = %{ $self->[PARAM] || {} };
+    my $p = $self->[PARAM] || {};
+    # if we only have an object as parameter
+    $p = ref $p eq 'HASH'
+        ? \% { $p }
+        : $p;
     my $f = $self->getFile;
     $fh = \*STDOUT unless $fh;
-    $self->getPerl()->( $self, \%p, \\%p, $fh );
+    $self->getPerl()->( $self, $p, \$p, $fh );
 }
 
 sub import {
@@ -1519,14 +1553,15 @@ template syntax as HTML::Template and the same perl API (see L<"COMPATIBILITY">
 for what you need to know if you want the same behaviour). Internally
 it works different, because it turns the template into perl code,
 and once that is done, generating the output is much faster than with
-HTML::Template (4-5 times at the moment, at least with my tests, and 3.5 times,
-when both are run with loop_context_vars 0. See L<LOOP_CONTEXT> for a special
-feature). It also can generate perl files so that the next time the template is
-loaded it doesn't have to be parsed again. The best performance gain is probably
-reached in applications running under mod_perl, for example.
+HTML::Template (3-7 times at the moment, at least with my tests, and 3.5 times (see
+L<"Benchmarks"> for some examples), when both are run with loop_context_vars 0. See
+L<"TMPL_LOOP_CONTEXT"> for a special feature). It also can generate perl files so that
+the next time the template is loaded it doesn't have to be parsed again. The best
+performance gain is probably reached in applications running under mod_perl, for example.
 
-If you don't use caching at all, HTC will be even slower than H::T (but still a
-bit faster than Template-Toolkit. See the C<examples/bench.pl>.
+If you don't use caching at all (e.g. CGI environment without file caching), HTC
+will be even slower than H::T (but still a bit faster than Template-Toolkit.
+See the C<examples/bench.pl>.
 
 HTC will use a lot of memory because it keeps all template objects in memory.
 If you are on mod_perl, and have a lot of templates, you should preload them at server
@@ -1571,7 +1606,7 @@ current information.
 
 =item HTML_TEMPLATE_ROOT
 
-=item ESCAPE=(HTML|URL)
+=item ESCAPE=(HTML|URL|0)
 
 =item DEFAULT=...
 
@@ -1590,8 +1625,6 @@ use option case_sensitive => 0 to use this feature (slow down)
 =item scalarref, arrayref, filehandle
 
 =item C<global_vars>
-
-new (roughly tested)
 
 =back
 
@@ -1612,6 +1645,10 @@ see L<"TMPL_COMMENT">
 =item TMPL_NOPARSE
 
 see L<"TMPL_NOPARSE">
+
+=item TMPL_VERBATIM
+
+see L<"TMPL_VERBATIM">
 
 =item TMPL_LOOP_CONTEXT
 
@@ -1775,15 +1812,12 @@ if you don't like that.
 
   <TMPL_VAR NAME="OBJECT.fullname">
   <TMPL_WITH OBJECT>
-  Name: <TMPL_VAR _.fullname>
+  Name: <TMPL_VAR fullname>
   </TMPL_WITH>
 
 C<fullname> will call the fullname method of your Your::Class object.
-You have to use C<_> here because with using only C<fullname> HTC couldn't
-know if you want to dereference a hash or do a method call.
 
-The default values might change in the future depending on what people use most,
-so at the moment it's the best to always set the options.
+It's recommended to just use the default . value for methods and dereferencing.
 
 =head2 DEBUGGING
 
@@ -1801,8 +1835,8 @@ entities.
 
 =head2 TMPL_WITH
 
-If you have a deep leveled hash you might not want to write 
-THE.FULL.PATH.TO.YOUR.VAR always. Jump to your desired level once and
+If you have a deep leveled hash you might not want to always write 
+THE.FULL.PATH.TO.YOUR.VAR. Jump to your desired level once and
 then you need only one level. Compare:
 
   <TMPL_WITH DEEP.PATH.TO.HASH>
@@ -1810,6 +1844,8 @@ then you need only one level. Compare:
   </TMPL_WITH>
 
   <TMPL_VAR DEEP.PATH.TO.HASH.NAME>: <TMPL_VAR DEEP.PATH.TO.HASH.AGE>
+
+Inside TMPL_WITH you can't reference parent nodes unless you're using global_vars.
 
 =head2 TMPL_LOOP
 
@@ -1872,11 +1908,22 @@ Anything between
 will not be recognized as template directives. Same syntax as TMPL_COMMENT.
 It will output the content, though.
 
+=head2 TMPL_VERBATIM
+
+Anything between
+
+  <tmpl_verbatim>...</tmpl_verbatim>
+
+will not be recognized as template directives. But it will be HTML-Escaped. This
+can be useful for debugging.
+Same syntax as TMPL_COMMENT|NOPARSE.
+
 =head2 TMPL_SWITCH
 
 The SWITCH directive has the same syntax as VAR, IF etc.
 The CASE directive takes a simple string or a comma separated list of strings.
-Yes, without quotes. I might add that if someone finds it useful.
+Yes, without quotes. This will probably change!
+With that directive you can do simple string comparisons.
 
  <tmpl_switch language>(or <tmpl_switch name=language>)
   <tmpl_case de>echt cool
@@ -1945,14 +1992,27 @@ templates created like this.
 
 Vars like C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>
 
-To enable loop_context_vars is a slow down, too (about 10%). See L<LOOP_CONTEXT> for
+To enable loop_context_vars is a slow down, too (about 10%). See L<"TMPL_LOOP_CONTEXT"> for
 how to avoid this.
 
-See L<"LOOP_CONTEXT"> for special features.
+See L<"TMPL_LOOP_CONTEXT"> for special features.
 
 =item global_vars (fixed)
 
 If set to 1, every outer variable can be accessed from anywhere in the enclosing scope.
+
+If set to 2, you don't have global vars, but have the possibility to go
+up the stack one level. Example:
+
+ <tmpl_var ...key>
+
+This will get you up 2 levels (remember: one dot means root in HTC) and access the 'key'
+element.
+
+If set to 3 (C<3 == 1|2>) you have both, global vars and explicitly going up the stack.
+
+So setting global_vars to 2 can save you from global vars but still allows you to
+browse through the stack.
 
 =item default_escape
 
@@ -1964,7 +2024,7 @@ If set to 1, every outer variable can be accessed from anywhere in the enclosing
 Now everything will be escaped for HTML unless you explicitly specify C<ESCAPE=0> (no escaping)
 or C<ESCAPE=URI>.
 
-=item deref (figed)
+=item deref (fixed)
 
 Define the string you want to use for dereferencing, default is C<.> at the
 moment:
@@ -1981,6 +2041,22 @@ the moment:
 Don't use ->, though, like you could in earlier version. Var names can contain:
 Numbers, letters, '.', '/', '+', '-' and '_'. (Just like HTML::Template)
  
+=item default_path (fixed)
+
+  my $htc = HTML::Template::Compiled->new(
+    ...
+    default_path
+         # default is PATH_DEREF
+      => HTML::Template::Compiled::Utils::PATH_FORMATTER,
+  );
+
+Is needed if you have an unqualified tmpl_var that should be resolved as
+a call to your formatter, for example. Otherwise you have to call it
+fully qualified. If your formatter_path is '/', you'd say tmpl_var C<_/method>.
+With the option default_path you can make that the default, so you don't need
+the C<_/>: C<tmpl_var method>. If you don't use formatters, don't care about
+this option.
+
 =item line_numbers
 
 For debugging: prints the line number of the wrong tag, e.g. if you have
@@ -2105,7 +2181,7 @@ Class- or object-method. Removes all generated perl files from a given directory
 
 Class method. Will preload all template files from a given cachedir into memory. Should
 be done, for example in a mod_perl environment, at server startup, so all templates
-go into shared memory
+go into "shared memory"
 
   HTML::Template::Compiled->preload($cache_dir);
 
@@ -2185,6 +2261,19 @@ If you are alone on the machine, but you are running under taint mode (see L<per
 you have to explicitly set the C<$UNTAINT> variable to 1. HTC will then untaint the code for you
 and treat it as if it were safe (it hopefully is =).
 
+=head1 BENCHMARKS
+
+The options C<case_sensitive>, C<loop_context_vars> and C<global_vars> can have the biggest influence
+on speed.
+
+Setting case_sensitive to 1, loop_context_vars to 0 and global_vars to 0 saves time.
+
+On the other hand, compared to HTML::Template, the speed gain is biggest (under mod_perl
+you save ca. 86%, under CGI 29%), if you use case_sensitive = 1, loop_context_vars = 0,
+global_vars = 1.
+
+See examples/bench.pdf for a detailed table.
+
 =head1 BUGS
 
 At the moment files with no newline at the end of the last line aren't correctly parsed.
@@ -2193,6 +2282,9 @@ The method C<param()> is not correctly implemented - it should behave like C<que
 called without args. This will be resolved as soon as i implement C<query()>.
 
 Probably many more bugs I don't know yet =)
+
+Use the bugtracking system to report a bug:
+http://rt.cpan.org/NoAuth/Bugs.html?Dist=HTML-Template-Compiled
 
 =head1 Why another Template System?
 

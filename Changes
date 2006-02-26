@@ -1,5 +1,11 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.60 Sun Feb 26 18:46:07 CET 2006
+- Clarified docs for TMPL_WITH to explain interaction with global_vars
+- New Feature: TMPL_VERBATIM
+- Bug Fix: error when double TMPL_ELSE
+- New feature: global_vars => 2
+
 0.59 Tue Jan  3 19:40:46 CET 2006
 - $UNTAINT
 - All the "new_" constructor shortcuts were added from HTML::Template, with
@@ -15,7 +21,7 @@ Revision history for Perl extension HTML::Template::Compiled.
 - Added query() tests from HTML::Template suite. (Currently TODO)
 - Change: use dot notation for mehtod calls and dereference
 - Change: literal dots in var names work now; you can't use -> for method calling
-  any more, just use the dot, just use the dot
+  any more, just use the dot
 
 0.58 Sun Dec 11 23:20:35 CET 2005
 - fixed test with html entities

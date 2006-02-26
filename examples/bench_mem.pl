@@ -124,7 +124,7 @@ my $news = {
 	-f "examples/mem/included.html" or
 	copy "examples/included.html", "examples/mem/included.html" or die $!;
     # preprocess half of the templates
-    my $t = process($count/1, $mod, $file);
+    my $t = process($count/2, $mod, $file);
     print_top("root");
     for my $i (1..2) {
         if (my $pid = fork) {

@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.12 2005/12/15 22:24:54 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.13 2006/01/11 22:41:47 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 6;
@@ -38,10 +38,13 @@ my $hash = {
 };
 sub HTC::Test::key { return $_[0]->{"_key"} }
 
-my $cache = File::Spec->catfile('t', 'cache');
+#my $cache = File::Spec->catfile('t', 'cache');
+use lib 't';
+use HTC_Utils qw($cache $tdir &cdir);
 mkdir $cache unless -d $cache;
+my $include = cdir($tdir,'include.html');
 my %args = (
-	path => 't/templates',
+	path => $tdir,
 	#case_insensitive => 1,
 	case_sensitive => 0,
 	loop_context_vars => 1,
@@ -95,7 +98,7 @@ INCLUDED: Hair of the Dog
 EOM
 	for ($exp, $out) { s/^\s+//mg; tr/\n\r//d; }
 	cmp_ok($exp, "eq", $out, "output ok");
-	open my $fh, '+<', 't/templates/include.html' or die $!;
+	open my $fh, '+<', $include or die $!;
 	local $/;
 	my $txt = <$fh>;
 	$txt =~ s/INCLUDED/INCLUDED_NEW/;
@@ -115,7 +118,7 @@ EOM
 	$out = $htc->output;
 	$out =~ s/^\s+//mg; $out =~ tr/\n\r//d;
 	cmp_ok($exp,"eq", $out, "output after update & sleep ok");
-	open $fh, '+<', 't/templates/include.html' or die $!;
+	open $fh, '+<', $include or die $!;
 	local $/;
 	$txt = <$fh>;
 	$txt =~ s/INCLUDED_NEW/INCLUDED/;
@@ -125,8 +128,7 @@ EOM
 	close $fh;
 }
 {
-	my $tmpl = File::Spec->catfile('t', 'templates', 'include.html');
-	open my $fh, '<', $tmpl or die $!;
+	open my $fh, '<', $include or die $!;
 	my $htc = HTML::Template::Compiled->new(
 		filehandle => $fh,
 	);
