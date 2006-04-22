@@ -1,4 +1,4 @@
-# $Id: 03_param.t,v 1.9 2006/01/02 21:28:40 tinita Exp $
+# $Id: 03_param.t,v 1.10 2006/04/22 17:36:51 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 8;
@@ -25,7 +25,7 @@ TODO: {
     print "(@param)\n";
 	cmp_ok(@param, "==", 2, "param() 1");
 	cmp_ok($param[0], "eq", 'bar', "param() 2");
-	cmp_ok($param[1], "eq", 'foo', "param() 2");
+	cmp_ok($param[1]||'', "eq", 'foo', "param() 2");
 	eval {
         my @query = sort $htc->query();
 	    cmp_ok("@param", "eq", "@query", "query");

@@ -1,9 +1,9 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 06_dyn_include.t,v 1.3 2005/11/21 21:19:21 tinita Exp $
+# $Id: 06_dyn_include.t,v 1.4 2006/04/22 16:29:53 tinita Exp $
 
 use lib 'blib/lib';
-use Test::More tests => 3;
+use Test::More tests => 7;
 BEGIN { use_ok('HTML::Template::Compiled') };
 #$HTML::Template::Compiled::NEW_CHECK = 2;
 
@@ -19,14 +19,12 @@ for my $ix (1..2) {
 		test => 23,
 	);
 	my $out = $htc->output;
-	#print $out;
+    #print $out;
 	$out =~ s/\r\n|\r/\n/g;
-	ok(
-		$out =~ m/^Dynamic include:/m
-			&& $out =~ m/^This is dynamically included file $ix\./m
-			&& $out =~ m/^23/m,
-		"dynamic include $ix",
-	);
+    cmp_ok($out, "=~",
+        "Dynamic include:", "dynamic include $ix.1");
+    cmp_ok($out, "=~", "This is dynamically included file $ix\.", "dynamic include $ix.2");
+    cmp_ok($out, "=~", "23", "dynamic include $ix.3");
 }
 
 

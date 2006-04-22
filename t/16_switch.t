@@ -1,9 +1,9 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 16_switch.t,v 1.1 2005/12/07 00:19:42 tinita Exp $
+# $Id: 16_switch.t,v 1.2 2006/04/21 22:45:42 tinita Exp $
 
 use lib 'blib/lib';
-use Test::More tests => 2;
+use Test::More tests => 3;
 use Data::Dumper;
 use File::Spec;
 use strict;
@@ -17,7 +17,7 @@ my $cache = File::Spec->catfile('t', 'cache');
 	my $htc = HTML::Template::Compiled->new(
 		scalarref => \<<'EOM',
 <tmpl_switch .lang>
-<tmpl_case en>
+    <tmpl_case en>
 	english
 	<tmpl_case de,fr>
 		german or french
@@ -27,6 +27,10 @@ my $cache = File::Spec->catfile('t', 'cache');
 	<tmpl_case>
 		default
 </tmpl_switch>
+<tmpl_switch .lang>
+	<tmpl_case fr,default>
+    french or default
+</tmpl_switch>
 EOM
 		debug => 0,
 	);
@@ -34,6 +38,7 @@ EOM
 		lang => 'de',
 	);
 	my $out = $htc->output;
-	#print $out,$/;
+    #print $out,$/;
 	ok($out =~ m/german or french.*german/s, "switch");
+	ok($out =~ m/french or default/s, "switch default");
 }

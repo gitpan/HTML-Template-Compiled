@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.129 2006/02/26 17:46:34 tinita Exp $
+# $Id: Compiled.pm,v 1.137 2006/04/22 17:34:51 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.60";
+our $VERSION = "0.61";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.60";
+our $VERSION = "0.61";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -56,17 +56,24 @@ use constant CHECKED  => 1;
 use constant LMTIME   => 2;
 use constant LCHECKED => 3;
 
-use constant TIF      => 'IF';
-use constant TUNLESS  => 'UNLESS';
-use constant TELSIF   => 'ELSIF';
-use constant TELSE    => 'ELSE';
-use constant T_END    => '__EOT__';
-use constant TLOOP    => 'LOOP';
-use constant TWITH    => 'WITH';
-use constant T_SWITCH => 'SWITCH';
-use constant T_CASE   => 'CASE';
+use constant T_VAR     => 'VAR';
+use constant T_IF       => 'IF';
+use constant T_UNLESS   => 'UNLESS';
+use constant T_ELSIF    => 'ELSIF';
+use constant T_ELSE     => 'ELSE';
+use constant T_END      => '__EOT__';
+use constant T_WITH     => 'WITH';
+use constant T_SWITCH   => 'SWITCH';
+use constant T_CASE     => 'CASE';
+use constant T_INCLUDE  => 'INCLUDE';
+use constant T_LOOP    => 'LOOP';
+use constant T_LOOP_CONTEXT => 'LOOP_CONTEXT';
+use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
 
 use constant INDENT   => '    ';
+
+use constant OPENING_TAG => 0;
+use constant CLOSING_TAG => 1;
 
 my ($start_re,$end_re,$tmpl_re,$close_re,$var_re,$comment_re);
 my $asp_re =     ['<%'          ,'%>',    '<%/',          '<%/?.*?%>'];
@@ -76,15 +83,45 @@ my $classic_re = ['<TMPL_'      ,'>',     '</TMPL_',      '</?TMPL.*?>'];
     my $init = 0;
     sub init_re {
         return if $init;
-        $start_re = '(?i:'  . ($ENABLE_ASP ? "$asp_re->[0]|" : '') . "$classic_re->[0]|$comm_re->[0])";
-        $end_re   = '(?:'   . ($ENABLE_ASP ? "$asp_re->[1]|" : '') . "$classic_re->[1]|$comm_re->[1])";
-        $tmpl_re  = '(?is:' . ($ENABLE_ASP ? "$asp_re->[3]|" : '') . "$classic_re->[3]|$comm_re->[3])";
-        $close_re = '(?i:'  . ($ENABLE_ASP ? "$asp_re->[2]|" : '') . "$classic_re->[2]|$comm_re->[2])";
+        $start_re = '(?i:'  . ($ENABLE_ASP ? "$asp_re->[0]|" : '') . "$comm_re->[0]|$classic_re->[0])";
+        $end_re   = '(?:'   . ($ENABLE_ASP ? "$asp_re->[1]|" : '') . "$comm_re->[1]|$classic_re->[1])";
+        $tmpl_re  = '(?is:' . ($ENABLE_ASP ? "$asp_re->[3]|" : '') . "$comm_re->[3]|$classic_re->[3])";
+        $close_re = '(?i:'  . ($ENABLE_ASP ? "$asp_re->[2]|" : '') . "$comm_re->[2]|$classic_re->[2])";
         $var_re   = '(?:[\w./+-])+';
-        $comment_re
-            = '(COMMENT|NOPARSE|VERBATIM)\s*(?:\s+(\w+)\s*)?'
-            . $end_re;
+        $comment_re = '(?:(\w+)\s*)?';
         $init = 1;
+    }
+    sub strip_tags {
+        # returns ($type, $name, $tag) where $type is 0 (opening),
+        # 1 (closing), # undef (no HTC tag), $name is IF|VAR|WITH|...
+        # and $tag is the tag-content or the
+        # original text
+        my ($full_tag) = @_;
+        for my $t ($asp_re, $comm_re, $classic_re) {
+            my ($pre,$tag,$post, $tt, $name);
+            if(($pre,$tag,$post) = $full_tag =~ m/^($t->[2])(.*)($t->[1])$/is) {
+                $tt = 1;
+            }
+            elsif(($pre,$tag,$post) = $full_tag =~ m/^($t->[0])(.*)($t->[1])$/is) {
+                $tt = 0;
+            }
+            else {
+                next;
+            }
+            if ($tag =~ s/^
+                ( VAR|=|IF|UNLESS|ELSIF|ELSE|
+                WITH|COMMENT|VERBATIM|NOPARSE|LOOP|
+                LOOP_CONTEXT|SWITCH|CASE|INCLUDE|INCLUDE_VAR ) (\s+|$)//xi) {
+                $name = uc $1;
+                $name = 'VAR' if $name eq '=';
+            }
+            else {
+                croak "'$full_tag' is not a valid HTC tag";
+            }
+            #print STDERR "($name, $tt, $tag)\n";
+            return ($name, $tt, $tag);
+        }
+        return (undef, undef, $full_tag);
     }
 }
 
@@ -695,11 +732,17 @@ EOM
     my $noparse = 0;
     my $verbatim = 0;
     for (@p) {
-        my $indent = INDENT x $level;
         s/~/\\~/g;
         if ( $self->getLine_numbers && s#__(\d+)__($tmpl_re)#$2# ) {
             $line = $1 + 1;
         }
+        #print STDERR "p: '$_'\n";
+        my ($tname, $tt, $stripped) = strip_tags($_);
+        if (defined $tt) {
+            #print STDERR "s: '$stripped'\n";
+        }
+        my $indent = INDENT x $level;
+        my $is_tag = defined $tt;
         my $meth     = $self->getMethod_call;
         my $deref    = $self->getDeref;
         my $format   = $self->getFormatter_path;
@@ -711,9 +754,9 @@ EOM
         );
         # --------- TMPL_VAR
         if ( !$comment && !$noparse && !$verbatim) {
-            if (m#$start_re(VAR|=)\s+(?:NAME=)?(['"]?)($var_re)\2.*$end_re#i) {
-                my $type = uc $1;
-                $type = "VAR" if $type eq '=';
+            if ($is_tag && $tt == OPENING_TAG && $tname eq T_VAR && $stripped =~ m#^()(?:NAME=)?(['"]?)($var_re)\2#i) {
+                #print STDERR "===== VAR ($_)\n";
+                my $type = $tname;
                 my $var    = $3;
                 my $escape = $self->getDefault_escape;
                 if (m/\s+ESCAPE=(['"]?)(\w+(?:\|\w+)*)\1/i) {
@@ -751,7 +794,7 @@ EOM
                 if ( defined $default ) {
                     $varstr = qq#defined $varstr ? $varstr : '$default'#;
                 }
-                if ( uc $type eq 'VAR' ) {
+                if ( $tname eq T_VAR ) {
                     if ($escape) {
                         $escape = uc $escape;
                         my @escapes = split m/\|/, $escape;
@@ -779,8 +822,8 @@ EOM
             }
 
             # --------- TMPL_WITH
-            elsif (m#${start_re}WITH\s+(?:NAME=)?(['"]?)($var_re)\1\s*$end_re#i) {
-                push @$stack, TWITH;
+            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_WITH && $stripped =~ m#^(?:NAME=)?(['"]?)($var_re)\1\s*$#i) {
+                push @$stack, T_WITH;
                 $level++;
                 my $var    = $2;
                 my $varstr = $self->_make_path(
@@ -798,7 +841,7 @@ EOM
             }
 
             # --------- TMPL_LOOP_CONTEXT
-            elsif (m{ $start_re LOOP_CONTEXT \s* $end_re }ix) {
+            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_LOOP_CONTEXT && $stripped =~ m{ ^  $ }ix) {
                 my $indent = INDENT x $level;
                 $code .= <<"EOM";
 ${indent}local \$__counter__ = \$ix+1;
@@ -810,15 +853,14 @@ EOM
             }
 
             # --------- TMPL_LOOP
-            elsif (m{ $start_re
-                (?:LOOP|FOR) \s+
+            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_LOOP && $stripped =~ m{ ^
                 (?:NAME=)?
                 (['"]?)   # $1 "'
                 ($var_re) # $2
                 \1
                 (?: \s+ AS \s+ (\w+) ) ? # $3
-                \s* $end_re }ix) {
-                push @$stack, TLOOP;
+                \s* $ }ix) {
+                push @$stack, T_LOOP;
                 my $var     = $2;
                 my $lexical = $3;
                 push @lexicals, $lexical;
@@ -859,18 +901,19 @@ EOM
             }
 
             # --------- TMPL_ELSE
-            elsif (m#${start_re}ELSE\s*$end_re#i) {
+            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_ELSE && $stripped =~ m#^$#i) {
                 # we can only have an open if or unless
-                $self->_checkstack( $fname, $line, $stack, TELSE );
+                $self->_checkstack( $fname, $line, $stack, T_ELSE );
                 pop @$stack;
-                push @$stack, TELSE;
+                push @$stack, T_ELSE;
                 my $indent = INDENT x( $level - 1 );
                 $code .= qq#${indent}\}\n${indent}else {\n#;
             }
 
             # --------- / TMPL_IF TMPL UNLESS TMPL_WITH
-            elsif (m#$close_re(IF|UNLESS|WITH)(?:\s+$var_re)?\s*$end_re#i) {
-                $self->_checkstack( $fname, $line, $stack, uc "$1" );
+            elsif ($is_tag && $tt == CLOSING_TAG && $tname =~ m/^(?:IF|UNLESS|WITH)$/ && $stripped =~ m#^()(?:$var_re)?\s*$#i) {
+                #print STDERR "============ IF ($_)\n";
+                $self->_checkstack( $fname, $line, $stack, $tname );
                 pop @$stack;
                 $level--;
                 my $indent = INDENT x $level;
@@ -883,10 +926,10 @@ EOM
             }
 
 			# --------- / TMPL_LOOP
-            elsif (m{ $close_re
-                (?:LOOP|FOR) (?:\s*$var_re\s*)?
-                \s* $end_re}ix) {
-                $self->_checkstack($fname,$line,$stack, TLOOP);
+            elsif ($is_tag && $tt == CLOSING_TAG && $tname eq T_LOOP && $stripped =~ m{ ^
+                (?:\s*$var_re\s*)?
+                \s* $}ix) {
+                $self->_checkstack($fname,$line,$stack, T_LOOP);
                 pop @$stack;
                 pop @lexicals;
                 $level--;
@@ -903,9 +946,9 @@ ${indent}\} # end loop
 $global
 EOM
             }
-			# --------- TMPL_IF TMPL UNLESS TMPL_ELSE
-            elsif (m#$start_re(ELSIF|IF|UNLESS)\s+(DEFINED\s+)?(?:NAME=)?(['"]?)($var_re)\3\s*$end_re#i) {
-                my $type   = uc $1;
+			# --------- TMPL_IF TMPL UNLESS TMPL_ELSIF
+            elsif ($is_tag && $tt == OPENING_TAG && $tname =~ m/^(?:IF|UNLESS|ELSIF)$/ && $stripped =~ m#^()(DEFINED\s+)?(?:NAME=)?(['"]?)($var_re)\3\s*$#i) {
+                #print STDERR "============ IF ($_)\n";
                 my $def    = $2;
                 my $var    = $4;
                 my $indent = INDENT x $level;
@@ -916,17 +959,17 @@ EOM
                 );
                 my $if =
                   { IF => 'if', UNLESS => 'unless', ELSIF => 'elsif' }
-                  ->{ uc $1 };
-                my $elsif = $type eq 'ELSIF' ? 1 : 0;
+                  ->{ $tname };
+                my $elsif = $tname eq 'ELSIF' ? 1 : 0;
                 if ($def) {
                     $varstr = "defined( $varstr )";
                 }
                 if ($elsif) {
                     $code .= qq#${indent}\}\n#;
-                    $self->_checkstack( $fname, $line, $stack, TELSIF );
+                    $self->_checkstack( $fname, $line, $stack, T_ELSIF );
                 }
                 else {
-                    push @$stack, $type;
+                    push @$stack, $tname;
                     $level++;
                 }
                 $code .= <<"EOM"
@@ -935,7 +978,7 @@ EOM
             }
 
             # --------- TMPL_SWITCH
-            elsif ( m# $start_re SWITCH \s+ (?:NAME=)?(['"]?)($var_re)\1\s* $end_re #xi) {
+            elsif ( $is_tag && $tt == OPENING_TAG && $tname eq T_SWITCH && $stripped =~ m# ^ (?:NAME=)?(['"]?)($var_re)\1\s* #xi) {
                 my $var = $2;
                 push @$stack,   T_SWITCH;
                 push @switches, 0;
@@ -951,7 +994,7 @@ EOM
             }
             
             # --------- / TMPL_SWITCH
-            elsif (m# $close_re SWITCH (?:\s+$var_re)?\s*$end_re#xi) {
+            elsif ($is_tag && $tt == CLOSING_TAG && $tname eq T_SWITCH && $stripped =~ m# ^ (?:\s+$var_re)?\s* #xi) {
                 $self->_checkstack( $fname, $line, $stack, T_SWITCH );
                 pop @$stack;
                 $level--;
@@ -965,7 +1008,7 @@ EOM
             }
             
             # --------- TMPL_CASE
-            elsif (m# $start_re CASE (\s+\w+(?:,\s*\w+)?)? \s* $end_re #xi) {
+            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_CASE && $stripped =~ m# ^ (\s+\w+(?:,\s*\w+)?)? \s* $ #xi) {
                 my $val = $1;
                 $val =~ s/^\s+//;
                 $self->_checkstack( $fname, $line, $stack, T_CASE );
@@ -982,25 +1025,34 @@ EOM
                     $code .= qq#${indent}if (1) \{\n#;
                 }
                 else {
-                    my $values = join ",", map { qq#'$_'# } split ",", $val;
+                    my @splitted = split ",", $val;
+                    my $is_default = '';
+                    @splitted = grep {
+                        uc $_ eq 'DEFAULT'
+                            ? do {
+                                $is_default = ' or 1 ';
+                                0;
+                            }
+                            : 1
+                    } @splitted;
+                    my $values = join ",", map { qq#'$_'# } @splitted;
                     $code .=
-qq#${indent}if (grep \{ \$_switch eq \$_ \} $values) \{\n#;
+qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 }
             }
 
             # --------- TMPL_INCLUDE_VAR
-            elsif (m# $start_re INCLUDE(_VAR)?\s+(.+?) $end_re #ixs) {
-                my $match = $2;
+            elsif ($is_tag && $tt == OPENING_TAG && $tname =~ m/^INCLUDE/ && $stripped =~ m# ^ (.+?) $ #ixs) {
                 my $filename;
                 my $varstr;
                 my $path = $self->getPath();
                 my $dir;
                 $path = [$path] unless ref $path eq 'ARRAY';
-                my $dynamic = $1 ? 1 : 0;
+                my $dynamic = $tname eq T_INCLUDE_VAR ? 1 : 0;
 
                 # deprecated 'INCLUDE VAR='
                 # use 'INCLUDE_VAR NAME=' instead
-                if ( $match =~ m/(?:VAR=)(['"]?)($var_re)\1/i ) {
+                if ( $stripped =~ m/(?:VAR=)(['"]?)($var_re)\1/i ) {
                     carp "use of INCLUDE VAR=... is deprecated. use INCLUDE_VAR NAME=... instead";
 
                     # dynamic filename
@@ -1011,7 +1063,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values) \{\n#;
                         final => 0,
                     );
                 }
-                elsif ( $match =~ m/(?:NAME=)?(['"]?)([^'">]+)\1/i ) {
+                elsif ( $stripped =~ m/^(?:NAME=)?(['"]?)([^'">]+)\1\s*$/i ) {
                     if ($dynamic) {
                         # dynamic filename
                         my $dfilename = $2;
@@ -1059,22 +1111,23 @@ ${indent}  $output \$new->getPerl()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']})
 ${indent}\}
 EOM
                 }
+                else {
+                    croak "tag '$_' is no valid HTC tag";
+                }
             }
 
             # --------- TMPL_COMMENT|NOPARSE|VERBATIM
-            elsif (m#$start_re$comment_re#i) {
-                my $type = uc $1;
-                my $name = $2;
-                $type eq 'COMMENT' ? $comment++ : $type eq 'NOPARSE' ? $noparse++ : $verbatim++;
+            elsif ($is_tag && $tt == OPENING_TAG && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/ && $stripped =~ m#^$comment_re$#i) {
+                my $name = $1;
+                $tname eq 'COMMENT' ? $comment++ : $tname eq 'NOPARSE' ? $noparse++ : $verbatim++;
                 $code .= qq{ # comment $name (level $comment)\n};
             }
 
             # --------- / TMPL_COMMENT|NOPARSE|VERBATIM
-            elsif (m#$close_re$comment_re#i) {
-                my $type = uc $1;
-                my $name = $2;
+            elsif ($is_tag && $tt == CLOSING_TAG && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/ && $stripped =~ m#^$comment_re$#i) {
+                my $name = $1;
                 $code .= qq{ # end comment $name (level $comment)\n};
-                $type eq 'COMMENT' ? $comment-- : $type eq 'NOPARSE' ? $noparse-- : $verbatim--;
+                $tname eq 'COMMENT' ? $comment-- : $tname eq 'NOPARSE' ? $noparse-- : $verbatim--;
             }
             else {
                 if ( length $_ ) {
@@ -1087,19 +1140,17 @@ EOM
         else {
 
             # --------- TMPL_COMMENT|NOPARSE|VERBATIM
-            if (m#$start_re$comment_re#i) {
-                my $type = uc $1;
-                my $name = $2;
-                $type eq 'COMMENT' ? $comment++ : $type eq 'NOPARSE' ? $noparse++ : $verbatim++;
+            if ($is_tag && $tt == OPENING_TAG && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/ && $stripped =~ m#^$comment_re$#i) {
+                my $name = $1;
+                $tname eq 'COMMENT' ? $comment++ : $tname eq 'NOPARSE' ? $noparse++ : $verbatim++;
                 $code .= qq{ # comment $name (level $comment)\n};
             }
 
             # --------- / TMPL_COMMENT|NOPARSE|VERBATIM
-            elsif (m#$close_re$comment_re#i) {
-                my $type = uc $1;
-                my $name = $2;
+            elsif ($is_tag && $tt == CLOSING_TAG && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/ && $stripped =~ m#^$comment_re$#i) {
+                my $name = $1;
                 $code .= qq{ # end comment $name (level $comment)\n};
-                $type eq 'COMMENT' ? $comment-- : $type eq 'NOPARSE' ? $noparse-- : $verbatim--;
+                $tname eq 'COMMENT' ? $comment-- : $tname eq 'NOPARSE' ? $noparse-- : $verbatim--;
             }
             else {
                 # don't output anything if we are in a comment
@@ -1211,7 +1262,7 @@ sub try_global {
             return $item->{$path};
         }
     }
-    return $walk;
+    return;
 }
 
 {
@@ -1313,12 +1364,12 @@ sub _get_var_sub_global {
 
 {
     my %map = (
-        IF         => [ TIF, TUNLESS, TELSE ],
-        UNLESS     => [TUNLESS, TELSE],
-        ELSIF      => [ TIF, TUNLESS ],
-        ELSE       => [ TIF, TUNLESS, TELSIF ],
-        LOOP       => [TLOOP],
-        WITH       => [TWITH],
+        IF         => [ T_IF, T_UNLESS, T_ELSE ],
+        UNLESS     => [T_UNLESS, T_ELSE],
+        ELSIF      => [ T_IF, T_UNLESS ],
+        ELSE       => [ T_IF, T_UNLESS, T_ELSIF ],
+        LOOP       => [T_LOOP],
+        WITH       => [T_WITH],
         T_SWITCH() => [T_SWITCH],
         T_CASE()   => [T_SWITCH],
         T_END()    => [T_END],
@@ -1753,7 +1804,7 @@ Additionally to
 
 you can do an include of a template variable:
 
-  <TMPL_INCLUDE_VAR NAME=="file_include_var">
+  <TMPL_INCLUDE_VAR NAME="file_include_var">
   $htc->param(file_include_var => "file.htc");
 
 Using C<INCLUDE VAR="..."> is deprecated.
@@ -1934,6 +1985,12 @@ With that directive you can do simple string comparisons.
   <tmpl_case>(same as default)
  </tmpl_switch>
 
+It's also possible to specify the default with a list of other strings:
+
+ <tmpl_case fr,default>
+
+Note that the default case should always be the last statement before the
+closing switch.
 
 =head2 OPTIONS
 
@@ -1949,7 +2006,7 @@ Path to template files
 
 =item search_path_on_include
 
-Search the list of paths spcified with C<path> when including a tmplate.
+Search the list of paths specified with C<path> when including a template.
 Default is 1 (different from HTML::Template).
 
 =item cache_dir
@@ -2328,7 +2385,7 @@ Sam Tregar big thanks for ideas and letting me use his L<HTML::Template> test su
 
 Bjoern Kriews for original idea and contributions
 
-Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Sascha Kiefer from perl-community.de for ideas and beta-testing
+Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Sascha Kiefer, Jan Willamowius for ideas and beta-testing
 
 perlmonks.org and perl-community.de for everyday learning
 
