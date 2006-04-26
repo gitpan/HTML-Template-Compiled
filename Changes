@@ -1,5 +1,9 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.62
+- New Feature: added method precompile
+- New Feature: implemented query() (from HTML::Template)
+
 0.61 Sat Apr 22 19:34:32 CEST 2006
 - Bug Fix: global_vars and variables that are never set
   http://rt.cpan.org/Public/Bug/Display.html?id=17851

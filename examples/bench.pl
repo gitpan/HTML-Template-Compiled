@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.8 2006/01/03 18:28:19 tinita Exp $
+# $Id: bench.pl,v 1.9 2006/04/26 21:25:56 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -42,8 +42,8 @@ sub new_htc {
 		debug => $debug,
 		# note that you have to create the cachedir
 		# first, otherwise it will run without cache
-		#cache_dir => "cache/htc",
-		#cache => 0,
+        #cache_dir => "cache/htc",
+        #cache => 0,
 		out_fh => 1,
         #global_vars => 1,
 	);
@@ -65,6 +65,8 @@ sub new_ht {
 		#path => 'examples',
 		filename => $ht_file,
 		cache => 1,
+        #file_cache => 1,
+        #file_cache_dir => 'cache/ht',
         #global_vars => 1,
 	);
 	#my $size = total_size($t2);

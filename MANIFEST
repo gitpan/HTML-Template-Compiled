@@ -35,6 +35,8 @@ t/15_comment.t
 t/16_switch.t
 t/17_escape.t
 t/18_objects.t
+t/19_query.t
+t/20_precompile.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html
@@ -46,6 +48,9 @@ t/templates/dyn_included1.htc
 t/templates/dyn_included2.htc
 t/templates/formatter.htc
 t/templates/dummy.tmpl
+t/templates/precompiled1.tmpl
 t/templates/subdir/a/file1.html
 t/templates/subdir/a/file2.html
+t/templates/query-test.tmpl
+t/templates/query-test2.tmpl
 META.yml                                 Module meta-data (added by MakeMaker)

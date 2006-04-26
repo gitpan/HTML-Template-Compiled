@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.137 2006/04/22 17:34:51 tinita Exp $
+# $Id: Compiled.pm,v 1.143 2006/04/26 21:22:42 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.61";
+our $VERSION = "0.62";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.61";
+our $VERSION = "0.62";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -37,7 +37,7 @@ use vars qw(
   $__first__ $__last__ $__inner__ $__odd__ $__counter__
   $NEW_CHECK $UNDEF $ENABLE_ASP $ENABLE_SUB
   $CASE_SENSITIVE_DEFAULT $DEBUG_DEFAULT $SEARCHPATH
-  %FILESTACK %SUBSTACK $DEFAULT_ESCAPE
+  %FILESTACK %SUBSTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
   $UNTAINT
 );
 $NEW_CHECK              = 60 * 10; # 10 minutes default
@@ -49,6 +49,7 @@ $SEARCHPATH             = 1;
 $DEFAULT_ESCAPE         = 0;
 $UNDEF                  = ''; # set for debugging
 $UNTAINT                = 0;
+$DEFAULT_QUERY          = 0;
 
 
 use constant MTIME    => 0;
@@ -150,7 +151,7 @@ use constant PATH => 1;
           method_call deref formatter_path default_path
           debug perl out_fh default_escape
           filter formatter
-          globalstack
+          globalstack use_query
           )
     );
 
@@ -281,7 +282,8 @@ sub create {
             D && $self->log("md5: $md5");
             $self->setFilename($md5);
             #$self->setPath( defined $args{path} ? $args{path} : '' );
-            $self->setPath( $args{path} );
+            #$self->setPath( $args{path} );
+            $self->setPath( '' );
         }
         elsif ( $args{filehandle} ) {
             $self->setFilehandle( $args{filehandle} );
@@ -484,7 +486,6 @@ sub add_file_cache {
 EOM
       : <<"EOM";
         filename => '@{[$self->getFilename]}',
-        file => '@{[$self->getFile]}',
 EOM
     print $fh <<"EOM";
     package HTML::Template::Compiled;
@@ -653,6 +654,7 @@ sub init {
         global_vars            => 0,
         default_escape         => $DEFAULT_ESCAPE,
         default_path           => PATH_DEREF,
+        use_query              => $DEFAULT_QUERY,
         %args,
     );
     $self->setMethod_call( $defaults{method_call} );
@@ -664,6 +666,7 @@ sub init {
     $self->setFormatter( $args{formatter} ) if $args{formatter};
     $self->setDefault_escape( $defaults{default_escape} );
     $self->setDefault_path( $defaults{default_path} );
+    $self->setUse_query( $defaults{use_query} );
     $self->setSearch_path_on_include( $defaults{search_path_on_include} );
     if ( $args{filter} ) {
         require HTML::Template::Compiled::Filter;
@@ -705,6 +708,8 @@ sub _compile {
     my $level = 1;
     my $code  = '';
     my $stack = [T_END];
+    my $info = {}; # for query()
+    my $info_stack = [$info];
 
     # got this trick from perlmonks.org
     my $anon = D
@@ -758,6 +763,9 @@ EOM
                 #print STDERR "===== VAR ($_)\n";
                 my $type = $tname;
                 my $var    = $3;
+                if ($self->getUse_query) {
+                    $info_stack->[-1]->{lc $var}->{type} = T_VAR;
+                }
                 my $escape = $self->getDefault_escape;
                 if (m/\s+ESCAPE=(['"]?)(\w+(?:\|\w+)*)\1/i) {
                     $escape = $2;
@@ -862,6 +870,11 @@ EOM
                 \s* $ }ix) {
                 push @$stack, T_LOOP;
                 my $var     = $2;
+                if ($self->getUse_query) {
+                    $info_stack->[-1]->{lc $var}->{type} = T_LOOP;
+                    $info_stack->[-1]->{lc $var}->{children} ||= {};
+                    push @$info_stack, $info_stack->[-1]->{lc $var}->{children};
+                }
                 my $lexical = $3;
                 push @lexicals, $lexical;
                 my $lexi =
@@ -932,6 +945,9 @@ EOM
                 $self->_checkstack($fname,$line,$stack, T_LOOP);
                 pop @$stack;
                 pop @lexicals;
+                if ($self->getUse_query) {
+                    pop @$info_stack;
+                }
                 $level--;
                 $level--;
                 my $indent = INDENT x $level;
@@ -1167,6 +1183,10 @@ EOM
         }
     }
     $self->_checkstack( $fname, $line, $stack, T_END );
+    if ($self->getUse_query) {
+        $self->setUse_query($info);
+    }
+    #warn Data::Dumper->Dump([\$info], ['info']);
     $code = $header . $code . "\n} # end of sub\n";
 
     #$code .= "\n} # end of sub\n";
@@ -1445,12 +1465,33 @@ sub preload {
     return scalar @files;
 }
 
+sub precompile {
+    my ($class, %args) = @_;
+    my $files = delete $args{filenames};
+    return unless ref $files eq 'ARRAY';
+    my @precompiled;
+    for my $file (@$files) {
+        my $htc = $class->new(%args,
+            (ref $file eq 'SCALAR'
+                ? 'scalarref'
+                : ref $file eq 'ARRAY'
+                ? 'arrayref'
+                : ref $file eq 'GLOB'
+                ? 'filehandle'
+                : 'filename') => $file,
+        );
+        push @precompiled, $htc,
+    }
+    return \@precompiled;
+}
+
 sub clear_params {
     $_[0]->[PARAM] = ();
 }
 sub param {
     my $self = shift;
     unless (@_) {
+        return $self->query();
         return UNIVERSAL::can($self->[PARAM],'can')
             ? $self->[PARAM]
             : $self->[PARAM]
@@ -1480,6 +1521,35 @@ sub param {
         %p = %$uc;
     }
     $self->[PARAM]->{$_} = $p{$_} for keys %p;
+}
+
+sub query {
+    my ($self, $what, $tags) = @_;
+    #print STDERR "query(@_)\n";
+    my $info = $self->getUse_query
+        or croak "You are using query() but have not specified that you want to use it";
+    my $pointer = {children => $info};
+    $tags = [] unless defined $tags;
+    $tags = [$tags] unless ref $tags eq 'ARRAY';
+    for my $tag (@$tags) {
+        if (defined (my $value = $pointer->{children}->{lc $tag})) {
+            $pointer = $value;
+        }
+    }
+    unless ($what) {
+        return keys %{ $pointer->{children} };
+    }
+    elsif ($what eq 'name') {
+        my $type = $pointer->{type};
+        return $type;
+    }
+    elsif ($what eq 'loop') {
+        if ($pointer->{type} eq 'LOOP') {
+            return keys %{ $pointer->{children} };
+        }
+        else { croak "error: (@$tags) is not a LOOP" }
+    }
+    return;
 }
 
 # =head2 uchash
@@ -1534,12 +1604,14 @@ sub import {
         $ENABLE_SUB             = 1;
         $CASE_SENSITIVE_DEFAULT = 0;
         $SEARCHPATH             = 0;
+        $DEFAULT_QUERY          = 1;
     }
     elsif ( $args{speed} ) {
         # default at the moment
         $ENABLE_SUB             = 0;
         $CASE_SENSITIVE_DEFAULT = 1;
         $SEARCHPATH             = 1;
+        $DEFAULT_QUERY          = 0;
     }
 }
 
@@ -1677,6 +1749,8 @@ use option case_sensitive => 0 to use this feature (slow down)
 
 =item C<global_vars>
 
+=item C<query>
+
 =back
 
 =head2 ADDITIONAL FEATURES
@@ -1750,15 +1824,11 @@ I'll try to list them here.
 
 I don't think I'll implement that.
 
-=item C<query>
-
-I will implement that as soon as possible.
-
 =back
 
 =head2 COMPATIBILITY
 
-At the moment there are three defaults that differ from L<HTML::Template>:
+At the moment there are four defaults that differ from L<HTML::Template>:
 
 =over 4
 
@@ -1774,6 +1844,10 @@ default is 0. Set it via C<$HTML::Template::Compiled::ENABLE_SUB = 1>
 =item search_path_on_include
 
 default is 1. Set it via C<$HTML::Template::Compiled::SEARCHPATH = 0>
+
+=item use_query
+
+default is 0. Set it via C<$HTML::Template::Compiled::DEFAULT_QUERY = 1>
 
 =back
 
@@ -2179,7 +2253,7 @@ Filter template code before parsing.
 
 =item formatter
 
-With formatter you can spcify how an object should be rendered. This is useful
+With formatter you can specify how an object should be rendered. This is useful
 if you don't want object methods to be called, but only a given subset of
 methods.
 
@@ -2208,6 +2282,10 @@ see formatter. Defaults to '/'
 =item debug
 
 If set to 1 you will get the generated perl code on standard error
+
+=item use_query
+
+Specify if you plan to use the query() method. Default is 0.
 
 =back
 
@@ -2244,6 +2322,11 @@ go into "shared memory"
 
 If you don't do preloading in mod_perl, memory usage might go up if you have a lot
 of templates.
+
+=item precompile
+
+Class method. It will precompile a list of template files into the specified
+cache directory. See L<"PRECOMPILE">.
 
 =item clear_params
 
@@ -2300,23 +2383,26 @@ and just put the compiled templates onto the server, with no write access for th
 Set the C<$NEW_CHECK> variable to a high value so that HTC never attempts to check the
 template timestamp to force a regenerating of the code.
 
-There is no easy way to provide a C<pre_compile> function to HTC, because every template can
-have different options. But maybe there will be a function added, that you can use, if
-your templates use the same options.
-
-The function could work like this:
-
-  HTML::Template::Compiled->precompile(
-    # usual options like path, default_escape, global_vars
-    cache_dir => $dir,
-  );
-
-This would then pre-compile all templates into cache_dir. Now you would just put this
-directory onto the server, with write access only for yourself.
-
 If you are alone on the machine, but you are running under taint mode (see L<perlsec>) then
 you have to explicitly set the C<$UNTAINT> variable to 1. HTC will then untaint the code for you
 and treat it as if it were safe (it hopefully is =).
+
+=head2 PRECOMPILE
+
+I think there is no way to provide an easy function for precompiling,
+because every template can have different options.
+If you have all your templates with the same options, then you can use the
+precompile class method.
+It works like this:
+
+  HTML::Template::Compiled->precompile(
+    # usual options like path, default_escape, global_vars, cache_dir, ...
+    filenames => [ list of template-filenames ],
+  );
+
+This will then pre-compile all templates into cache_dir. Now you would just put this
+directory onto the server, and it doesn't need any write-permissions, as it
+will be never changed (until you update it because templates have changed).
 
 =head1 BENCHMARKS
 
@@ -2334,9 +2420,6 @@ See examples/bench.pdf for a detailed table.
 =head1 BUGS
 
 At the moment files with no newline at the end of the last line aren't correctly parsed.
-
-The method C<param()> is not correctly implemented - it should behave like C<query()> when
-called without args. This will be resolved as soon as i implement C<query()>.
 
 Probably many more bugs I don't know yet =)
 
