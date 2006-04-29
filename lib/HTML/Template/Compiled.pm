@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.143 2006/04/26 21:22:42 tinita Exp $
+# $Id: Compiled.pm,v 1.149 2006/04/29 00:33:34 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.62";
+our $VERSION = "0.63";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.62";
+our $VERSION = "0.63";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -68,6 +68,7 @@ use constant T_SWITCH   => 'SWITCH';
 use constant T_CASE     => 'CASE';
 use constant T_INCLUDE  => 'INCLUDE';
 use constant T_LOOP    => 'LOOP';
+use constant T_WHILE   => 'WHILE';
 use constant T_LOOP_CONTEXT => 'LOOP_CONTEXT';
 use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
 
@@ -111,7 +112,7 @@ my $classic_re = ['<TMPL_'      ,'>',     '</TMPL_',      '</?TMPL.*?>'];
             }
             if ($tag =~ s/^
                 ( VAR|=|IF|UNLESS|ELSIF|ELSE|
-                WITH|COMMENT|VERBATIM|NOPARSE|LOOP|
+                WITH|COMMENT|VERBATIM|NOPARSE|LOOP|WHILE|
                 LOOP_CONTEXT|SWITCH|CASE|INCLUDE|INCLUDE_VAR ) (\s+|$)//xi) {
                 $name = uc $1;
                 $name = 'VAR' if $name eq '=';
@@ -479,6 +480,8 @@ sub add_file_cache {
       )
       . ']';
     my $isScalar = $self->getScalar ? 1 : 0;
+    my $query_info = $self->getUse_query;
+    $query_info = Data::Dumper->Dump([\$query_info], ['query_info']);
     my $file_args = $isScalar
       ? <<"EOM"
         scalarref => $isScalar,
@@ -491,6 +494,7 @@ EOM
     package HTML::Template::Compiled;
 # file date $lmtime
 # last checked date $lchecked
+my $query_info;
 my \$args = {
     # HTC version
     version => '$VERSION',
@@ -507,6 +511,7 @@ $file_args
     deref => '@{[$self->getDeref]}',
     out_fh => @{[$self->getOut_fh]},
     default_escape => '@{[$self->getDefault_escape]}',
+    use_query => \$query_info,
     # TODO
     # dumper => ...
     # template subroutine
@@ -759,10 +764,10 @@ EOM
         );
         # --------- TMPL_VAR
         if ( !$comment && !$noparse && !$verbatim) {
-            if ($is_tag && $tt == OPENING_TAG && $tname eq T_VAR && $stripped =~ m#^()(?:NAME=)?(['"]?)($var_re)\2#i) {
+            if ($is_tag && $tt == OPENING_TAG && $tname eq T_VAR && $stripped =~ m#^(?:NAME=)?(['"]?)($var_re)\1#i) {
                 #print STDERR "===== VAR ($_)\n";
                 my $type = $tname;
-                my $var    = $3;
+                my $var    = $2;
                 if ($self->getUse_query) {
                     $info_stack->[-1]->{lc $var}->{type} = T_VAR;
                 }
@@ -782,7 +787,7 @@ EOM
                     final => 1,
                 );
 
-                #print "line: $_ var: $var\n";
+                #print "line: $_ var: $var ($varstr)\n";
                 my $root = 0;
                 my $path = 0;
                 if ( $var =~ s/^\.// ) {
@@ -860,16 +865,23 @@ ${indent}local \$__inner__   = !\$__first__ && !\$__last__;
 EOM
             }
 
-            # --------- TMPL_LOOP
-            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_LOOP && $stripped =~ m{ ^
+            # --------- TMPL_LOOP|WHILE
+            elsif ($is_tag && $tt == OPENING_TAG && ($tname eq T_LOOP || $tname eq T_WHILE) && $stripped =~ m{ ^
                 (?:NAME=)?
                 (['"]?)   # $1 "'
                 ($var_re) # $2
                 \1
                 (?: \s+ AS \s+ (\w+) ) ? # $3
                 \s* $ }ix) {
-                push @$stack, T_LOOP;
+                push @$stack, $tname;
                 my $var     = $2;
+                my $varstr = $self->_make_path(
+                    %var_args,
+                    var   => $var,
+                    final => 0,
+                );
+                $level += 2;
+                my $ind    = INDENT;
                 if ($self->getUse_query) {
                     $info_stack->[-1]->{lc $var}->{type} = T_LOOP;
                     $info_stack->[-1]->{lc $var}->{children} ||= {};
@@ -879,37 +891,40 @@ EOM
                 push @lexicals, $lexical;
                 my $lexi =
                   defined $lexical ? "${indent}my \$$lexical = \$\$C;\n" : "";
-                my $varstr = $self->_make_path(
-                    %var_args,
-                    var   => $var,
-                    final => 0,
-                );
-            $level += 2;
-            my $ind    = INDENT;
-            my $global = $self->getGlobal_vars ? <<"EOM" : '';
+                if ($tname eq T_WHILE) {
+                    $code .= <<"EOM";
+${indent}${ind}# while $var
+${indent}${ind}\{
+${indent}${ind}while (my \$next = $varstr) {
+${indent}${indent}my \$C = \\\$next;
+EOM
+                }
+                else {
+                    my $global = $self->getGlobal_vars ? <<"EOM" : '';
 ${indent}my \$stack = \$t->getGlobalstack;
 ${indent}push \@\$stack, \$\$C;
 ${indent}\$t->setGlobalstack(\$stack);
 EOM
-            $code .= <<"EOM";
+                    $code .= <<"EOM";
 ${indent}if (UNIVERSAL::isa(my \$array = $varstr, 'ARRAY') )\{
 ${indent}${ind}my \$size = \$#{ \$array };
 $global
 
 ${indent}${ind}# loop over $var
-${indent}${ind}for my \$ix (\$[..\$size) {
+${indent}${ind}for my \$ix (\$[..\$size) \{
 ${indent}${ind}${ind}my \$C = \\ (\$array->[\$ix]);
 $lexi
 EOM
-                if ($self->getLoop_context) {
-                    my $indent = INDENT x $level;
-                    $code .= <<"EOM";
+                    if ($self->getLoop_context) {
+                        my $indent = INDENT x $level;
+                        $code .= <<"EOM";
 ${indent}local \$__counter__ = \$ix+1;
 ${indent}local \$__first__   = \$ix == \$[;
 ${indent}local \$__last__    = \$ix == \$size;
 ${indent}local \$__odd__     = !(\$ix & 1);
 ${indent}local \$__inner__   = !\$__first__ && !\$__last__;
 EOM
+                    }
                 }
             }
 
@@ -924,7 +939,7 @@ EOM
             }
 
             # --------- / TMPL_IF TMPL UNLESS TMPL_WITH
-            elsif ($is_tag && $tt == CLOSING_TAG && $tname =~ m/^(?:IF|UNLESS|WITH)$/ && $stripped =~ m#^()(?:$var_re)?\s*$#i) {
+            elsif ($is_tag && $tt == CLOSING_TAG && $tname =~ m/^(?:IF|UNLESS|WITH)$/ && $stripped =~ m#^(?:$var_re)?\s*$#i) {
                 #print STDERR "============ IF ($_)\n";
                 $self->_checkstack( $fname, $line, $stack, $tname );
                 pop @$stack;
@@ -939,10 +954,10 @@ EOM
             }
 
 			# --------- / TMPL_LOOP
-            elsif ($is_tag && $tt == CLOSING_TAG && $tname eq T_LOOP && $stripped =~ m{ ^
+            elsif ($is_tag && $tt == CLOSING_TAG && ($tname eq T_LOOP || $tname eq T_WHILE) && $stripped =~ m{ ^
                 (?:\s*$var_re\s*)?
                 \s* $}ix) {
-                $self->_checkstack($fname,$line,$stack, T_LOOP);
+                $self->_checkstack($fname,$line,$stack, $tname);
                 pop @$stack;
                 pop @lexicals;
                 if ($self->getUse_query) {
@@ -963,10 +978,10 @@ $global
 EOM
             }
 			# --------- TMPL_IF TMPL UNLESS TMPL_ELSIF
-            elsif ($is_tag && $tt == OPENING_TAG && $tname =~ m/^(?:IF|UNLESS|ELSIF)$/ && $stripped =~ m#^()(DEFINED\s+)?(?:NAME=)?(['"]?)($var_re)\3\s*$#i) {
+            elsif ($is_tag && $tt == OPENING_TAG && $tname =~ m/^(?:IF|UNLESS|ELSIF)$/ && $stripped =~ m#^(DEFINED\s+)?(?:NAME=)?(['"]?)($var_re)\2\s*$#i) {
                 #print STDERR "============ IF ($_)\n";
-                my $def    = $2;
-                my $var    = $4;
+                my $def    = $1;
+                my $var    = $3;
                 my $indent = INDENT x $level;
                 my $varstr = $self->_make_path(
                     %var_args,
@@ -1024,7 +1039,7 @@ EOM
             }
             
             # --------- TMPL_CASE
-            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_CASE && $stripped =~ m# ^ (\s+\w+(?:,\s*\w+)?)? \s* $ #xi) {
+            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_CASE && $stripped =~ m# ^ (\w+(?:,\s*\w+)?)? \s* $ #xi) {
                 my $val = $1;
                 $val =~ s/^\s+//;
                 $self->_checkstack( $fname, $line, $stack, T_CASE );
@@ -1225,14 +1240,18 @@ sub quote_file {
 sub _make_path {
     my ( $self, %args ) = @_;
     my $lexicals = $args{lexicals};
+    my $local_loop_context = 0;
     if ( grep { defined $_ && $args{var} eq $_ } @$lexicals ) {
         return "\$$args{var}";
     }
     my $root = 0;
-    if ( $args{var} =~ m/^__(\w+)__$/ ) {
+    if ( $self->getLoop_context && $args{var} =~ m/^__(\w+)__$/ ) {
         return "\$\L$args{var}\E";
     }
-    if ( $args{var} =~ s/^_// ) {
+    elsif ( $args{var} =~ m/^__(\w+)__$/ ) {
+        $local_loop_context = 1;
+    }
+    elsif ( $args{var} =~ s/^_// ) {
         $root = 0;
     }
     elsif ($args{var} =~ m/^(\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)(\1?)/) {
@@ -1260,8 +1279,12 @@ sub _make_path {
     $getvar .= $self->getGlobal_vars&1 ? '_global' : '';
     my $varstr =
       "\$t->$getvar(\$P," . ( $root ? '$P' : '$$C' ) . ",$final,@paths)";
-    return $varstr;
-    return ( $root, \@paths );
+    if ($local_loop_context) {
+        return "defined \$\L$args{var}\E ? \$\L$args{var}\E : $varstr";
+    }
+    else {
+        return $varstr;
+    }
 }
 
 
@@ -1389,6 +1412,7 @@ sub _get_var_sub_global {
         ELSIF      => [ T_IF, T_UNLESS ],
         ELSE       => [ T_IF, T_UNLESS, T_ELSIF ],
         LOOP       => [T_LOOP],
+        WHILE      => [T_WHILE],
         WITH       => [T_WITH],
         T_SWITCH() => [T_SWITCH],
         T_CASE()   => [T_SWITCH],
@@ -1763,6 +1787,10 @@ use option case_sensitive => 0 to use this feature (slow down)
 
 see L<"TMPL_WITH">
 
+=item TMPL_WHILE
+
+see L<"TMPL_WHILE">
+
 =item TMPL_COMMENT
 
 see L<"TMPL_COMMENT">
@@ -2001,6 +2029,23 @@ directly after the loop tag (but you can do it anywhere in a loop):
 
 If you only have a small number of loops that need the loop_context then this can
 save you a bit of CPU, too. Set loop_context_vars to 0 and use the directive only.
+
+=head2 TMPL_WHILE
+
+Useful for iterating, for example over database resultsets.
+The directive
+
+  <tmpl_while resultset.fetchrow>
+    <tmpl_var _.0>
+  </tmpl_while>
+
+will work like:
+  while (my $row = $resultset->fetchrow) {
+    print $row->[0];
+  }
+
+So the special variable name _ is set to the current item returned
+by the iterator.
 
 =head2 TMPL_COMMENT
 
@@ -2364,7 +2409,8 @@ code.
 
 =head1 TODO
 
-fix C<path> option, query, implement expressions, ...
+fix C<path> option, associate, methods with simple parameters,
+expressions, ...
 
 =head2 SECURITY
 
@@ -2412,10 +2458,8 @@ on speed.
 Setting case_sensitive to 1, loop_context_vars to 0 and global_vars to 0 saves time.
 
 On the other hand, compared to HTML::Template, the speed gain is biggest (under mod_perl
-you save ca. 86%, under CGI 29%), if you use case_sensitive = 1, loop_context_vars = 0,
+you save ca. 86%, under CGI about 10%), if you use case_sensitive = 1, loop_context_vars = 0,
 global_vars = 1.
-
-See examples/bench.pdf for a detailed table.
 
 =head1 BUGS
 

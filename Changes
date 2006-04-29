@@ -1,6 +1,12 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
-0.62
+0.63 Sat Apr 29 02:39:30 CEST 2006
+- Bug Fix: info for query() got lost with file caching
+- New Feature: TMPL_WHILE
+- Bug Fix: __vars__ when not using loop_context_vars
+- Bug Fix: TMPL_CASE wasn't rendered correctly since 0.61
+
+0.62 Wed Apr 26 23:36:13 CEST 2006
 - New Feature: added method precompile
 - New Feature: implemented query() (from HTML::Template)
 

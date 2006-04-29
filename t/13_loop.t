@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 13_loop.t,v 1.3 2005/12/11 22:16:21 tinita Exp $
+# $Id: 13_loop.t,v 1.4 2006/04/28 23:12:27 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 4;
@@ -25,20 +25,25 @@ EOM
 my $text1 = <<'EOM';
 <tmpl_loop array>
 <tmpl_var __counter__>
-<tmpl_var _>
+<tmpl_var _.x>
 </tmpl_loop>
 EOM
 my $text2 = <<'EOM';
 <tmpl_loop array><tmpl_loop_context>
 <tmpl_var __counter__>
-<tmpl_var _>
+<tmpl_var _.x>
 </tmpl_loop>
 EOM
 for ($text1, $text2) {
 	my $htc = HTML::Template::Compiled->new(
 		scalarref => \$_,
+        debug => 0,
 	);
-	$htc->param(array => [qw(a b c)]);
+	$htc->param(array => [
+        {x=>"a","__counter__"=>"A"},
+        {x=>"b","__counter__"=>"B"},
+        {x=>"c","__counter__"=>"C"},
+    ]);
 	my $out = $htc->output;
 	$out =~ s/\s+//g;
 	my $exp;
@@ -46,7 +51,7 @@ for ($text1, $text2) {
 		$exp = "1a2b3c";
 	}
 	else {
-		$exp = "abc";
+		$exp = "AaBbCc";
 	}
 	#print "($out)($exp)\n";
 	cmp_ok($out, "eq", $exp, "loop context");

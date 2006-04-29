@@ -15,7 +15,6 @@ examples/bench_mem.pl
 examples/test.tt
 examples/test.tst
 examples/dhtml.html
-examples/bench.pdf
 t/HTC_Utils.pm
 t/01_HTML-Template-Compiled.t
 t/02_version.t
@@ -37,6 +36,7 @@ t/17_escape.t
 t/18_objects.t
 t/19_query.t
 t/20_precompile.t
+t/21_while.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html

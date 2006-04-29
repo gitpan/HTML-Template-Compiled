@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.9 2006/04/26 21:25:56 tinita Exp $
+# $Id: bench.pl,v 1.10 2006/04/29 00:35:08 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -33,19 +33,24 @@ $HTML::Template::Compiled::NEW_CHECK = 10;
 use Benchmark;
 my $debug = 0;
 $ENV{'HTML_TEMPLATE_ROOT'} = "examples";
+my $FILE_CACHE     = 0;
+my $MEM_CACHE      = 1;
+my $LOOP_CONTEXT   = 1;
+my $GLOBAL_VARS    = 0;
+my $CASE_SENSITIVE = 1;
 sub new_htc {
 	my $t1 = HTML::Template::Compiled->new(
 		#path => 'examples',
-		#case_sensitive => 0, # slow down
-		loop_context_vars => 1,
+		case_sensitive => $CASE_SENSITIVE, # slow down
+		loop_context_vars => $LOOP_CONTEXT,
 		filename => $ht_file,
 		debug => $debug,
 		# note that you have to create the cachedir
 		# first, otherwise it will run without cache
-        #cache_dir => "cache/htc",
-        #cache => 0,
+        cache_dir => ($FILE_CACHE ? "cache/htc" : undef),
+        cache => $MEM_CACHE,
 		out_fh => 1,
-        #global_vars => 1,
+        global_vars => $GLOBAL_VARS,
 	);
 	#my $size = total_size($t1);
 	#print "size htc = $size\n";
@@ -60,14 +65,15 @@ sub new_tst {
 }
 sub new_ht {
 	my $t2 = HTML::Template->new(
-		# case_sensitive => 1,
-		loop_context_vars => 1,
+		case_sensitive => $CASE_SENSITIVE, # slow down
+		loop_context_vars => $LOOP_CONTEXT,
 		#path => 'examples',
 		filename => $ht_file,
-		cache => 1,
-        #file_cache => 1,
-        #file_cache_dir => 'cache/ht',
-        #global_vars => 1,
+		cache => $MEM_CACHE,
+        $FILE_CACHE ?
+        (file_cache => $FILE_CACHE,
+        file_cache_dir => 'cache/ht') : (),
+        global_vars => $GLOBAL_VARS,
 	);
 	#my $size = total_size($t2);
 	#print "size ht  = $size\n";
