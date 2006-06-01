@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 11_dhtml.t,v 1.2 2005/11/21 21:19:21 tinita Exp $
+# $Id: 11_dhtml.t,v 1.3 2006/06/01 19:01:36 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 2;
@@ -25,6 +25,7 @@ SKIP: {
 	my $htc = HTML::Template::Compiled->new(
 		filename => "t/templates/dhtml.htc",
 		dumper => 'DHTML',
+        debug => 0,
 	);
 	$htc->param(%hash);
 	my $out = $htc->output;

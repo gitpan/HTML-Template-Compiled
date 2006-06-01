@@ -1,8 +1,9 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm,v 1.5 2006/01/03 18:27:06 tinita Exp $
+# $Id: Utils.pm,v 1.7 2006/05/29 18:30:11 tinita Exp $
 $VERSION = "0.02";
 use strict;
 use warnings;
+use Data::Dumper;
 
 use base 'Exporter';
 use vars qw/@EXPORT_OK %EXPORT_TAGS/;
@@ -25,7 +26,7 @@ use constant PATH_FORMATTER => 3;
 
 sub stack {
     my ( $self, $force ) = @_;
-    return if !HTMP::Template::Compiled::D() and !$force;
+    return if !HTML::Template::Compiled::D() and !$force;
     my $i = 0;
     my $out;
     while ( my @c = caller($i) ) {

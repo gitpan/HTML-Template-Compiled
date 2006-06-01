@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.13 2006/01/11 22:41:47 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.14 2006/05/31 22:36:44 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 6;
@@ -97,7 +97,7 @@ INCLUDED: Hair of the Dog
 23
 EOM
 	for ($exp, $out) { s/^\s+//mg; tr/\n\r//d; }
-	cmp_ok($exp, "eq", $out, "output ok");
+	cmp_ok($out, "eq", $exp, "output ok");
 	open my $fh, '+<', $include or die $!;
 	local $/;
 	my $txt = <$fh>;
@@ -110,14 +110,14 @@ EOM
 	$htc->param(%$hash);
 	$out = $htc->output;
 	$out =~ s/^\s+//mg; $out =~ tr/\n\r//d;
-	cmp_ok($exp, "eq", $out, "output after update ok");
+	cmp_ok($out, "eq", $exp, "output after update ok");
 	$exp =~ s/INCLUDED/INCLUDED_NEW/;
 	sleep 2;
 	$htc = HTML::Template::Compiled->new(%args);
 	$htc->param(%$hash);
 	$out = $htc->output;
 	$out =~ s/^\s+//mg; $out =~ tr/\n\r//d;
-	cmp_ok($exp,"eq", $out, "output after update & sleep ok");
+	cmp_ok($out,"eq", $exp, "output after update & sleep ok");
 	open $fh, '+<', $include or die $!;
 	local $/;
 	$txt = <$fh>;

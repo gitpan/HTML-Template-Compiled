@@ -1,5 +1,12 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.64
+- bug with undefined filename and INCLUDE_VAR
+- New Feature: alias
+- Change: TMPL_IF DEFINED deprecated
+- Change: TMPL_INCLUDE VAR from deprecated to forbidden
+- New Feature: Define your own tagstyles
+
 0.63 Sat Apr 29 02:39:30 CEST 2006
 - Bug Fix: info for query() got lost with file caching
 - New Feature: TMPL_WHILE

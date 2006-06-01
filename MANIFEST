@@ -5,6 +5,7 @@ README
 lib/HTML/Template/Compiled.pm
 lib/HTML/Template/Compiled/Utils.pm
 lib/HTML/Template/Compiled/Filter.pm
+lib/HTML/Template/Compiled/Parser.pm
 lib/HTML/Template/Compiled/Plugin/DHTML.pm
 examples/test.htc
 examples/test.htc.20
@@ -37,6 +38,7 @@ t/18_objects.t
 t/19_query.t
 t/20_precompile.t
 t/21_while.t
+t/22_pod.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html

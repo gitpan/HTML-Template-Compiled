@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.149 2006/04/29 00:33:34 tinita Exp $
+# $Id: Compiled.pm,v 1.160 2006/06/01 21:43:23 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.63";
+our $VERSION = "0.64";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.63";
+our $VERSION = "0.64";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -32,25 +32,20 @@ eval {
     require HTML::Entities;
     require URI::Escape;
 };
+use HTML::Template::Compiled::Parser qw(
+    $CASE_SENSITIVE_DEFAULT
+    $NEW_CHECK
+    $ENABLE_SUB
+    $DEBUG_DEFAULT
+    $SEARCHPATH
+    %FILESTACK %SUBSTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
+    $UNTAINT $DEFAULT_TAGSTYLE
+  $UNDEF
 
+);
 use vars qw(
   $__first__ $__last__ $__inner__ $__odd__ $__counter__
-  $NEW_CHECK $UNDEF $ENABLE_ASP $ENABLE_SUB
-  $CASE_SENSITIVE_DEFAULT $DEBUG_DEFAULT $SEARCHPATH
-  %FILESTACK %SUBSTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
-  $UNTAINT
 );
-$NEW_CHECK              = 60 * 10; # 10 minutes default
-$DEBUG_DEFAULT          = 0;
-$CASE_SENSITIVE_DEFAULT = 1; # set to 0 for H::T compatibility
-$ENABLE_SUB             = 0;
-$ENABLE_ASP             = 1; # use <% %> tags?
-$SEARCHPATH             = 1;
-$DEFAULT_ESCAPE         = 0;
-$UNDEF                  = ''; # set for debugging
-$UNTAINT                = 0;
-$DEFAULT_QUERY          = 0;
-
 
 use constant MTIME    => 0;
 use constant CHECKED  => 1;
@@ -74,58 +69,9 @@ use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
 
 use constant INDENT   => '    ';
 
-use constant OPENING_TAG => 0;
-use constant CLOSING_TAG => 1;
-
-my ($start_re,$end_re,$tmpl_re,$close_re,$var_re,$comment_re);
-my $asp_re =     ['<%'          ,'%>',    '<%/',          '<%/?.*?%>'];
-my $comm_re =    ['<!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','<!--\s*/?TMPL_.*?\s*-->'];
-my $classic_re = ['<TMPL_'      ,'>',     '</TMPL_',      '</?TMPL.*?>'];
-{
-    my $init = 0;
-    sub init_re {
-        return if $init;
-        $start_re = '(?i:'  . ($ENABLE_ASP ? "$asp_re->[0]|" : '') . "$comm_re->[0]|$classic_re->[0])";
-        $end_re   = '(?:'   . ($ENABLE_ASP ? "$asp_re->[1]|" : '') . "$comm_re->[1]|$classic_re->[1])";
-        $tmpl_re  = '(?is:' . ($ENABLE_ASP ? "$asp_re->[3]|" : '') . "$comm_re->[3]|$classic_re->[3])";
-        $close_re = '(?i:'  . ($ENABLE_ASP ? "$asp_re->[2]|" : '') . "$comm_re->[2]|$classic_re->[2])";
-        $var_re   = '(?:[\w./+-])+';
-        $comment_re = '(?:(\w+)\s*)?';
-        $init = 1;
-    }
-    sub strip_tags {
-        # returns ($type, $name, $tag) where $type is 0 (opening),
-        # 1 (closing), # undef (no HTC tag), $name is IF|VAR|WITH|...
-        # and $tag is the tag-content or the
-        # original text
-        my ($full_tag) = @_;
-        for my $t ($asp_re, $comm_re, $classic_re) {
-            my ($pre,$tag,$post, $tt, $name);
-            if(($pre,$tag,$post) = $full_tag =~ m/^($t->[2])(.*)($t->[1])$/is) {
-                $tt = 1;
-            }
-            elsif(($pre,$tag,$post) = $full_tag =~ m/^($t->[0])(.*)($t->[1])$/is) {
-                $tt = 0;
-            }
-            else {
-                next;
-            }
-            if ($tag =~ s/^
-                ( VAR|=|IF|UNLESS|ELSIF|ELSE|
-                WITH|COMMENT|VERBATIM|NOPARSE|LOOP|WHILE|
-                LOOP_CONTEXT|SWITCH|CASE|INCLUDE|INCLUDE_VAR ) (\s+|$)//xi) {
-                $name = uc $1;
-                $name = 'VAR' if $name eq '=';
-            }
-            else {
-                croak "'$full_tag' is not a valid HTC tag";
-            }
-            #print STDERR "($name, $tt, $tag)\n";
-            return ($name, $tt, $tag);
-        }
-        return (undef, undef, $full_tag);
-    }
-}
+use constant NO_TAG      => 0;
+use constant OPENING_TAG => 1;
+use constant CLOSING_TAG => 2;
 
 # options / object attributes
 use constant PARAM => 0;
@@ -148,11 +94,11 @@ use constant PATH => 1;
         undef, qw(
           path filename file scalar filehandle
           cache_dir cache search_path_on_include
-          loop_context line_numbers case_sensitive dumper global_vars
+          loop_context case_sensitive dumper global_vars
           method_call deref formatter_path default_path
           debug perl out_fh default_escape
           filter formatter
-          globalstack use_query
+          globalstack use_query parser
           )
     );
 
@@ -168,7 +114,6 @@ use constant PATH => 1;
 }
 
 sub new {
-    init_re(); # initialize the regexes
     my ( $class, %args ) = @_;
     my $self = [];
     bless $self, $class;
@@ -293,6 +238,7 @@ sub create {
     }
     D && $self->log("trying from_cache()");
     my $t = $self->from_cache();
+    D && $self->log(\%args);
     if ($t) {
         if ( my $fm = $args{formatter} || $self->getFormatter ) {
             unless ( $t->getFormatter ) {
@@ -363,6 +309,7 @@ sub from_cache {
         my $fname  = $self->getFilename;
         my $cached = $cache->{$dir}->{$fname};
         my $times  = $times->{$dir}->{$fname};
+        D && $self->log("\$cached=$cached \$times=$times \$fname=$fname\n");
         if ( $cached && $self->uptodate($times) ) {
             return $cached;
         }
@@ -371,6 +318,7 @@ sub from_cache {
     }
     sub add_mem_cache {
         my ( $self, %times ) = @_;
+        D && $self->stack(1);
         my $dir = $self->getCache_dir;
         $dir = '' unless defined $dir;
         my $fname = $self->getFilename;
@@ -482,6 +430,8 @@ sub add_file_cache {
     my $isScalar = $self->getScalar ? 1 : 0;
     my $query_info = $self->getUse_query;
     $query_info = Data::Dumper->Dump([\$query_info], ['query_info']);
+    my $tagstyle =$self->getParser->[0];
+    $tagstyle = Data::Dumper->Dump([\$tagstyle], ['tagstyle']);
     my $file_args = $isScalar
       ? <<"EOM"
         scalarref => $isScalar,
@@ -495,6 +445,7 @@ EOM
 # file date $lmtime
 # last checked date $lchecked
 my $query_info;
+my $tagstyle;
 my \$args = {
     # HTC version
     version => '$VERSION',
@@ -512,6 +463,7 @@ $file_args
     out_fh => @{[$self->getOut_fh]},
     default_escape => '@{[$self->getDefault_escape]}',
     use_query => \$query_info,
+    tagstyle => \$tagstyle,
     # TODO
     # dumper => ...
     # template subroutine
@@ -651,7 +603,6 @@ sub init {
         deref                  => '.',
         formatter_path         => '/',
         search_path_on_include => $SEARCHPATH,
-        line_numbers           => 0,
         loop_context_vars      => 0,
         case_sensitive         => $CASE_SENSITIVE_DEFAULT,
         debug                  => $DEBUG_DEFAULT,
@@ -664,7 +615,6 @@ sub init {
     );
     $self->setMethod_call( $defaults{method_call} );
     $self->setDeref( $defaults{deref} );
-    $self->setLine_numbers(1) if $args{line_numbers};
     $self->setLoop_context(1) if $args{loop_context_vars};
     $self->setCase_sensitive( $defaults{case_sensitive} );
     $self->setDumper( $args{dumper} )       if $args{dumper};
@@ -682,6 +632,19 @@ sub init {
     $self->setOut_fh( $defaults{out_fh} );
     $self->setGlobal_vars( $defaults{global_vars} );
     $self->setFormatter_path( $defaults{formatter_path} );
+    my $tagstyle = $args{tagstyle};
+    my $parser;
+    if (ref $tagstyle eq 'ARRAY') {
+        # user specified named styles or regexes
+        $parser = HTML::Template::Compiled::Parser->new(
+            tagstyle => $tagstyle,
+        );
+    }
+    elsif (ref $tagstyle eq 'HTML::Template::Compiled::Parser') {
+        $parser = $tagstyle;
+    }
+    $parser ||= HTML::Template::Compiled::Parser->new();
+    $self->setParser($parser);
 }
 
 sub _readfile {
@@ -698,18 +661,8 @@ sub _compile {
     if ( my $filter = $self->getFilter ) {
         $filter->filter($text);
     }
-    if ( $self->getLine_numbers ) {
-
-        # split lines and preserve empty trailing lines
-        my @lines = split /\n/, $text, -1;
-        for my $i ( 0 .. $#lines ) {
-            $lines[$i] =~ s#($tmpl_re)#__${i}__$1#g;
-        }
-        $text = join "\n", @lines;
-    }
-    my $re =
-      $self->getLine_numbers ? qr#((?:__\d+__)?$tmpl_re)# : qr#($tmpl_re)#;
-    my @p     = split $re, $text;
+    my $parser = $self->getParser;
+    my @p = $parser->tags($text);
     my $level = 1;
     my $code  = '';
     my $stack = [T_END];
@@ -735,24 +688,23 @@ $anon
     #my \$C = \\\$P;
 EOM
 
-    my $line = 0;
+    my $line_save = 0;
     my @lexicals;
     my @switches;
     my $comment = 0;
     my $noparse = 0;
     my $verbatim = 0;
-    for (@p) {
+    for my $p (@p) {
+        my ($text, $tt, $line, $open, $tname, $attr, $close) = @$p;
+        #print STDERR "tags: ($text, $tt, $line, $open, $tname, $attr, $close)\n";
+        $line_save = $line;
+        local $_ = $text;
         s/~/\\~/g;
-        if ( $self->getLine_numbers && s#__(\d+)__($tmpl_re)#$2# ) {
-            $line = $1 + 1;
-        }
         #print STDERR "p: '$_'\n";
-        my ($tname, $tt, $stripped) = strip_tags($_);
-        if (defined $tt) {
-            #print STDERR "s: '$stripped'\n";
-        }
         my $indent = INDENT x $level;
-        my $is_tag = defined $tt;
+        my $is_tag = $tt != NO_TAG;
+        my $is_open = $is_tag && $tt == OPENING_TAG;
+        my $is_close = $is_tag && $tt == CLOSING_TAG;
         my $meth     = $self->getMethod_call;
         my $deref    = $self->getDeref;
         my $format   = $self->getFormatter_path;
@@ -764,21 +716,21 @@ EOM
         );
         # --------- TMPL_VAR
         if ( !$comment && !$noparse && !$verbatim) {
-            if ($is_tag && $tt == OPENING_TAG && $tname eq T_VAR && $stripped =~ m#^(?:NAME=)?(['"]?)($var_re)\1#i) {
+            if ($is_open && $tname eq T_VAR && exists $attr->{NAME}) {
                 #print STDERR "===== VAR ($_)\n";
                 my $type = $tname;
-                my $var    = $2;
+                my $var = $attr->{NAME};
+                #my $var    = $2;
                 if ($self->getUse_query) {
                     $info_stack->[-1]->{lc $var}->{type} = T_VAR;
                 }
                 my $escape = $self->getDefault_escape;
-                if (m/\s+ESCAPE=(['"]?)(\w+(?:\|\w+)*)\1/i) {
-                    $escape = $2;
+                if (exists $attr->{ESCAPE}) {
+                    $escape = $attr->{ESCAPE};
                 }
                 my $default;
-                if ( ($default) = m/\s+DEFAULT=('([^']*)'|"([^"]*)"|(\S+))/i ) {
-                    $default =~ s/^['"]//;
-                    $default =~ s/['"]$//;
+                if (exists $attr->{DEFAULT}) {
+                    $default = $attr->{DEFAULT};
                     $default =~ s/'/\\'/g;
                 }
                 my $varstr = $self->_make_path(
@@ -835,10 +787,10 @@ EOM
             }
 
             # --------- TMPL_WITH
-            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_WITH && $stripped =~ m#^(?:NAME=)?(['"]?)($var_re)\1\s*$#i) {
+            elsif ($is_open && $tname eq T_WITH && exists $attr->{NAME}) {
                 push @$stack, T_WITH;
                 $level++;
-                my $var    = $2;
+                my $var    = $attr->{NAME};
                 my $varstr = $self->_make_path(
                     %var_args,
                     var   => $var,
@@ -854,7 +806,7 @@ EOM
             }
 
             # --------- TMPL_LOOP_CONTEXT
-            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_LOOP_CONTEXT && $stripped =~ m{ ^  $ }ix) {
+            elsif ($is_open && $tname eq T_LOOP_CONTEXT) {
                 my $indent = INDENT x $level;
                 $code .= <<"EOM";
 ${indent}local \$__counter__ = \$ix+1;
@@ -866,15 +818,10 @@ EOM
             }
 
             # --------- TMPL_LOOP|WHILE
-            elsif ($is_tag && $tt == OPENING_TAG && ($tname eq T_LOOP || $tname eq T_WHILE) && $stripped =~ m{ ^
-                (?:NAME=)?
-                (['"]?)   # $1 "'
-                ($var_re) # $2
-                \1
-                (?: \s+ AS \s+ (\w+) ) ? # $3
-                \s* $ }ix) {
+            elsif ($is_open && ($tname eq T_LOOP || $tname eq T_WHILE)
+                && exists $attr->{NAME}) {
                 push @$stack, $tname;
-                my $var     = $2;
+                my $var     = $attr->{NAME};
                 my $varstr = $self->_make_path(
                     %var_args,
                     var   => $var,
@@ -887,7 +834,7 @@ EOM
                     $info_stack->[-1]->{lc $var}->{children} ||= {};
                     push @$info_stack, $info_stack->[-1]->{lc $var}->{children};
                 }
-                my $lexical = $3;
+                my $lexical = $attr->{ALIAS};
                 push @lexicals, $lexical;
                 my $lexi =
                   defined $lexical ? "${indent}my \$$lexical = \$\$C;\n" : "";
@@ -929,7 +876,7 @@ EOM
             }
 
             # --------- TMPL_ELSE
-            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_ELSE && $stripped =~ m#^$#i) {
+            elsif ($is_open && $tname eq T_ELSE) {
                 # we can only have an open if or unless
                 $self->_checkstack( $fname, $line, $stack, T_ELSE );
                 pop @$stack;
@@ -939,7 +886,7 @@ EOM
             }
 
             # --------- / TMPL_IF TMPL UNLESS TMPL_WITH
-            elsif ($is_tag && $tt == CLOSING_TAG && $tname =~ m/^(?:IF|UNLESS|WITH)$/ && $stripped =~ m#^(?:$var_re)?\s*$#i) {
+            elsif ($is_close && $tname =~ m/^(?:IF|UNLESS|WITH)$/) {
                 #print STDERR "============ IF ($_)\n";
                 $self->_checkstack( $fname, $line, $stack, $tname );
                 pop @$stack;
@@ -954,9 +901,7 @@ EOM
             }
 
 			# --------- / TMPL_LOOP
-            elsif ($is_tag && $tt == CLOSING_TAG && ($tname eq T_LOOP || $tname eq T_WHILE) && $stripped =~ m{ ^
-                (?:\s*$var_re\s*)?
-                \s* $}ix) {
+            elsif ($is_close && ($tname eq T_LOOP || $tname eq T_WHILE)) {
                 $self->_checkstack($fname,$line,$stack, $tname);
                 pop @$stack;
                 pop @lexicals;
@@ -977,11 +922,14 @@ ${indent}\} # end loop
 $global
 EOM
             }
-			# --------- TMPL_IF TMPL UNLESS TMPL_ELSIF
-            elsif ($is_tag && $tt == OPENING_TAG && $tname =~ m/^(?:IF|UNLESS|ELSIF)$/ && $stripped =~ m#^(DEFINED\s+)?(?:NAME=)?(['"]?)($var_re)\2\s*$#i) {
+			# --------- TMPL_IF TMPL_UNLESS TMPL_ELSIF
+            elsif ($is_open && $tname =~ m/^(?:IF_DEFINED|IF DEFINED|IF|UNLESS|ELSIF)$/ && exists $attr->{NAME}) {
                 #print STDERR "============ IF ($_)\n";
-                my $def    = $1;
-                my $var    = $3;
+                my $def    = $tname =~ m/DEFINED$/;
+                if ($tname eq 'IF DEFINED') {
+                    carp "use of TMPL_IF DEFINED is deprecated. use TMPL_IF_DEFINED instead";
+                }
+                my $var    = $attr->{NAME};
                 my $indent = INDENT x $level;
                 my $varstr = $self->_make_path(
                     %var_args,
@@ -1009,8 +957,8 @@ EOM
             }
 
             # --------- TMPL_SWITCH
-            elsif ( $is_tag && $tt == OPENING_TAG && $tname eq T_SWITCH && $stripped =~ m# ^ (?:NAME=)?(['"]?)($var_re)\1\s* #xi) {
-                my $var = $2;
+            elsif ( $is_open && $tname eq T_SWITCH && exists $attr->{NAME}) {
+                my $var = $attr->{NAME};
                 push @$stack,   T_SWITCH;
                 push @switches, 0;
                 $level++;
@@ -1025,7 +973,7 @@ EOM
             }
             
             # --------- / TMPL_SWITCH
-            elsif ($is_tag && $tt == CLOSING_TAG && $tname eq T_SWITCH && $stripped =~ m# ^ (?:\s+$var_re)?\s* #xi) {
+            elsif ($is_close && $tname eq T_SWITCH) {
                 $self->_checkstack( $fname, $line, $stack, T_SWITCH );
                 pop @$stack;
                 $level--;
@@ -1039,9 +987,9 @@ EOM
             }
             
             # --------- TMPL_CASE
-            elsif ($is_tag && $tt == OPENING_TAG && $tname eq T_CASE && $stripped =~ m# ^ (\w+(?:,\s*\w+)?)? \s* $ #xi) {
-                my $val = $1;
-                $val =~ s/^\s+//;
+            elsif ($is_open && $tname eq T_CASE) {
+                my $val = $attr->{NAME};
+                #$val =~ s/^\s+//;
                 $self->_checkstack( $fname, $line, $stack, T_CASE );
                 if ( $switches[$#switches] ) {
 
@@ -1073,7 +1021,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
             }
 
             # --------- TMPL_INCLUDE_VAR
-            elsif ($is_tag && $tt == OPENING_TAG && $tname =~ m/^INCLUDE/ && $stripped =~ m# ^ (.+?) $ #ixs) {
+            elsif ($is_open && $tname =~ m/^INCLUDE/ && exists $attr->{NAME}) {
                 my $filename;
                 my $varstr;
                 my $path = $self->getPath();
@@ -1081,82 +1029,66 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 $path = [$path] unless ref $path eq 'ARRAY';
                 my $dynamic = $tname eq T_INCLUDE_VAR ? 1 : 0;
 
-                # deprecated 'INCLUDE VAR='
-                # use 'INCLUDE_VAR NAME=' instead
-                if ( $stripped =~ m/(?:VAR=)(['"]?)($var_re)\1/i ) {
-                    carp "use of INCLUDE VAR=... is deprecated. use INCLUDE_VAR NAME=... instead";
-
+                if ($dynamic) {
                     # dynamic filename
-                    my $dfilename = $2;
+                    my $dfilename = $attr->{NAME};
                     $varstr = $self->_make_path(
                         %var_args,
                         var   => $dfilename,
                         final => 0,
                     );
                 }
-                elsif ( $stripped =~ m/^(?:NAME=)?(['"]?)([^'">]+)\1\s*$/i ) {
-                    if ($dynamic) {
-                        # dynamic filename
-                        my $dfilename = $2;
-                        $varstr = $self->_make_path(
-                            %var_args,
-                            var   => $dfilename,
-                            final => 0,
-                        );
+                else {
+                    # static filename
+                    $filename = $attr->{NAME};
+                    $varstr   = $self->quote_file($filename);
+                    $dir      = dirname $fname;
+                    if ( defined $dir and !grep { $dir eq $_ } @$path ) {
+                        # add the current directory to top of paths
+                        $path =
+                          [ $dir, @$path ]
+                          ;    # create new $path, don't alter original ref
                     }
-                    else {
-                        # static filename
-                        $filename = $2;
-                        $varstr   = $self->quote_file($filename);
-                        $dir      = dirname $fname;
-                        if ( defined $dir and !grep { $dir eq $_ } @$path ) {
-                            # add the current directory to top of paths
-                            $path =
-                              [ $dir, @$path ]
-                              ;    # create new $path, don't alter original ref
-                        }
-                        # generate included template
-                        {
-                            D && $self->log("compile include $filename!!");
-                            my $cached_or_new =
-                              $self->clone_init( $path, $filename,
-                                $self->getCache_dir );
-                        }
+                    # generate included template
+                    {
+                        D && $self->log("compile include $filename!!");
+                        my $cached_or_new =
+                          $self->clone_init( $path, $filename,
+                            $self->getCache_dir );
                     }
-                    #print STDERR "include $varstr\n";
-                    my $cache = $self->getCache_dir;
-                    $path = defined $path
-                      ? !ref $path
-                      ? $self->quote_file($path)
+                }
+                #print STDERR "include $varstr\n";
+                my $cache = $self->getCache_dir;
+                $path = defined $path
+                  ? !ref $path
+                  ? $self->quote_file($path)
 
-                      # support path => arrayref soon
-                      : '['
-                      . join( ',', map { $self->quote_file($_) } @$path ) . ']'
-                      : 'undef';
-                    $cache =
-                      defined $cache ? $self->quote_file($cache) : 'undef';
-                    $code .= <<"EOM";
+                  # support path => arrayref soon
+                  : '['
+                  . join( ',', map { $self->quote_file($_) } @$path ) . ']'
+                  : 'undef';
+                $cache =
+                  defined $cache ? $self->quote_file($cache) : 'undef';
+                $code .= <<"EOM";
 ${indent}\{
 ${indent}  my \$new = \$t->clone_init($path,$varstr,$cache);
 ${indent}  $output \$new->getPerl()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
 ${indent}\}
 EOM
-                }
-                else {
-                    croak "tag '$_' is no valid HTC tag";
-                }
             }
 
             # --------- TMPL_COMMENT|NOPARSE|VERBATIM
-            elsif ($is_tag && $tt == OPENING_TAG && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/ && $stripped =~ m#^$comment_re$#i) {
-                my $name = $1;
+            elsif ($is_open && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/) {
+                my $name = $attr->{NAME};
+                $name = '' unless defined $name;
                 $tname eq 'COMMENT' ? $comment++ : $tname eq 'NOPARSE' ? $noparse++ : $verbatim++;
                 $code .= qq{ # comment $name (level $comment)\n};
             }
 
             # --------- / TMPL_COMMENT|NOPARSE|VERBATIM
-            elsif ($is_tag && $tt == CLOSING_TAG && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/ && $stripped =~ m#^$comment_re$#i) {
-                my $name = $1;
+            elsif ($is_close && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/) {
+                my $name = $attr->{NAME};
+                $name = '' unless defined $name;
                 $code .= qq{ # end comment $name (level $comment)\n};
                 $tname eq 'COMMENT' ? $comment-- : $tname eq 'NOPARSE' ? $noparse-- : $verbatim--;
             }
@@ -1171,15 +1103,17 @@ EOM
         else {
 
             # --------- TMPL_COMMENT|NOPARSE|VERBATIM
-            if ($is_tag && $tt == OPENING_TAG && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/ && $stripped =~ m#^$comment_re$#i) {
-                my $name = $1;
+            if ($is_open && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/) {
+                my $name = $attr->{NAME};
+                $name = '' unless defined $name;
                 $tname eq 'COMMENT' ? $comment++ : $tname eq 'NOPARSE' ? $noparse++ : $verbatim++;
                 $code .= qq{ # comment $name (level $comment)\n};
             }
 
             # --------- / TMPL_COMMENT|NOPARSE|VERBATIM
-            elsif ($is_tag && $tt == CLOSING_TAG && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/ && $stripped =~ m#^$comment_re$#i) {
-                my $name = $1;
+            elsif ($is_close && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/) {
+                my $name = $attr->{NAME};
+                $name = '' unless defined $name;
                 $code .= qq{ # end comment $name (level $comment)\n};
                 $tname eq 'COMMENT' ? $comment-- : $tname eq 'NOPARSE' ? $noparse-- : $verbatim--;
             }
@@ -1197,7 +1131,7 @@ EOM
             }
         }
     }
-    $self->_checkstack( $fname, $line, $stack, T_END );
+    $self->_checkstack( $fname, $line_save, $stack, T_END );
     if ($self->getUse_query) {
         $self->setUse_query($info);
     }
@@ -1468,6 +1402,10 @@ sub clone {
 
 sub clone_init {
     my ( $self, $path, $filename, $cache ) = @_;
+    unless (defined $filename) {
+        my ($file) = (caller(1))[3];
+        croak "Filename is undef (in template $file)" unless defined $filename;
+    }
     my $new = bless [@$self], ref $self;
     D && $self->log("clone_init($path,$filename,$cache)");
     $new->setFilename($filename);
@@ -1672,6 +1610,8 @@ sub __test_version {
 
 __END__
 
+=pod
+
 =head1 SYNOPSIS
 
   use HTML::Template::Compiled speed => 1;
@@ -1722,8 +1662,7 @@ HTC does not implement all features of HTML::Template (yet), and
 it has got some additional features which are explained below.
 
 HTC will complain if you have a closing tag that does not fit
-the last opening tag. To get the line number, set the line_numbers-option
-(See L<"OPTIONS"> below)
+the last opening tag.
 
 Generating code, writing it on disk and later eval() it can open security holes, for example
 if you have more users on the same machine that can access the same files (usually an
@@ -1829,8 +1768,27 @@ see L<"INCLUDE">
 
 =item TMPL_IF DEFINED
 
+Deprecated, use C<TMPL_IF_DEFINED>
+
+=item TMPL_IF_DEFINED
+
 Check for definedness instead of truth:
   <TMPL_IF DEFINED NAME="var">
+
+=item ALIAS
+
+Set an alias for a loop variable. For example, these two loops are
+functionally equivalent:
+
+ <tmpl_loop foo>
+   <tmpl_var _>
+ </tmpl_loop foo>
+ <tmpl_loop foo alias=current>
+   <tmpl_var current>
+ </tmpl_loop foo>
+
+This works only with C<TMPL_LOOP> at the moment. I probably will
+implement this for C<TMPL_WITH>, C<TMPL_WHILE> too.
 
 =item asp/jsp-like templates
 
@@ -2235,6 +2193,8 @@ this option.
 
 =item line_numbers
 
+NOTE: This option does not exist any more; line numbers will alway be reported.
+
 For debugging: prints the line number of the wrong tag, e.g. if you have
 a /TMPL_IF that does not have an opening tag.
 
@@ -2295,6 +2255,53 @@ Filter template code before parsing.
       ...
     ],
   );
+
+=item tagstyle (fixed)
+
+Specify which styles you want to use. This option takes an arrayref
+with strings of named tagstyles or your own regexes.
+
+At the moment there are the following named tagstyles builtin:
+
+    # classic (active by default)
+    <TMPL_IF foo><tmpl_var bar></TMPL_IF>
+    # comment (active by default)
+    <!-- TMPL_IF foo --><!-- TMPL_VAR bar --><!-- /TMPL_IF -->
+    # asp (active by default)
+    <%if foo%><%VAR bar%><%/if%>
+    # php (not active by default)
+    <?if foo?><?var bar?><?/if foo?>
+    # t (not active by default)t
+    [%if foo%][%var bar%][%/if foo%]
+
+You deactive a style by saying -stylename. You activate by saying
++stylename.
+
+Define your own tagstyle by specifying for regexes. For example
+you want to use {C<{if foo}}{{var bar}}{{/if foo}}>, then your
+definition should be:
+
+    [
+        qr({{), start of opening tag
+        qr(}}), # end of opening tag
+        qr({{/), # start of closing tag
+        qr(}}), # end of closing tag
+    ]
+
+NOTE: do not specify capturing parentheses in you regexes. If you
+need parentheses, use C<(?:foo|bar)> instead of C<(foo|bar)>.
+
+Say you want to deactivate asp-style, comment-style, activate php- and
+tt-style and your own C<{{}} > style, then say:
+
+    my $htc = HTML::Template::Compiled->new(
+        ...
+        tagstyle => [
+            qw(-asp -comment +php +tt),
+            [ qr({{), qr(}}), qr({{/), qr(}})],
+        ],
+    );
+
 
 =item formatter
 
@@ -2410,7 +2417,7 @@ code.
 =head1 TODO
 
 fix C<path> option, associate, methods with simple parameters,
-expressions, ...
+expressions, lazy-loading, pluggable, ...
 
 =head2 SECURITY
 
