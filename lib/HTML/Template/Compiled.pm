@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.160 2006/06/01 21:43:23 tinita Exp $
+# $Id: Compiled.pm,v 1.161 2006/06/02 08:12:14 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.64";
+our $VERSION = "0.65";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.64";
+our $VERSION = "0.65";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;

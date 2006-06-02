@@ -1,7 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
-0.64
-- bug with undefined filename and INCLUDE_VAR
+0.65 Fri Jun  2 10:10:06 CEST 2006
+- Bug Fix: Documentation error broke pod
+
+0.64 Thu Jun  1 23:54:32 CEST 2006
+- Bug Fix: undefined filename and INCLUDE_VAR
 - New Feature: alias
 - Change: TMPL_IF DEFINED deprecated
 - Change: TMPL_INCLUDE VAR from deprecated to forbidden

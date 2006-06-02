@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.10 2006/06/01 21:26:51 tinita Exp $
+# $Id: Parser.pm,v 1.11 2006/06/02 08:13:22 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -221,7 +221,7 @@ __END__
 
 =head1 NAME
 
-HTML::Template::Compiled - Parser module for HTML::Template::Compiled
+HTML::Template::Compiled::Parser - Parser module for HTML::Template::Compiled
 
 =head1 SYNOPSIS
 
