@@ -30,7 +30,7 @@ BEGIN { use_ok('HTML::Template::Compiled') };
         ],
     );
     my $out = $htc->output;
-    #print $out, $/;
+    print $out, $/;
     ok($out =~ m/loopvar: one.*global: 42.*loopvar: two.*global: 23.*loopvar: three.*global: 42/s, 'global_vars');
     cmp_ok($out, "!~", "neverset", "global_vars and unset variable");
 }

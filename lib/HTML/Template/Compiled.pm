@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.161 2006/06/02 08:12:14 tinita Exp $
+# $Id: Compiled.pm,v 1.167 2006/06/04 01:50:51 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.65";
+our $VERSION = "0.66";
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.65";
+our $VERSION = "0.66";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -432,6 +432,7 @@ sub add_file_cache {
     $query_info = Data::Dumper->Dump([\$query_info], ['query_info']);
     my $tagstyle =$self->getParser->[0];
     $tagstyle = Data::Dumper->Dump([\$tagstyle], ['tagstyle']);
+    my $gl = $self->getGlobal_vars;
     my $file_args = $isScalar
       ? <<"EOM"
         scalarref => $isScalar,
@@ -464,6 +465,7 @@ $file_args
     default_escape => '@{[$self->getDefault_escape]}',
     use_query => \$query_info,
     tagstyle => \$tagstyle,
+    global_vars => $gl,
     # TODO
     # dumper => ...
     # template subroutine
@@ -1136,6 +1138,7 @@ EOM
         $self->setUse_query($info);
     }
     #warn Data::Dumper->Dump([\$info], ['info']);
+    $code .= qq#return \$OUT;\n#;
     $code = $header . $code . "\n} # end of sub\n";
 
     #$code .= "\n} # end of sub\n";
@@ -1452,7 +1455,7 @@ sub clear_params {
 }
 sub param {
     my $self = shift;
-    unless (@_) {
+    if (!@_) {
         return $self->query();
         return UNIVERSAL::can($self->[PARAM],'can')
             ? $self->[PARAM]
@@ -1487,9 +1490,16 @@ sub param {
 
 sub query {
     my ($self, $what, $tags) = @_;
+    # param() no arguments should behave like query
+    # query() is not activated by default, and
+    # my %param = (); $htc->param(%param); should
+    # *not* call query(). so we check if the user wants
+    # a return value; that indicates that they wanted to
+    # use query-like behaviour.
+    return unless defined wantarray();
     #print STDERR "query(@_)\n";
     my $info = $self->getUse_query
-        or croak "You are using query() but have not specified that you want to use it";
+        or carp "You are using query() but have not specified that you want to use it";
     my $pointer = {children => $info};
     $tags = [] unless defined $tags;
     $tags = [$tags] unless ref $tags eq 'ARRAY';
@@ -1773,7 +1783,7 @@ Deprecated, use C<TMPL_IF_DEFINED>
 =item TMPL_IF_DEFINED
 
 Check for definedness instead of truth:
-  <TMPL_IF DEFINED NAME="var">
+  <TMPL_IF_DEFINED NAME="var">
 
 =item ALIAS
 
@@ -2271,7 +2281,7 @@ At the moment there are the following named tagstyles builtin:
     <%if foo%><%VAR bar%><%/if%>
     # php (not active by default)
     <?if foo?><?var bar?><?/if foo?>
-    # t (not active by default)t
+    # tt (not active by default)
     [%if foo%][%var bar%][%/if foo%]
 
 You deactive a style by saying -stylename. You activate by saying
@@ -2470,9 +2480,7 @@ global_vars = 1.
 
 =head1 BUGS
 
-At the moment files with no newline at the end of the last line aren't correctly parsed.
-
-Probably many more bugs I don't know yet =)
+Probably many bugs I don't know yet =)
 
 Use the bugtracking system to report a bug:
 http://rt.cpan.org/NoAuth/Bugs.html?Dist=HTML-Template-Compiled

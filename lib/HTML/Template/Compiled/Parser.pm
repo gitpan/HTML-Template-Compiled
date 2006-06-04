@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.11 2006/06/02 08:13:22 tinita Exp $
+# $Id: Parser.pm,v 1.12 2006/06/02 16:35:58 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -231,7 +231,7 @@ not fixed (yet), so this is just for understanding at the moment.
     my $parser = HTML::Template::Compiled::Parser->new(
         tagstyle => [
             # -name deactivates style
-            # name or +name activates stxle
+            # +name activates style
             qw(-classic -comment +asp +php),
             # define own regexes
             # e.g. for tags like

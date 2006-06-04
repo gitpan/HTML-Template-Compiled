@@ -1,5 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.66 Sun Jun  4 03:49:58 CEST 2006
+- Bug Fix: global_vars didn't work correctly with file-caching
+- Bug Fix: there was no output when last characters in template are a tag.
+- Bug Fix: calling param(%emptyhash) caused error-message
+
 0.65 Fri Jun  2 10:10:06 CEST 2006
 - Bug Fix: Documentation error broke pod
 
