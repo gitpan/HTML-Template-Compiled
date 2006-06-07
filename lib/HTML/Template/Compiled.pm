@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.167 2006/06/04 01:50:51 tinita Exp $
+# $Id: Compiled.pm,v 1.173 2006/06/07 19:38:04 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-our $VERSION = "0.66";
+$VERSION = "0.67"
 
 =cut
 # doesn't work with make tardist
-#our $VERSION = ($version_pod =~ m/^our \$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.66";
+#our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
+our $VERSION = "0.67";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -89,7 +89,7 @@ use constant PATH => 1;
 #     }
 # }
 
-{
+BEGIN {
     my @map = (
         undef, qw(
           path filename file scalar filehandle
@@ -104,9 +104,9 @@ use constant PATH => 1;
 
     for my $i ( 1 .. @map ) {
         my $method = ucfirst $map[$i];
-        my $get    = sub { return $_[0]->[$i] };
+        my $get    = eval qq#sub { return \$_[0]->[$i] }#;
         my $set;
-            $set = sub { $_[0]->[$i] = $_[1] };
+            $set = eval qq#sub { \$_[0]->[$i] = \$_[1] }#;
         no strict 'refs';
         *{"get$method"} = $get;
         *{"set$method"} = $set;
@@ -353,6 +353,40 @@ sub from_cache {
         ref $self and $self->unlock;
         return 1;
     }
+
+    sub uptodate {
+        my ( $self, $cached_times ) = @_;
+        return 1 if $self->getScalar;
+        unless ($cached_times) {
+            my $dir = $self->getCache_dir;
+            $dir = '' unless defined $dir;
+            my $fname  = $self->getFilename;
+            my $cached = $cache->{$dir}->{$fname};
+            $cached_times  = $times->{$dir}->{$fname};
+            return unless $cached;
+        }
+        my $now = time;
+        if ( $now - $cached_times->{checked} < $NEW_CHECK ) {
+            return 1;
+        }
+        else {
+            my $file = $self->createFilename( $self->getPath, $self->getFilename );
+            $self->setFile($file);
+            #print STDERR "uptodate($file)\n";
+            my @times = $self->_checktimes($file);
+            if ( $times[MTIME] <= $cached_times->{mtime} ) {
+                D && $self->log("uptodate template old");
+                # set last check time to new value
+                $cached_times->{checked} = $now;
+                return 1;
+            }
+        }
+        # template is not up to date, re-compile it
+        return 0;
+    }
+
+
+
 }
 
 sub compile {
@@ -430,8 +464,8 @@ sub add_file_cache {
     my $isScalar = $self->getScalar ? 1 : 0;
     my $query_info = $self->getUse_query;
     $query_info = Data::Dumper->Dump([\$query_info], ['query_info']);
-    my $tagstyle =$self->getParser->[0];
-    $tagstyle = Data::Dumper->Dump([\$tagstyle], ['tagstyle']);
+    my $parser =$self->getParser;
+    $parser = Data::Dumper->Dump([\$parser], ['parser']);
     my $gl = $self->getGlobal_vars;
     my $file_args = $isScalar
       ? <<"EOM"
@@ -446,7 +480,7 @@ EOM
 # file date $lmtime
 # last checked date $lchecked
 my $query_info;
-my $tagstyle;
+my $parser;
 my \$args = {
     # HTC version
     version => '$VERSION',
@@ -464,7 +498,7 @@ $file_args
     out_fh => @{[$self->getOut_fh]},
     default_escape => '@{[$self->getDefault_escape]}',
     use_query => \$query_info,
-    tagstyle => \$tagstyle,
+    parser => \$parser,
     global_vars => $gl,
     # TODO
     # dumper => ...
@@ -517,10 +551,14 @@ sub include_file {
     }
     my $cached_version = $r->{version};
     my $args = $r->{htc};
-    my $t    = HTML::Template::Compiled->new(%$args);
-    D && $self->log( "include", $t, "$args->{perl}" );
+    # we first just create from cached perl-code
+    my $t = HTML::Template::Compiled->new(%$args);
+    unless ($VERSION eq $cached_version && $t->uptodate( $r->{times} )) {
+        # is not uptodate
+        # print STDERR "$t is not uptodate\n";
+        $t->compile;
+    }
     # recompile if timestamps have changed or HTC version
-    return if not $t->uptodate( $r->{times} ) or $VERSION ne $cached_version;
     $t->add_mem_cache(
         checked => $r->{times}->{checked},
         mtime   => $r->{times}->{mtime},
@@ -552,29 +590,6 @@ sub createFilename {
         # TODO - bug with scalarref
         croak "'$filename' not found";
     }
-}
-
-sub uptodate {
-    my ( $self, $cached_times ) = @_;
-    return 1 if $self->getScalar;
-    my $now = time;
-    if ( $now - $cached_times->{checked} < $NEW_CHECK ) {
-        return 1;
-    }
-    else {
-        my $file = $self->createFilename( $self->getPath, $self->getFilename );
-        $self->setFile($file);
-        #print STDERR "uptodate($file)\n";
-        my @times = $self->_checktimes($file);
-        if ( $times[MTIME] <= $cached_times->{mtime} ) {
-            D && $self->log("uptodate template old");
-            # set last check time to new value
-            $cached_times->{checked} = $now;
-            return 1;
-        }
-    }
-    # template is not up to date, re-compile it
-    return 0;
 }
 
 sub dump {
@@ -686,7 +701,7 @@ sub {
     no warnings;
 $anon
     my (\$t, \$P, \$C, \$OFH) = \@_;
-    my \$OUT;
+    my \$OUT = '';
     #my \$C = \\\$P;
 EOM
 
@@ -889,17 +904,19 @@ EOM
 
             # --------- / TMPL_IF TMPL UNLESS TMPL_WITH
             elsif ($is_close && $tname =~ m/^(?:IF|UNLESS|WITH)$/) {
+                my $var = $attr->{NAME};
+                $var = '' unless defined $var;
                 #print STDERR "============ IF ($_)\n";
                 $self->_checkstack( $fname, $line, $stack, $tname );
                 pop @$stack;
                 $level--;
                 my $indent = INDENT x $level;
-                my $global = $self->getGlobal_vars ? <<"EOM" : '';
+                my $global = $self->getGlobal_vars && $tname eq 'WITH' ? <<"EOM" : '';
 ${indent}my \$stack = \$t->getGlobalstack;
 ${indent}pop \@\$stack;
 ${indent}\$t->setGlobalstack(\$stack);
 EOM
-                $code .= qq#${indent}\} \# end $1\n$global#;
+                $code .= qq#${indent}\} \# end $var\n$global#;
             }
 
 			# --------- / TMPL_LOOP
@@ -1073,8 +1090,10 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                   defined $cache ? $self->quote_file($cache) : 'undef';
                 $code .= <<"EOM";
 ${indent}\{
-${indent}  my \$new = \$t->clone_init($path,$varstr,$cache);
-${indent}  $output \$new->getPerl()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
+${indent}  if (defined (my \$file = $varstr)) \{
+${indent}    my \$new = \$t->clone_init($path,\$file,$cache);
+${indent}    $output \$new->getPerl()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
+${indent}  \}
 ${indent}\}
 EOM
             }
@@ -1406,6 +1425,7 @@ sub clone {
 sub clone_init {
     my ( $self, $path, $filename, $cache ) = @_;
     unless (defined $filename) {
+#        return;
         my ($file) = (caller(1))[3];
         croak "Filename is undef (in template $file)" unless defined $filename;
     }
@@ -1424,10 +1444,12 @@ sub preload {
     opendir my $dh, $dir or die "Could not open '$dir': $!";
     my @files = grep { m/\.pl$/ } readdir $dh;
     closedir $dh;
+    my $loaded = 0;
     for my $file (@files) {
-        $class->include_file( File::Spec->catfile( $dir, $file ) );
+        my $success = $class->include_file( File::Spec->catfile( $dir, $file ) );
+        $loaded++ if $success;
     }
-    return scalar @files;
+    return scalar $loaded;
 }
 
 sub precompile {
@@ -1573,18 +1595,43 @@ sub output {
 sub import {
     my ( $class, %args ) = @_;
     if ( $args{compatible} ) {
-        $ENABLE_SUB             = 1;
-        $CASE_SENSITIVE_DEFAULT = 0;
-        $SEARCHPATH             = 0;
-        $DEFAULT_QUERY          = 1;
+        $class->EnableSub(1);
+        $class->CaseSensitive(0);
+        $class->SearchPathOnInclude(0);
+        $class->UseQuery(1);
     }
     elsif ( $args{speed} ) {
         # default at the moment
-        $ENABLE_SUB             = 0;
-        $CASE_SENSITIVE_DEFAULT = 1;
-        $SEARCHPATH             = 1;
-        $DEFAULT_QUERY          = 0;
+        $class->EnableSub(0);
+        $class->CaseSensitive(1);
+        $class->SearchPathOnInclude(1);
+        $class->UseQuery(0);
     }
+}
+
+sub ExpireTime {
+    my ($class, $seconds) = @_;
+    $NEW_CHECK = $seconds;
+}
+
+sub EnableSub {
+    my ($class, $bool) = @_;
+    $ENABLE_SUB = $bool ? 1 : 0;
+}
+
+sub CaseSensitive {
+    my ($class, $bool) = @_;
+    $CASE_SENSITIVE_DEFAULT = $bool ? 1 : 0;
+}
+
+sub SearchPathOnInclude {
+    my ($class, $bool) = @_;
+    $SEARCHPATH = $bool ? 1 : 0;
+}
+
+sub UseQuery {
+    my ($class, $bool) = @_;
+    $DEFAULT_QUERY = $bool ? 1 : 0;
 }
 
 {
@@ -1830,20 +1877,38 @@ At the moment there are four defaults that differ from L<HTML::Template>:
 
 =item case_sensitive
 
-default is 1. Set it via C<$HTML::Template::Compiled::CASE_SENSITIVE_DEFAULT = 0>
+default is 1. Set it via
+    HTML::Template::Compiled::CaseSensitive(0);
 Note (again): this will slow down templating a lot (50%).
+
+Explanation: This has nothing to do with C<TMPL_IF> or C<tmpl_if>. It's
+about the variable names. With case_sensitive set to 1, the following
+tags are different:
+
+    <tmpl_var Foo> prints the value of hash key 'Foo'
+    <tmpl_var fOO> prints the value of hash key 'fOO'
+
+With case_sensitive set to 0, all your parameters passed to C<param()>
+are converted to uppercase, and the following tags are the same:
+
+    <tmpl_var Foo> prints the value of hash key 'FOO'
+    <tmpl_var fOO> prints the value of hash key 'FOO'
+
 
 =item subref variables
 
-default is 0. Set it via C<$HTML::Template::Compiled::ENABLE_SUB = 1>
+default is 0. Set it via
+    HTML::Template::Compiled::EnableSub(1);
 
 =item search_path_on_include
 
-default is 1. Set it via C<$HTML::Template::Compiled::SEARCHPATH = 0>
+default is 1. Set it via
+    HTML::Template::Compiled::SearchPathOnInclude(0);
 
 =item use_query
 
-default is 0. Set it via C<$HTML::Template::Compiled::DEFAULT_QUERY = 1>
+default is 0. Set it via
+    HTML::Template::Compiled::UseQuery(1);
 
 =back
 
@@ -2349,6 +2414,13 @@ If set to 1 you will get the generated perl code on standard error
 
 Specify if you plan to use the query() method. Default is 0.
 
+Explanation: If you want to use query() to collect information
+on the template HTC has to do extra-work while compiling and
+uses extra-memory, so you can choose to save HTC work by
+setting use_query to 0 (default) or letting HTC do the extra
+work by setting it to 1. If you would like 1 to be the default,
+write me. If enough people write me, I'll think abou it =)
+
 =back
 
 =head2 METHODS
@@ -2373,6 +2445,15 @@ Class- or object-method. Removes all generated perl files from a given directory
   HTML::Template::Compiled->clear_filecache('cache_directory');
   # clear this template's cache directory (and not one template file only!)
   $htc->clear_filecache();
+
+=item param
+
+Works like in L<HTML::Template>.
+
+=item query
+
+Works like in L<HTML::Template>. But it is not activated by default. If you want
+to use it, specify the use_query option.
 
 =item preload
 
@@ -2417,12 +2498,14 @@ perl files, and a call to the constructor like above won't parse
 the template, but just use the loaded code. If your template
 file has changed, though, then it will be parsed again.
 
-You can set $HTML::Template::Compiled::NEW_CHECK to the amount of
-seconds you want to wait until the template is expired. So
-C<$HTML::Template::Compiled::NEW_CHECK = 60 * 10;> will check after
-10 minutes if the tmpl file was modified. Set it to a very high
-value will then ignore any changes, until you delete the generated
-code.
+You can set the expire time of a template by
+  HTML::Template::Compiled->ExpireTime($seconds);
+(C<$HTML::Template::Compiled::NEW_CHECK> is deprecated).
+So
+  HTML::Template::Compiled->ExpireTime(60 * 10);
+will check after 10 minutes if the tmpl file was modified. Set it to a
+very high value will then ignore any changes, until you delete the
+generated code.
 
 =head1 TODO
 
@@ -2443,7 +2526,7 @@ environment!
 
 In this case it is the safest option to generate your compiled templates on a local machine
 and just put the compiled templates onto the server, with no write access for the http server.
-Set the C<$NEW_CHECK> variable to a high value so that HTC never attempts to check the
+Set the C<ExpireTime> variable to a high value so that HTC never attempts to check the
 template timestamp to force a regenerating of the code.
 
 If you are alone on the machine, but you are running under taint mode (see L<perlsec>) then

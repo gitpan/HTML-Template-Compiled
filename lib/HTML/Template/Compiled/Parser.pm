@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.12 2006/06/02 16:35:58 tinita Exp $
+# $Id: Parser.pm,v 1.13 2006/06/05 18:16:37 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -16,7 +16,6 @@ BEGIN {
     %FILESTACK %SUBSTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
     $UNTAINT $DEFAULT_TAGSTYLE
     $UNDEF
-    $start_close_re
 );
 }
 our @EXPORT_OK = @vars;
@@ -39,7 +38,7 @@ use constant CLOSING_TAG => 2;
 
 use constant ATTR_TAGSTYLE => 0;
 
-# under construction
+# under construction (sic!)
 sub new {
     my $class = shift;
     my %args = @_;
@@ -48,6 +47,10 @@ sub new {
     $self->init(%args);
     $self;
 }
+
+sub set_tagstyle { $_[0]->[ATTR_TAGSTYLE] = $_[1] }
+sub get_tagstyle { $_[0]->[ATTR_TAGSTYLE] }
+
 my $supported_tags = {
     classic => ['<TMPL_'      ,'>',     '</TMPL_',      '>',    ],
     comment => ['<!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->'],
@@ -88,14 +91,13 @@ sub init {
 }
 
 {
-my $start_close_re;
     my $allowed_ident = qr{VAR|=|IF|IF_DEFINED|IF\sDEFINED|UNLESS|ELSIF|ELSE|
     WITH|COMMENT|VERBATIM|NOPARSE|LOOP_CONTEXT|LOOP|WHILE|
     SWITCH|CASE|INCLUDE_VAR|INCLUDE}ix;
     sub tags {
         my ($self, $text) = @_;
         my $tagstyle = $self->[ATTR_TAGSTYLE];
-        $start_close_re = '(?i:' . join("|", sort {
+        my $start_close_re = '(?i:' . join("|", sort {
                 length($b) <=> length($a)
             } map {
                 $_->[0], $_->[2]

@@ -1,5 +1,20 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.67 Wed Jun  7 22:19:05 CEST 2006
+- Bug Fix: stack for global_vars wrong when using if-tag
+    http://rt.cpan.org/Ticket/Display.html?id=19662
+- Bug Fix: preloading did not recompile outdated templates
+- Change: undefined files via TMPL_INCLUDE_VAR don't let script die
+- Change: Deprecated setting global variables directly, they must be changed
+    by class-methods:
+    $ENABLE_SUB => EnableSub(bool)
+    $CASE_SENSITIVE_DEFAULT => CaseSensitive(bool)
+    $SEARCHPATH => SearchPathOnInclude(bool)
+    $DEFAULT_QUERY => UseQuery(bool)
+    $NEW_CHECK => ExpireTime(seconds)
+- Documentation: explain case_sensitive and use_query better
+    http://rt.cpan.org/Public/Bug/Display.html?id=19686
+
 0.66 Sun Jun  4 03:49:58 CEST 2006
 - Bug Fix: global_vars didn't work correctly with file-caching
 - Bug Fix: there was no output when last characters in template are a tag.

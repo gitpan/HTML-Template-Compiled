@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 06_dyn_include.t,v 1.5 2006/05/29 19:30:15 tinita Exp $
+# $Id: 06_dyn_include.t,v 1.6 2006/06/07 19:38:39 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 8;
@@ -32,7 +32,8 @@ for my $ix (1..2,undef) {
     }
     else {
         #print "Error: $@\n";
-        cmp_ok($@, "=~", "Filename is undef", "detect undefined filename");
+        #print "out: $out\n";
+        cmp_ok($out, "=~", 'Dynamic include:\s+$', "undefined filename");
     }
 }
 
