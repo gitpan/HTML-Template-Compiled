@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm,v 1.7 2006/05/29 18:30:11 tinita Exp $
+# $Id: Utils.pm,v 1.9 2006/06/19 21:13:42 tinita Exp $
 $VERSION = "0.02";
 use strict;
 use warnings;
@@ -11,13 +11,13 @@ my @paths = qw(PATH_METHOD PATH_DEREF PATH_FORMATTER);
 @EXPORT_OK = (
     @paths, qw(
         &log &stack
-        &escape_html &escape_uri
+        &escape_html &escape_uri &escape_js
     )
 );
 %EXPORT_TAGS = (
 	walkpath => \@paths,
 	log => [qw(&log &stack)],
-	escape => [qw(&escape_html &escape_uri)],
+	escape => [qw(&escape_html &escape_uri &escape_js)],
 );
 
 use constant PATH_METHOD => 1;
@@ -65,7 +65,7 @@ sub log {
 }
 
 sub escape_html {
-    my ( $self, $var ) = @_;
+    my ( $var ) = @_;
     my $new = $var;
 
     # we have to do this cause HTML::Entities changes its arg
@@ -76,9 +76,16 @@ sub escape_html {
 }
 
 sub escape_uri {
-    return URI::Escape::uri_escape( $_[1] );
+    return URI::Escape::uri_escape( $_[0] );
 }
 
+sub escape_js {
+    my ($var) = @_;
+    $var =~ s/(["'])/\\$1/g;
+    $var =~ s/\r/\\r/g;
+    $var =~ s/\n/\\n/g;
+    return $var;
+}
 
 1;
 __END__

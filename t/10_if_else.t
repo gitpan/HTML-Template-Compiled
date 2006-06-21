@@ -1,4 +1,4 @@
-# $Id: 10_if_else.t,v 1.3 2006/01/11 14:15:06 tinita Exp $
+# $Id: 10_if_else.t,v 1.4 2006/06/07 20:54:29 tinita Exp $
 use lib 'blib/lib';
 use Test::More tests => 3;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -12,9 +12,9 @@ test_double_else();
 sub test_defined {
 	my ($type, $clearcache) = @_;
 	my $str = <<'EOM';
-<tmpl_if defined undef>WRONG<tmpl_elsif undef>WRONG<tmpl_else>RIGHT</tmpl_if>
-<tmpl_if defined zero>RIGHT<tmpl_elsif zero>WRONG<tmpl_else>RIGHT</tmpl_if>
-<tmpl_if defined true>RIGHT<tmpl_elsif true>RIGHT<tmpl_else>WRONG</tmpl_if>
+<tmpl_if_defined undef>WRONG<tmpl_elsif undef>WRONG<tmpl_else>RIGHT</tmpl_if>
+<tmpl_if_defined zero>RIGHT<tmpl_elsif zero>WRONG<tmpl_else>RIGHT</tmpl_if>
+<tmpl_if_defined true>RIGHT<tmpl_elsif true>RIGHT<tmpl_else>WRONG</tmpl_if>
 EOM
 	my $htc = HTML::Template::Compiled->new(
 		path => 't/templates',

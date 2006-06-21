@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.173 2006/06/07 19:38:04 tinita Exp $
+# $Id: Compiled.pm,v 1.187 2006/06/20 22:47:11 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.67"
+$VERSION = "0.68"
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.67";
+our $VERSION = "0.68";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -26,6 +26,7 @@ use Fcntl qw(:seek :flock);
 use File::Spec;
 use File::Basename qw(dirname);
 use HTML::Template::Compiled::Utils qw(:walkpath :log :escape);
+use HTML::Template::Compiled::Expression::Expressions;
 # TODO
 eval {
     require Digest::MD5;
@@ -57,6 +58,7 @@ use constant T_IF       => 'IF';
 use constant T_UNLESS   => 'UNLESS';
 use constant T_ELSIF    => 'ELSIF';
 use constant T_ELSE     => 'ELSE';
+use constant T_IF_DEFINED => 'IF_DEFINED';
 use constant T_END      => '__EOT__';
 use constant T_WITH     => 'WITH';
 use constant T_SWITCH   => 'SWITCH';
@@ -238,6 +240,9 @@ sub create {
     }
     D && $self->log("trying from_cache()");
     my $t = $self->from_cache();
+    if ($t) {
+        $t = $t->clone;
+    }
     D && $self->log(\%args);
     if ($t) {
         if ( my $fm = $args{formatter} || $self->getFormatter ) {
@@ -493,9 +498,11 @@ my \$args = {
         cache_dir => '$cache',
 $file_args
     path => $path_str,
+    formatter_path => '@{[$self->getFormatter_path]}',
     method_call => '@{[$self->getMethod_call]}',
     deref => '@{[$self->getDeref]}',
     out_fh => @{[$self->getOut_fh]},
+    default_path   => '@{[$self->getDefault_path]}',
     default_escape => '@{[$self->getDefault_escape]}',
     use_query => \$query_info,
     parser => \$parser,
@@ -730,6 +737,7 @@ EOM
             method_call    => $meth,
             formatter_path => $format,
             lexicals       => \@lexicals,
+            final          => 0,   
         );
         # --------- TMPL_VAR
         if ( !$comment && !$noparse && !$verbatim) {
@@ -737,7 +745,6 @@ EOM
                 #print STDERR "===== VAR ($_)\n";
                 my $type = $tname;
                 my $var = $attr->{NAME};
-                #my $var    = $2;
                 if ($self->getUse_query) {
                     $info_stack->[-1]->{lc $var}->{type} = T_VAR;
                 }
@@ -748,7 +755,8 @@ EOM
                 my $default;
                 if (exists $attr->{DEFAULT}) {
                     $default = $attr->{DEFAULT};
-                    $default =~ s/'/\\'/g;
+                    my $exp = _expr_string($default);
+                    $default = $exp->to_string($level);
                 }
                 my $varstr = $self->_make_path(
                     %var_args,
@@ -758,51 +766,29 @@ EOM
 
                 #print "line: $_ var: $var ($varstr)\n";
                 my $root = 0;
-                my $path = 0;
                 if ( $var =~ s/^\.// ) {
                     # we have NAME=.ROOT
                     $root++;
                 }
-                if ( $var =~ tr/.// ) {
-                    # we have NAME=BLAH.BLUBB
-                    $path++;
-                }
-                if ( $root || $path ) {
+                if ( $root ) {
                     $code .= qq#${indent}\{\n${indent}  my \$C = \$C;\n#;
-                }
-                if ($root) {
                     $code .= qq#${indent}  \$C = \\\$P;\n#;
                 }
+                my $exp = _expr_literal($varstr);
                 if ( defined $default ) {
-                    $varstr = qq#defined $varstr ? $varstr : '$default'#;
+                    $exp = _expr_ternary(
+                        _expr_defined($exp),
+                        $exp,
+                        _expr_literal($default),
+                    );
                 }
-                if ( $tname eq T_VAR ) {
-                    if ($escape) {
-                        $escape = uc $escape;
-                        my @escapes = split m/\|/, $escape;
-                        for (@escapes) {
-                            if ( $_ eq 'HTML' ) {
-                                $varstr = qq#\$t->escape_html($varstr)#;
-                            }
-                            elsif ( $_ eq 'URL' ) {
-                                $varstr = qq#\$t->escape_uri($varstr)#;
-                            }
-                            elsif ( $_ eq 'DUMP' ) {
-                                $varstr = qq#\$t->dump($varstr)#;
-                            }
-                        }
-                        $code .= qq#${indent}$output $varstr;\n#;
-                    }
-                    else {
-                        #$code .= qq#print STDERR "<<<<<<<<<<< $var\\n";\n\# line 1000\n#;
-                        $code .= qq#${indent}$output $varstr;\n#;
-                    }
-                }
-                if ( $root || $path ) {
-                      $code .= qq#\n${indent}\}\n#;
+                $exp = $self->_escape_expression($exp, $escape);
+                $code .= qq#${indent}$output #
+                    . $exp->to_string($level) . qq#;\n#;
+                if ( $root ) {
+                    $code .= _expr_close()->to_string($level);
                 }
             }
-
             # --------- TMPL_WITH
             elsif ($is_open && $tname eq T_WITH && exists $attr->{NAME}) {
                 push @$stack, T_WITH;
@@ -810,15 +796,16 @@ EOM
                 my $var    = $attr->{NAME};
                 my $varstr = $self->_make_path(
                     %var_args,
-                    var   => $var,
-                    final => 0,
+                    var => $var,
                 );
-                my $global = $self->getGlobal_vars ? <<"EOM" : '';
-${indent}my \$stack = \$t->getGlobalstack;
-${indent}push \@\$stack, \$\$C;
-${indent}\$t->setGlobalstack(\$stack);
-EOM
-                $code .= qq#${indent}\{ \# WITH $var\n$global#;
+                $code .= qq#${indent}\{ \# WITH $var\n#;
+                if ($self->getGlobal_vars) {
+                    $code .= _expr_method(
+                        'pushGlobalstack',
+                        _expr_literal('$t'),
+                        _expr_literal('$$C')
+                    )->to_string($level) . ";\n";
+                }
                 $code .= qq#${indent}  my \$C = \\$varstr;\n#;
             }
 
@@ -842,7 +829,6 @@ EOM
                 my $varstr = $self->_make_path(
                     %var_args,
                     var   => $var,
-                    final => 0,
                 );
                 $level += 2;
                 my $ind    = INDENT;
@@ -865,9 +851,7 @@ EOM
                 }
                 else {
                     my $global = $self->getGlobal_vars ? <<"EOM" : '';
-${indent}my \$stack = \$t->getGlobalstack;
-${indent}push \@\$stack, \$\$C;
-${indent}\$t->setGlobalstack(\$stack);
+${indent}\$t->pushGlobalstack(\$\$C);
 EOM
                     $code .= <<"EOM";
 ${indent}if (UNIVERSAL::isa(my \$array = $varstr, 'ARRAY') )\{
@@ -894,12 +878,11 @@ EOM
 
             # --------- TMPL_ELSE
             elsif ($is_open && $tname eq T_ELSE) {
-                # we can only have an open if or unless
                 $self->_checkstack( $fname, $line, $stack, T_ELSE );
                 pop @$stack;
                 push @$stack, T_ELSE;
-                my $indent = INDENT x( $level - 1 );
-                $code .= qq#${indent}\}\n${indent}else {\n#;
+                my $exp = HTML::Template::Compiled::Expression::Else->new;
+                $code .= $exp->to_string($level);
             }
 
             # --------- / TMPL_IF TMPL UNLESS TMPL_WITH
@@ -911,12 +894,11 @@ EOM
                 pop @$stack;
                 $level--;
                 my $indent = INDENT x $level;
-                my $global = $self->getGlobal_vars && $tname eq 'WITH' ? <<"EOM" : '';
-${indent}my \$stack = \$t->getGlobalstack;
-${indent}pop \@\$stack;
-${indent}\$t->setGlobalstack(\$stack);
-EOM
-                $code .= qq#${indent}\} \# end $var\n$global#;
+                my $exp = HTML::Template::Compiled::Expression::Close->new;
+                $code .= $exp->to_string($level) . qq{# end $var\n};
+                if ($self->getGlobal_vars && $tname eq 'WITH') {
+                    $code .= $indent . qq#\$t->popGlobalstack;\n#;
+                }
             }
 
 			# --------- / TMPL_LOOP
@@ -949,30 +931,33 @@ EOM
                     carp "use of TMPL_IF DEFINED is deprecated. use TMPL_IF_DEFINED instead";
                 }
                 my $var    = $attr->{NAME};
-                my $indent = INDENT x $level;
                 my $varstr = $self->_make_path(
                     %var_args,
                     var   => $var,
-                    final => 0,
                 );
-                my $if =
-                  { IF => 'if', UNLESS => 'unless', ELSIF => 'elsif' }
-                  ->{ $tname };
+                my $if = {
+                    IF => 'If',
+                    UNLESS => 'Unless',
+                    ELSIF => 'Elsif',
+                    IF_DEFINED => 'If',
+                    'IF DEFINED' => 'If',
+                }->{ $tname };
+                my $operand = HTML::Template::Compiled::Expression::Literal->new($varstr);
+                my $eclass = "HTML::Template::Compiled::Expression::$if";
                 my $elsif = $tname eq 'ELSIF' ? 1 : 0;
                 if ($def) {
-                    $varstr = "defined( $varstr )";
+                    $operand = HTML::Template::Compiled::Expression::Defined->new($operand);
                 }
                 if ($elsif) {
-                    $code .= qq#${indent}\}\n#;
-                    $self->_checkstack( $fname, $line, $stack, T_ELSIF );
+                    $self->_checkstack( $fname, $line, $stack, $tname );
                 }
                 else {
                     push @$stack, $tname;
                     $level++;
                 }
-                $code .= <<"EOM"
-${indent}$if($varstr) \{
-EOM
+                my $exp = $eclass->new($operand);
+                my $str = $exp->to_string($level);
+                $code .= $str . $/;
             }
 
             # --------- TMPL_SWITCH
@@ -984,7 +969,6 @@ EOM
                 my $varstr = $self->_make_path(
                     %var_args,
                     var   => $var,
-                    final => 0,
                 );
                 $code .= <<"EOM";
 ${indent}SWITCH: for my \$_switch ($varstr) \{
@@ -1054,7 +1038,6 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                     $varstr = $self->_make_path(
                         %var_args,
                         var   => $dfilename,
-                        final => 0,
                     );
                 }
                 else {
@@ -1115,9 +1098,8 @@ EOM
             }
             else {
                 if ( length $_ ) {
-                    s/\\/\\\\/g;
-                    s/'/\\'/g;
-                    $code .= qq#$indent$output '$_';\n#;
+                    my $exp = HTML::Template::Compiled::Expression::String->new($_);
+                    $code .= qq#$indent$output # . $exp->to_string($level) . $/;
                 }
             }
         }
@@ -1142,12 +1124,11 @@ EOM
                 # don't output anything if we are in a comment
                 # but output if we are in noparse or verbatim
                 if ( !$comment && length $_ ) {
-                    s/\\/\\\\/g;
-                    s/'/\\'/g;
                     if ($verbatim) {
                         HTML::Entities::encode_entities($_);
                     }
-                    $code .= qq#$indent$output '$_';\n#;
+                    my $exp = HTML::Template::Compiled::Expression::String->new($_);
+                    $code .= qq#$indent$output # . $exp->to_string($level) . $/;
                 }
             }
         }
@@ -1174,6 +1155,40 @@ EOM
     my $sub = eval $code;
     die "code: $@" if $@;
     return $code, $sub;
+}
+
+sub _escape_expression {
+    my ($self, $exp, $escape) = @_;
+    return $exp unless $escape;
+    my @escapes = split m/\|/, uc $escape;
+    for (@escapes) {
+        if ( $_ eq 'HTML' ) {
+            $exp = HTML::Template::Compiled::Expression::Function->new(
+                'HTML::Template::Compiled::Utils::escape_html',
+                $exp,
+            );
+        }
+        elsif ( $_ eq 'URL' ) {
+            $exp = HTML::Template::Compiled::Expression::Function->new(
+                'HTML::Template::Compiled::Utils::escape_uri',
+                $exp,
+            );
+        }
+        elsif ( $_ eq 'JS' ) {
+            $exp = HTML::Template::Compiled::Expression::Function->new(
+                'HTML::Template::Compiled::Utils::escape_js',
+                $exp,
+            );
+        }
+        elsif ( $_ eq 'DUMP' ) {
+            $exp = HTML::Template::Compiled::Expression::Method->new(
+                'dump',
+                HTML::Template::Compiled::Expression::Literal->new('$t'),
+                $exp,
+            );
+        }
+    }
+    return $exp;
 }
 
 sub quote_file {
@@ -1364,9 +1379,9 @@ sub _get_var_sub_global {
 {
     my %map = (
         IF         => [ T_IF, T_UNLESS, T_ELSE ],
-        UNLESS     => [T_UNLESS, T_ELSE],
-        ELSIF      => [ T_IF, T_UNLESS ],
-        ELSE       => [ T_IF, T_UNLESS, T_ELSIF ],
+        UNLESS     => [T_UNLESS, T_ELSE, T_IF_DEFINED],
+        ELSIF      => [ T_IF, T_UNLESS, T_IF_DEFINED ],
+        ELSE       => [ T_IF, T_UNLESS, T_ELSIF, T_IF_DEFINED ],
         LOOP       => [T_LOOP],
         WHILE      => [T_WHILE],
         WITH       => [T_WITH],
@@ -1436,6 +1451,8 @@ sub clone_init {
     $new->setFilehandle();
     $new->setPath($path);
     $new = $new->create();
+    my $stack = $self->getGlobalstack || [];
+    $new->setGlobalstack($stack);
     $new;
 }
 
@@ -1634,6 +1651,19 @@ sub UseQuery {
     $DEFAULT_QUERY = $bool ? 1 : 0;
 }
 
+sub pushGlobalstack {
+    my $stack = $_[0]->getGlobalstack;
+    push @$stack, $_[1];
+    $_[0]->setGlobalstack($stack);
+}
+
+sub popGlobalstack {
+    my $stack = $_[0]->getGlobalstack;
+    pop @$stack;
+    $_[0]->setGlobalstack($stack);
+}
+
+
 {
     my $lock_fh;
 
@@ -1749,7 +1779,7 @@ current information.
 
 =item HTML_TEMPLATE_ROOT
 
-=item ESCAPE=(HTML|URL|0)
+=item ESCAPE=(HTML|URL|JS|0)
 
 =item DEFAULT=...
 
@@ -1854,6 +1884,10 @@ can use E<lt>% %E<gt> tags and the E<lt>%= tag instead of E<lt>%VAR (which will 
 
  <%IF blah%>  <%= VARIABLE%>  <%/IF%>
 
+=item Chained escaping
+
+See L<"ESCAPING">
+
 =back
 
 =head2 MISSING FEATURES
@@ -1871,14 +1905,17 @@ I don't think I'll implement that.
 
 =head2 COMPATIBILITY
 
+=head3 Same behaviour as HTML::Template
+
 At the moment there are four defaults that differ from L<HTML::Template>:
 
 =over 4
 
 =item case_sensitive
 
-default is 1. Set it via
-    HTML::Template::Compiled::CaseSensitive(0);
+default is 1 (on). Set it via
+    HTML::Template::Compiled->CaseSensitive(0);
+
 Note (again): this will slow down templating a lot (50%).
 
 Explanation: This has nothing to do with C<TMPL_IF> or C<tmpl_if>. It's
@@ -1897,22 +1934,22 @@ are converted to uppercase, and the following tags are the same:
 
 =item subref variables
 
-default is 0. Set it via
-    HTML::Template::Compiled::EnableSub(1);
+default is 0 (off). Set it via
+    HTML::Template::Compiled->EnableSub(1);
 
 =item search_path_on_include
 
-default is 1. Set it via
-    HTML::Template::Compiled::SearchPathOnInclude(0);
+default is 1 (on). Set it via
+    HTML::Template::Compiledi->SearchPathOnInclude(0);
 
 =item use_query
 
-default is 0. Set it via
-    HTML::Template::Compiled::UseQuery(1);
+default is 0 (off). Set it via
+    HTML::Template::Compiled->UseQuery(1);
 
 =back
 
-To be compatible with all use:
+To be compatible in all of the above options all use:
 
   use HTML::Template::Compiled compatible => 1;
 
@@ -1922,10 +1959,25 @@ If you don't care about these options you should use
 
 which is the default but depending on user wishes that might change.
 
+=head3 Different behaviour from HTML::Template
+
+At the moment this snippet
+
+  <tmpl_if arrayref>true<tmpl_else>false</tmpl_if arrayref>
+
+with this code:
+
+    $htc->param(arrayref => []);
+
+will print true in HTC and false in HTML::Template. In HTML::Template an
+array is true if it has content, in HTC it's true if it (the reference) is
+defined. I'll try to find a way to change that behaviour, though that might
+be for the cost of speed.
+
 =head2 ESCAPING
 
-Like in HTML::Template, you have C<ESCAPE=HTML> and C<ESCAPE=URL>. (C<ESCAPE=1> won't follow!
-It's old and ugly...)
+Like in HTML::Template, you have C<ESCAPE=HTML>, C<ESCAPE=URL> and C<ESCAPE_JS>.
+(C<ESCAPE=1> won't follow!  It's old and ugly...)
 Additionally you have C<ESCAPE=DUMP>, which by default will generate a Data::Dumper output.
 You can change that output by setting a different dumper function, see L<"OPTIONS"> dumper.
 

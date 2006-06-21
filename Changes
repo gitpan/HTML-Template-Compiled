@@ -1,5 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.68 Wed Jun 21 20:38:05 CEST 2006
+- New Feature: ESCAPE=JS was still missing
+- Bug Fix: parameters stayed in memory cache
+- Documentation fix
+
 0.67 Wed Jun  7 22:19:05 CEST 2006
 - Bug Fix: stack for global_vars wrong when using if-tag
     http://rt.cpan.org/Ticket/Display.html?id=19662

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.13 2006/06/05 18:16:37 tinita Exp $
+# $Id: Parser.pm,v 1.15 2006/06/15 20:19:37 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -91,12 +91,35 @@ sub init {
 }
 
 {
-    my $allowed_ident = qr{VAR|=|IF|IF_DEFINED|IF\sDEFINED|UNLESS|ELSIF|ELSE|
-    WITH|COMMENT|VERBATIM|NOPARSE|LOOP_CONTEXT|LOOP|WHILE|
-    SWITCH|CASE|INCLUDE_VAR|INCLUDE}ix;
+    my %allowed_ident = (
+        VAR => [qw(NAME ESCAPE DEFAULT)],
+        '=' => [qw(NAME ESCAPE DEFAULT)], # just an alias for VAR
+        IF_DEFINED => [qw(NAME)],
+        'IF DEFINED' => [qw(NAME)], # deprecated
+        IF => [qw(NAME)],
+        UNLESS => [qw(NAME)],
+        ELSIF => [qw(NAME)],
+        ELSE => [qw(NAME)],
+        WITH => [qw(NAME)],
+        COMMENT => [qw(NAME)],
+        VERBATIM => [qw(NAME)],
+        NOPARSE => [qw(NAME)],
+        LOOP_CONTEXT => [qw(NAME)],
+        LOOP => [qw(NAME ALIAS)],
+        WHILE => [qw(NAME)],
+        SWITCH => [qw(NAME)],
+        CASE => [qw(NAME)],
+        INCLUDE_VAR => [qw(NAME)],
+        INCLUDE => [qw(NAME)],
+    );
+
+    # make (?i:IF_DEFINED|LOOP|IF|=|...) out of the list of identifiers
+    my $allowed_ident = "(?i:" . join("|", sort {
+        length $b <=> length $a
+    } keys %allowed_ident) . ")";
     sub tags {
         my ($self, $text) = @_;
-        my $tagstyle = $self->[ATTR_TAGSTYLE];
+        my $tagstyle = $self->get_tagstyle;
         my $start_close_re = '(?i:' . join("|", sort {
                 length($b) <=> length($a)
             } map {
