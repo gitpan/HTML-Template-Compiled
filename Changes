@@ -1,5 +1,13 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.69 Sun Jul  2 19:45:35 CEST 2006
+- Bug Fix: Includes didn't work always correctly in scalarref
+- Bug Fix: Allow 'absolute' filenames that are relative to attribute path
+- Bug Fix: Empty path didn't work properly
+- Bug Fix: make inheritance possible
+- Change: new class HTML::Template::Compiled::Classic for features that
+  can't be used with HTML::Template::Compiled features at the same time
+
 0.68 Wed Jun 21 20:38:05 CEST 2006
 - New Feature: ESCAPE=JS was still missing
 - Bug Fix: parameters stayed in memory cache

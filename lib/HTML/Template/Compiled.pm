@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.187 2006/06/20 22:47:11 tinita Exp $
+# $Id: Compiled.pm,v 1.194 2006/07/02 17:43:46 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.68"
+$VERSION = "0.69"
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.68";
+our $VERSION = "0.69";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -119,7 +119,10 @@ sub new {
     my ( $class, %args ) = @_;
     my $self = [];
     bless $self, $class;
-    $args{path} ||= $ENV{'HTML_TEMPLATE_ROOT'} || '';
+    unless (defined $args{path}) {
+        $args{path} = [];
+        defined $ENV{'HTML_TEMPLATE_ROOT'} and push @{$args{path}}, $ENV{'HTML_TEMPLATE_ROOT'};
+    }
 
     #print "PATH: $args{path}!!\n";
     if ( $args{perl} ) {
@@ -216,7 +219,10 @@ sub create {
     if (%args) {
         $self->setCache( exists $args{cache} ? $args{cache} : 1 );
         $self->setCache_dir( $args{cache_dir} );
-        if ( defined $args{filename} ) {
+        if ( defined $args{filename} && !(
+            defined $args{scalarref} ||
+            defined $args{arrayref} ||
+            defined $args{filehandle})) {
             $self->setFilename( $args{filename} );
             D && $self->log( "filename: " . $self->getFilename );
             $self->setPath( $args{path} );
@@ -229,9 +235,7 @@ sub create {
             my $md5  = Digest::MD5::md5_base64($$text);
             D && $self->log("md5: $md5");
             $self->setFilename($md5);
-            #$self->setPath( defined $args{path} ? $args{path} : '' );
-            #$self->setPath( $args{path} );
-            $self->setPath( '' );
+            $self->setPath( $args{path} );
         }
         elsif ( $args{filehandle} ) {
             $self->setFilehandle( $args{filehandle} );
@@ -488,6 +492,7 @@ my $query_info;
 my $parser;
 my \$args = {
     # HTC version
+    class => '@{[ref $self]}',
     version => '$VERSION',
     times => {
         mtime => $times{mtime},
@@ -521,7 +526,9 @@ EOM
 sub include {
     my ($self) = @_;
     D && $self->stack;
-    my $file = $self->createFilename( $self->getPath, $self->getFilename );
+    my $file = $self->getScalar || $self->getFilehandle
+        ? $self->getFilename
+        : $self->createFilename( $self->getPath, $self->getFilename );
     D && $self->log("include file: $file");
 
     #$self->setFile($file);
@@ -557,9 +564,10 @@ sub include_file {
         die "Eror while inclundig '$req': $@";
     }
     my $cached_version = $r->{version};
+    my $class = $r->{class} || 'HTML::Template::Compiled';
     my $args = $r->{htc};
     # we first just create from cached perl-code
-    my $t = HTML::Template::Compiled->new(%$args);
+    my $t = $class->new(%$args);
     unless ($VERSION eq $cached_version && $t->uptodate( $r->{times} )) {
         # is not uptodate
         # print STDERR "$t is not uptodate\n";
@@ -577,21 +585,23 @@ sub createFilename {
     my ( $self, $path, $filename ) = @_;
     D && $self->log("createFilename($path,$filename)");
     D && $self->stack(1);
-    if ( !length $path or File::Spec->file_name_is_absolute($filename) ) {
+    if ( !$path or !length $path or
+        (File::Spec->file_name_is_absolute($filename) &&
+        -f $filename) ) {
         return $filename;
     }
     else {
         D && $self->log( "file: " . File::Spec->catfile( $path, $filename ) );
         my $sp = $self->getSearch_path_on_include;
-        for (
-              ref $path
-            ? $sp
-            ? @$path
-            : $path->[0]
-            : $path
-          ) {
-            my $fp = File::Spec->catfile( $_, $filename );
-            return $fp if -f $fp;
+        my @paths = ref $path ? @$path : $path;
+        if (@paths) {
+            for ( $sp ? @paths : $paths[0]) {
+                my $fp = File::Spec->catfile( $_, $filename );
+                return $fp if -f $fp;
+            }
+        }
+        else {
+            return $filename if -f $filename;
         }
 
         # TODO - bug with scalarref
@@ -881,7 +891,7 @@ EOM
                 $self->_checkstack( $fname, $line, $stack, T_ELSE );
                 pop @$stack;
                 push @$stack, T_ELSE;
-                my $exp = HTML::Template::Compiled::Expression::Else->new;
+                my $exp = _expr_else();
                 $code .= $exp->to_string($level);
             }
 
@@ -894,7 +904,7 @@ EOM
                 pop @$stack;
                 $level--;
                 my $indent = INDENT x $level;
-                my $exp = HTML::Template::Compiled::Expression::Close->new;
+                my $exp = _expr_close();
                 $code .= $exp->to_string($level) . qq{# end $var\n};
                 if ($self->getGlobal_vars && $tname eq 'WITH') {
                     $code .= $indent . qq#\$t->popGlobalstack;\n#;
@@ -913,9 +923,7 @@ EOM
                 $level--;
                 my $indent = INDENT x $level;
                 my $global = $self->getGlobal_vars ? <<"EOM" : '';
-${indent}my \$stack = \$t->getGlobalstack;
-${indent}pop \@\$stack;
-${indent}\$t->setGlobalstack(\$stack);
+${indent}\$t->popGlobalstack;
 EOM
                 $code .= <<"EOM";
 ${indent}@{[INDENT()]}\}
@@ -942,11 +950,11 @@ EOM
                     IF_DEFINED => 'If',
                     'IF DEFINED' => 'If',
                 }->{ $tname };
-                my $operand = HTML::Template::Compiled::Expression::Literal->new($varstr);
+                my $operand = _expr_literal($varstr);
                 my $eclass = "HTML::Template::Compiled::Expression::$if";
                 my $elsif = $tname eq 'ELSIF' ? 1 : 0;
                 if ($def) {
-                    $operand = HTML::Template::Compiled::Expression::Defined->new($operand);
+                    $operand = _expr_defined($operand);
                 }
                 if ($elsif) {
                     $self->_checkstack( $fname, $line, $stack, $tname );
@@ -1098,7 +1106,7 @@ EOM
             }
             else {
                 if ( length $_ ) {
-                    my $exp = HTML::Template::Compiled::Expression::String->new($_);
+                    my $exp = _expr_string($_);
                     $code .= qq#$indent$output # . $exp->to_string($level) . $/;
                 }
             }
@@ -1127,7 +1135,7 @@ EOM
                     if ($verbatim) {
                         HTML::Entities::encode_entities($_);
                     }
-                    my $exp = HTML::Template::Compiled::Expression::String->new($_);
+                    my $exp = _expr_string($_);
                     $code .= qq#$indent$output # . $exp->to_string($level) . $/;
                 }
             }
@@ -1163,27 +1171,27 @@ sub _escape_expression {
     my @escapes = split m/\|/, uc $escape;
     for (@escapes) {
         if ( $_ eq 'HTML' ) {
-            $exp = HTML::Template::Compiled::Expression::Function->new(
+            $exp = _expr_function(
                 'HTML::Template::Compiled::Utils::escape_html',
                 $exp,
             );
         }
         elsif ( $_ eq 'URL' ) {
-            $exp = HTML::Template::Compiled::Expression::Function->new(
+            $exp = _expr_function(
                 'HTML::Template::Compiled::Utils::escape_uri',
                 $exp,
             );
         }
         elsif ( $_ eq 'JS' ) {
-            $exp = HTML::Template::Compiled::Expression::Function->new(
+            $exp = _expr_function(
                 'HTML::Template::Compiled::Utils::escape_js',
                 $exp,
             );
         }
         elsif ( $_ eq 'DUMP' ) {
-            $exp = HTML::Template::Compiled::Expression::Method->new(
+            $exp = _expr_method(
                 'dump',
-                HTML::Template::Compiled::Expression::Literal->new('$t'),
+                _expr_literal('$t'),
                 $exp,
             );
         }
@@ -1192,7 +1200,7 @@ sub _escape_expression {
 }
 
 sub quote_file {
-    my $f = $_[1];
+    defined(my $f = $_[1]) or return '';
     $f =~ s/'/\\'/g;
     return qq/'$f'/;
 }
@@ -1246,7 +1254,7 @@ sub _make_path {
     }
     local $" = ",";
     my $final = $args{final} ? 1 : 0;
-    my $getvar = $ENABLE_SUB ? '_get_var_sub' : '_get_var';
+    my $getvar = '_get_var';
     $getvar .= $self->getGlobal_vars&1 ? '_global' : '';
     my $varstr =
       "\$t->$getvar(\$P," . ( $root ? '$P' : '$$C' ) . ",$final,@paths)";
@@ -1280,15 +1288,39 @@ sub try_global {
 }
 
 {
+    sub _walk_formatter {
+        my ($self, $walk, $key, $global) = @_;
+        my $ref = ref $walk;
+        my $fm = $self->getFormatter();
+        my $sub = exists $fm->{$ref} ? $fm->{$ref}->{$key} : undef;
+        my $stack = [];
+        my $new_walk;
+        if ($global) {
+            $stack = $self->getGlobalstack || [];
+        }
+        for my $item ($walk, reverse @$stack) {
+            #print STDERR "::::::: formatter $walk -> $key (sub=$sub)\n";
+            if (defined $sub) {
+                $new_walk = $sub->($walk);
+                last;
+            }
+            elsif (exists $item->{$key}) {
+                #print STDERR "===== \$item->{$key} exists! '$item->{$key}'\n";
+                $new_walk = $item->{$key};
+                last;
+            }
+            # try next item in stack
+        }
+        #print STDERR "---- formatter $walk\n";
+        return $new_walk;
+    }
+
 	# ----------- still ugly code
 	# generating different code depending on global_vars
 	my $code = <<'EOM';
 sub {
 	my ($self, $P, $ref, $final, @paths) = @_;
 	my $walk = $ref;
-    # H::T compatibility
-    my $literal_dot = join '.', map { $_->[1] } @paths;
-    return $walk->{$literal_dot} if ref $walk eq 'HASH' and exists $walk->{$literal_dot};
 
 	for my $path (@paths) {
         last unless defined $walk;
@@ -1314,10 +1346,11 @@ sub {
 		}
 		elsif ($path->[0] == PATH_FORMATTER) {
 			my $key = $path->[1];
-			my $sub = $self->getFormatter()->{ref $walk}->{$key};
-			$walk = defined $sub
-				? $sub->($walk)
-				: $walk->{$key};
+            $walk = $self->_walk_formatter($walk, $key, *** isglobal ***);
+            #my $sub = $self->getFormatter()->{ref $walk}->{$key};
+            #$walk = defined $sub
+            #	? $sub->($walk)
+            #	: $walk->{$key};
 		}
 	}
     if (my $formatter = $self->getFormatter() and $final and my $ref = ref $walk) {
@@ -1339,39 +1372,25 @@ EOM
         $walk = $walk->$method;
     }
     else {
+        #$walk = exists $walk->{$path->[1]}
+        #    ? $walk->{$path->[1]}
+        #    : $P->{$path->[1]};
         $walk = $walk->{$path->[1]};
     }
 EOM
 	my $sub = $code;
 	$sub =~ s/^\Q*** walk ***\E$/$walk/m;
+    $sub =~ s/\Q*** isglobal ***\E/0/m;
 	my $subref = eval $sub;
     die "Compiling _get_var: $@" if $@;
 	no strict 'refs';
 	*{'HTML::Template::Compiled::_get_var'} = $subref;
 	$sub = $code;
 	$sub =~ s/^\Q*** walk ***\E$/$global/m;
+    $sub =~ s/\Q*** isglobal ***\E/1/m;
 	$subref = eval $sub;
     die "Compiling _get_var_global: $@" if $@;
 	*{'_get_var_global'} = $subref;
-}
-
-# and another two ugly subroutines
-
-sub _get_var_sub {
-    my ( $self, $P, $ref, $final, @paths ) = @_;
-    my $var = $self->_get_var( $P, $ref, $final, @paths );
-    if ( $ENABLE_SUB and ref $var eq 'CODE' ) {
-        return $var->();
-    }
-    return $var;
-}
-sub _get_var_sub_global {
-    my ( $self, $P, $ref, $final, @paths ) = @_;
-    my $var = $self->_get_var_global( $P, $ref, $final, @paths );
-    if ( $ENABLE_SUB and $final and ref $var eq 'CODE' ) {
-        return $var->();
-    }
-    return $var;
 }
 
 # end ugly code, phooey
@@ -1612,14 +1631,12 @@ sub output {
 sub import {
     my ( $class, %args ) = @_;
     if ( $args{compatible} ) {
-        $class->EnableSub(1);
         $class->CaseSensitive(0);
         $class->SearchPathOnInclude(0);
         $class->UseQuery(1);
     }
     elsif ( $args{speed} ) {
         # default at the moment
-        $class->EnableSub(0);
         $class->CaseSensitive(1);
         $class->SearchPathOnInclude(1);
         $class->UseQuery(0);
@@ -1632,6 +1649,7 @@ sub ExpireTime {
 }
 
 sub EnableSub {
+    carp "Warning: Subref variables are not supported any more, use HTML::Template::Compiled::Classic instead";
     my ($class, $bool) = @_;
     $ENABLE_SUB = $bool ? 1 : 0;
 }
@@ -1721,6 +1739,8 @@ __END__
   </TMPL_LOOP>
 
 =head1 DESCRIPTION
+
+For a quick reference, see L<HTML::Template::Compiled::Reference>.
 
 HTML::Template::Compiled (HTC) is a template system which uses the same
 template syntax as HTML::Template and the same perl API (see L<"COMPATIBILITY">
@@ -1934,8 +1954,9 @@ are converted to uppercase, and the following tags are the same:
 
 =item subref variables
 
-default is 0 (off). Set it via
-    HTML::Template::Compiled->EnableSub(1);
+As of version 0.69, subref variables are not supported any more. Use
+L<HTML::Template::Compiled::Classic> (contained in this distribution)
+instead.
 
 =item search_path_on_include
 
@@ -2300,7 +2321,10 @@ the moment:
  <TMPL_VAR object.method>
 
 Don't use ->, though, like you could in earlier version. Var names can contain:
-Numbers, letters, '.', '/', '+', '-' and '_'. (Just like HTML::Template)
+Numbers, letters, '.', '/', '+', '-' and '_', just like HTML::Template. Note that
+if your var names contain dots, though, they will be treated as hash
+dereferences. If you want literal dots, use L<HTML::Template::Compiled::Classic>
+instead.
  
 =item default_path (fixed)
 

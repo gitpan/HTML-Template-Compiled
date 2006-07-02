@@ -1,8 +1,11 @@
-# $Id: 03_param.t,v 1.12 2006/04/26 21:21:44 tinita Exp $
+# $Id: 03_param.t,v 1.13 2006/07/02 17:32:45 tinita Exp $
 
 use lib 'blib/lib';
-use Test::More tests => 9;
-BEGIN { use_ok('HTML::Template::Compiled') };
+use Test::More tests => 11;
+BEGIN {
+    use_ok('HTML::Template::Compiled');
+    use_ok('HTML::Template::Compiled::Classic');
+}
 
 {
 local $HTML::Template::Compiled::DEFAULT_QUERY = 1;
@@ -44,13 +47,28 @@ literal_dot_is_ok: {
     # to first check if a dot is literal
     # part of the name before treating it magically. 
     # This is important for a smooth upgrade path. 
-    my $htc = HTML::Template::Compiled->new(
+    my $htc = HTML::Template::Compiled::Classic->new(
         path => 't/templates',
         scalarref => \'<tmpl_var foo.bar>',
     );
     $htc->param('foo.bar', 'WORKS');
     like($htc->output, qr/WORKS/, "literal dot is OK");
 }
+
+subref_variables: {
+    my $htc = HTML::Template::Compiled::Classic->new(
+        scalarref => \"<TMPL_VAR foo><TMPL_LOOP loop><TMPL_VAR a><TMPL_VAR foo></TMPL_LOOP>",
+        global_vars => 1,
+    );
+    $htc->param(
+        foo => sub { return "bar" },
+        loop => [{a=>23}],
+    );
+    my $out = $htc->output;
+    #print "($out)\n";
+    cmp_ok($out, 'eq', "bar23bar", "subref variables");
+}
+
 
 }
 

@@ -12,6 +12,7 @@ lib/HTML/Template/Compiled/Expression/Conditional.pm
 lib/HTML/Template/Compiled/Expression/Function.pm
 lib/HTML/Template/Compiled/Expression.pm
 lib/HTML/Template/Compiled/Reference.pod
+lib/HTML/Template/Compiled/Classic.pm
 examples/test.htc
 examples/test.htc.20
 examples/included.htc
