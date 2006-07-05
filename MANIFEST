@@ -13,6 +13,7 @@ lib/HTML/Template/Compiled/Expression/Function.pm
 lib/HTML/Template/Compiled/Expression.pm
 lib/HTML/Template/Compiled/Reference.pod
 lib/HTML/Template/Compiled/Classic.pm
+lib/HTML/Template/Compiled/Lazy.pm
 examples/test.htc
 examples/test.htc.20
 examples/included.htc
@@ -45,6 +46,7 @@ t/19_query.t
 t/20_precompile.t
 t/21_while.t
 t/22_pod.t
+t/23_tagstyles.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html

@@ -91,7 +91,7 @@ Can be used in C<VAR>-tags.
 
     <%loop cds alias="cd" %><%= cd.title %><%/loop cds %>
 
-Can be used in C<LOOP> (and it's planned for C<WHILE>)
+Can be used in C<LOOP> and C<WHILE>
 
 =back
 

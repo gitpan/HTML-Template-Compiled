@@ -1,4 +1,4 @@
-# $Id: 21_while.t,v 1.1 2006/04/27 21:30:26 tinita Exp $
+# $Id: 21_while.t,v 1.2 2006/07/05 19:00:55 tinita Exp $
 use warnings;
 use strict;
 use lib qw(blib/lib t);
@@ -41,7 +41,7 @@ use HTC_Utils qw($cache $tdir &cdir);
         #}
     $htc->param(iterator => $iterator);
     my $out = $htc->output;
-    cmp_ok($out,"=~", qr{23.*24.*25}s, "while");
+    cmp_ok($out,"=~", qr{23.*24.*25.*23.*24.*25}s, "while");
     #print "out: $out\n";
 
 }
@@ -49,8 +49,11 @@ use HTC_Utils qw($cache $tdir &cdir);
 
 __DATA__
 <%with iterator%>
-<%while next%>
-<%VAR NAME="_" %>
+<%while next %>
+    <%VAR NAME="_" %>
 <%/while%>
-<%/with%>
+<%while next alias=hiThere%>
+    <%VAR NAME="hiThere" %>
+<%/while%>
+<%/with iterator%>
 

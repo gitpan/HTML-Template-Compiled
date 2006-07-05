@@ -1,8 +1,8 @@
 package HTML::Template::Compiled::Classic;
-# $Id: Classic.pm,v 1.2 2006/07/02 17:32:13 tinita Exp $
+# $Id: Classic.pm,v 1.3 2006/07/03 00:31:04 tinita Exp $
 use strict;
 use warnings;
-our $VERSIOn = "0.01";
+our $VERSION = "0.01";
 
 use base 'HTML::Template::Compiled';
 

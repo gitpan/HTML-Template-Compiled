@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.15 2006/06/15 20:19:37 tinita Exp $
+# $Id: Parser.pm,v 1.17 2006/07/02 22:09:46 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -37,6 +37,7 @@ use constant OPENING_TAG => 1;
 use constant CLOSING_TAG => 2;
 
 use constant ATTR_TAGSTYLE => 0;
+use constant ATTR_TAGNAMES => 1;
 
 # under construction (sic!)
 sub new {
@@ -51,18 +52,27 @@ sub new {
 sub set_tagstyle { $_[0]->[ATTR_TAGSTYLE] = $_[1] }
 sub get_tagstyle { $_[0]->[ATTR_TAGSTYLE] }
 
+sub set_tagnames { $_[0]->[ATTR_TAGNAMES] = $_[1] }
+sub get_tagnames { $_[0]->[ATTR_TAGNAMES] }
+
 my $supported_tags = {
     classic => ['<TMPL_'      ,'>',     '</TMPL_',      '>',    ],
     comment => ['<!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->'],
     asp     => ['<%'          ,'%>',    '<%/',          '%>',   ],
-    php     => ['<\?'         ,'%>',    '<%/',          '%>',   ],
+    php     => ['<\?'         ,'\?>',    '<\?/',          '\?>',   ],
     tt      => ['\[%'         ,'%\]',   '\[%/',         '%\]'   ],
 };
 
 
 sub init {
     my ($self, %args) = @_;
-    my $tagstyle_def = $args{tagstyle} || [];
+    my $tagstyle = $self->_create_tagstyle($args{tagstyle});
+    $self->[ATTR_TAGSTYLE] = $tagstyle;
+}
+
+sub _create_tagstyle {
+    my ($self, $tagstyle_def) = @_;
+    $tagstyle_def ||= [];
     my $tagstyle;
     my $named_styles = {
         map {
@@ -76,18 +86,18 @@ sub init {
         }
         elsif (!ref $def) {
             # strings
-            if ($def =~ s/^-//) {
+            if ($def =~ m/^-(.*)/) {
                 # deactivate style
-                delete $named_styles->{$def};
+                delete $named_styles->{"$1"};
             }
-            elsif ($def =~ s/^\+?//) {
+            elsif ($def =~ m/^\+?(.*)/) {
                 # activate style
-                $named_styles->{$def} = $supported_tags->{$def};
+                $named_styles->{"$1"} = $supported_tags->{"$1"};
             }
         }
     }
     push @$tagstyle, values %$named_styles;
-    $self->[ATTR_TAGSTYLE] = $tagstyle;
+    return $tagstyle;
 }
 
 {
@@ -238,6 +248,12 @@ sub find_attr {
     $name = "NAME" unless defined $name;
     return ($name, $var, $orig);
 }
+
+{
+    my $default_parser = __PACKAGE__->new;
+    sub default { return bless [@$default_parser], __PACKAGE__ }
+}
+
 1;
 
 __END__

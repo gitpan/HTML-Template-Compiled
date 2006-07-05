@@ -1,0 +1,66 @@
+package HTML::Template::Compiled::Lazy;
+# $Id: Lazy.pm,v 1.1 2006/07/04 01:57:21 tinita Exp $
+use strict;
+use warnings;
+our $VERSION = "0.01";
+
+use base 'HTML::Template::Compiled';
+
+sub from_scratch {
+    my ($self) = @_;
+    # dummy method. wait until real compilation until output().
+    return $self;
+}
+
+sub compile_early { 0 }
+
+sub output {
+    my ( $self, @args ) = @_;
+    my $perl = $self->getPerl;
+    unless ($perl) {
+        $self = $self->SUPER::from_scratch();
+    }
+    $self->SUPER::output(@args);
+}
+
+sub get_code {
+    my ($self) = @_;
+    my $perl = $self->getPerl;
+    unless ($perl) {
+        $self = $self->SUPER::from_scratch;
+        $perl = $self->getPerl;
+    }
+    return $perl;
+}
+
+1;
+
+__END__
+
+=head1 NAME
+
+HTML::Template::Compiled::Lazy
+
+=head1 SYNOPSIS
+
+    use HTML::Template::Compiled::Lazy;
+    my $htcc = HTML::Template::Compiled::Lazy->new(
+        # usual parameters for HTML::Template::Compiled
+    );
+    $htcl->param(...);
+    # file wasn't compiled yet
+    print $htcl->output; # now compile and output!
+
+=head1 DESCRIPTION
+
+This class does not compile templates before calling C<output()>.
+This includes C<TMPL_INCLUDE>s. This can be useful in CGI environments.
+If your template has got a lot of includes L<HTML::Template::Compiled> will
+compile all of them, even if they aren't needed because they are never
+reached (in a C<TMPL_IF>, for example).
+
+L<HTML::Template::Compiled::Lazy> also won't complain if the file does
+not exist - it will complain when you call C<output()>, though.
+
+=cut
+
