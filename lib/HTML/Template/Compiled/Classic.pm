@@ -1,8 +1,8 @@
 package HTML::Template::Compiled::Classic;
-# $Id: Classic.pm,v 1.3 2006/07/03 00:31:04 tinita Exp $
+# $Id: Classic.pm,v 1.6 2006/07/11 22:41:16 tinita Exp $
 use strict;
 use warnings;
-our $VERSION = "0.01";
+our $VERSION = "0.02";
 
 use base 'HTML::Template::Compiled';
 
@@ -28,8 +28,17 @@ sub _get_var_global_sub {
 
 sub _make_path {
     my ( $self, %args ) = @_;
+    my %loop_context = (
+        __counter__ => '$ix+1',
+        __first__   => '$ix == $[',
+        __last__    => '$ix == $size',
+        __odd__     => '!($ix & 1)',
+        __inner__   => '$ix != $[ && $ix != $size',
+    );
+
     if ( $self->getLoop_context && $args{var} =~ m/^__(\w+)__$/ ) {
-        return "\$\L$args{var}\E";
+        my $lc = $loop_context{ $args{var} };
+        return $lc;
     }
     my $getvar = '_get_var'
         . ($self->getGlobal_vars&1 ? '_global' : '')
@@ -46,11 +55,11 @@ __END__
 
 =head1 NAME
 
-HTML::Template::Compiled::Classic
+HTML::Template::Compiled::Classic - Provide the classic functionality like HTML::Template
 
 =head1 SYNOPSIS
 
-    use HTML::Template::Compiled::Classic;
+    use HTML::Template::Compiled::Classic compatible => 1;
     my $htcc = HTML::Template::Compiled::Classic->new(
         # usual parameters for HTML::Template::Compiled
     );
@@ -85,7 +94,7 @@ In L<HTML::Template>, the following works:
     print $ht->output; # prints 'bar'
 
 This doesn't work in L<HTML::Template::Compiled> (in the past it did,
-but as of this version it won't any more, sorry).
+but as of HTC version 0.70 it won't any more, sorry).
 
 =back
 

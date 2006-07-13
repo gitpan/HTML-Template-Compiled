@@ -15,6 +15,7 @@ lib/HTML/Template/Compiled/Reference.pod
 lib/HTML/Template/Compiled/Classic.pm
 lib/HTML/Template/Compiled/Lazy.pm
 examples/test.htc
+examples/test.htcc
 examples/test.htc.20
 examples/included.htc
 examples/included.tt
@@ -53,6 +54,7 @@ t/templates/include.html
 t/templates/dhtml.htc
 t/templates/out_fh.htc
 t/templates/filter.htc
+t/templates/filter_included.htc
 t/templates/dyn_include.htc
 t/templates/dyn_included1.htc
 t/templates/dyn_included2.htc

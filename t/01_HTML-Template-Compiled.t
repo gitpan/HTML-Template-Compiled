@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.14 2006/05/31 22:36:44 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.15 2006/07/13 18:48:19 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 6;
@@ -50,15 +50,20 @@ my %args = (
 	loop_context_vars => 1,
 	line_numbers => 1,
 	filename => 'songs.html',
-	method_call => '/',
-	deref => '.',
+#	method_call => '/',
+#	deref => '.',
 	debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
 	# for testing without cache comment out
 	cache_dir => $cache,
 	dumper => sub {Data::Dumper->Dump([$_[0]],['DUMP'])},
 );
 sleep 2;
-my $htc = HTML::Template::Compiled->new(%args);
+@HTML::Template::Compiled::subclass::ISA = qw(HTML::Template::Compiled);
+my $subclass = 'HTML::Template::Compiled::subclass';
+sub HTML::Template::Compiled::subclass::method_call { '/' }
+sub HTML::Template::Compiled::subclass::deref { '.' }
+
+my $htc = $subclass->new(%args);
 ok($htc, "template created");
 $htc->param(%$hash);
 
@@ -106,14 +111,14 @@ EOM
 	truncate $fh, 0;
 	print $fh $txt;
 	close $fh;
-	my $htc = HTML::Template::Compiled->new(%args);
+	my $htc = $subclass->new(%args);
 	$htc->param(%$hash);
 	$out = $htc->output;
 	$out =~ s/^\s+//mg; $out =~ tr/\n\r//d;
 	cmp_ok($out, "eq", $exp, "output after update ok");
 	$exp =~ s/INCLUDED/INCLUDED_NEW/;
 	sleep 2;
-	$htc = HTML::Template::Compiled->new(%args);
+	$htc = $subclass->new(%args);
 	$htc->param(%$hash);
 	$out = $htc->output;
 	$out =~ s/^\s+//mg; $out =~ tr/\n\r//d;
@@ -129,7 +134,7 @@ EOM
 }
 {
 	open my $fh, '<', $include or die $!;
-	my $htc = HTML::Template::Compiled->new(
+	my $htc = $subclass->new(
 		filehandle => $fh,
 	);
 	$htc->param(%$hash);

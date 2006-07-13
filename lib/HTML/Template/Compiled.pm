@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.200 2006/07/05 18:54:33 tinita Exp $
+# $Id: Compiled.pm,v 1.211 2006/07/13 18:49:43 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.70"
+$VERSION = "0.71"
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.70";
+our $VERSION = "0.71";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -44,9 +44,6 @@ use HTML::Template::Compiled::Parser qw(
   $UNDEF
 
 );
-use vars qw(
-  $__first__ $__last__ $__inner__ $__odd__ $__counter__
-);
 
 use constant MTIME    => 0;
 use constant CHECKED  => 1;
@@ -66,7 +63,6 @@ use constant T_CASE     => 'CASE';
 use constant T_INCLUDE  => 'INCLUDE';
 use constant T_LOOP    => 'LOOP';
 use constant T_WHILE   => 'WHILE';
-use constant T_LOOP_CONTEXT => 'LOOP_CONTEXT';
 use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
 
 use constant INDENT   => '    ';
@@ -117,166 +113,203 @@ BEGIN {
 
 sub new {
     my ( $class, %args ) = @_;
-    my $self = [];
-    bless $self, $class;
-    unless (defined $args{path}) {
-        $args{path} = [];
-        defined $ENV{'HTML_TEMPLATE_ROOT'} and push @{$args{path}}, $ENV{'HTML_TEMPLATE_ROOT'};
-    }
-    elsif (!ref $args{path}) {
-        $args{path} = [$args{path}];
-    }
-    defined $ENV{'HTML_TEMPLATE_ROOT'} and push @{$args{path}}, $ENV{'HTML_TEMPLATE_ROOT'};
-
-    #print "PATH: $args{path}!!\n";
-    if ( $args{perl} ) {
-        D && $self->log("new(perl) filename: $args{filename}");
-
-        # we have perl code already from cache!
-        $self->init(%args);
-        $self->setPerl( $args{perl} );
-        $self->setCache( exists $args{cache} ? $args{cache} : 1 );
-        $self->setFilename( $args{filename} );
-        $self->setCache_dir( $args{cache_dir} );
-        $self->setPath( $args{path} );
-        $self->setScalar( $args{scalarref} );
-
-        unless ( $self->getScalar ) {
-            my $file =
-              $self->createFilename( $self->getPath, $self->getFilename );
-            $self->setFile($file);
-        }
-        return $self;
-    }
-
+    D && $class->log("new()");
     # handle the "type", "source" parameter format (does anyone use it?)
-    if ( exists( $args{type} ) ) {
-        exists( $args{source} )
-          or croak(
-            "$class->new() called with 'type' parameter set, but no 'source'!");
-        (
-                 $args{type} eq 'filename'
-              or $args{type} eq 'scalarref'
-              or $args{type} eq 'arrayref'
-              or $args{type} eq 'filehandle'
-          )
-          or croak(
-"$class->new() : type parameter must be set to 'filename', 'arrayref', 'scalarref' or 'filehandle'!"
-          );
+    if ( exists $args{type} ) {
+        exists $args{source} or $class->_error_no_source();
+        $args{type} =~ m/^(?:filename|scalarref|arrayref|filehandle)$/
+          or $class->_error_wrong_source();
         $args{ $args{type} } = $args{source};
         delete $args{type};
         delete $args{source};
     }
+    if (exists $args{filename}) {
+        return $class->new_file($args{filename}, %args);
+    }
+    elsif (exists $args{filehandle}) {
+        return $class->new_filehandle($args{filehandle}, %args);
+    }
+    elsif (exists $args{arrayref}) {
+        return $class->new_array_ref($args{arrayref}, %args);
+    }
+    elsif (exists $args{scalarref}) {
+        return $class->new_scalar_ref($args{scalarref}, %args);
+    }
+    croak("$class->new called with not enough arguments");
+}
 
-    # check for too much arguments
-    my $source_count = 0;
-    exists( $args{filename} )   and $source_count++;
-    exists( $args{filehandle} ) and $source_count++;
-    exists( $args{arrayref} )   and $source_count++;
-    exists( $args{scalarref} )  and $source_count++;
-    if ( $source_count != 1 ) {
-        croak(
-"$class->new called with multiple (or no) template sources specified!"
-              . "A valid call to new() has exactly ne filename => 'file' OR exactly one"
-              . " scalarref => \\\$scalar OR exactly one arrayref => \\\@array OR"
-              . " exactly one filehandle => \*FH" );
-    }
+sub _error_wrong_source {
+    my ($self) = @_;
+    my $class = ref $self || $self;
+    croak("$class->new() : type parameter must be set to 'filename', "
+        . "'arrayref', 'scalarref' or 'filehandle'!");
+}
 
-    # check that filenames aren't empty
-    if ( exists( $args{filename} ) ) {
-        croak("$class->new called with empty filename parameter!")
-          unless defined $args{filename}
-          and length $args{filename};
+sub _error_no_source {
+    my ($self) = @_;
+    my $class = ref $self || $self;
+    croak("$class->new() called with 'type' parameter set,"
+       . " but no 'source'!");
+}
+
+sub _error_template_sources {
+    my ($self) = @_;
+    my $class = ref $self || $self;
+    croak(
+        "$class->new called with multiple (or no) template sources specified!"
+          . "A valid call to new() has exactly ne filename => 'file' OR exactly one"
+          . " scalarref => \\\$scalar OR exactly one arrayref => \\\@array OR"
+          . " exactly one filehandle => \*FH"
+      );
+}
+
+sub _error_empty_filename {
+    my ($self) = @_;
+    my $class = ref $self || $self;
+    croak("$class->new called with empty filename parameter!");
+}
+
+sub new_from_perl {
+    my ($class, %args) = @_;
+    my $self = bless [], $class;
+    D && $self->log("new(perl) filename: $args{filename}");
+
+    $self->init(%args);
+    $self->setPerl( $args{perl} );
+    $self->setCache( exists $args{cache} ? $args{cache} : 1 );
+    $self->setFilename( $args{filename} );
+    $self->setCache_dir( $args{cache_dir} );
+    $self->setPath( $args{path} );
+    $self->setScalar( $args{scalarref} );
+
+    unless ( $self->getScalar ) {
+        my $file =
+          $self->createFilename( $self->getPath, $self->getFilename );
+        $self->setFile($file);
     }
-    if (   defined $args{filename}
-        or $args{scalarref}
-        or $args{arrayref}
-        or $args{filehandle} )
-    {
-        D && $self->log("new()");
-        my $t = $self->create(%args);
-        return $t;
-    }
+    return $self;
 }
 
 sub new_file {
-    return shift->new( filename => @_ );
+    my ($class, $filename, %args) = @_;
+    my $self = bless [], $class;
+    $self->_check_deprecated_args(%args);
+    $args{path} = $self->build_path($args{path});
+    $self->_error_empty_filename()
+        if (!defined $filename or !length $filename);
+    $args{filename} = $filename;
+    if (exists $args{scalarref}
+        || exists $args{arrayref} || exists $args{filehandle}) {
+        $self->_error_template_sources;
+    }
+    $self->setFilename( $filename );
+    $self->setCache( exists $args{cache} ? $args{cache} : 1 );
+    $self->setCache_dir( $args{cache_dir} );
+    $self->setPath( $args{path} );
+    if (my $t = $self->from_cache()) {
+        return $t;
+    }
+    $self->init(%args);
+    $self->from_scratch;
+    return $self;
 }
 
 sub new_filehandle {
-    return shift->new( filehandle => @_ );
+    my ($class, $filehandle, %args) = @_;
+    my $self = bless [], $class;
+    $self->_check_deprecated_args(%args);
+    if (exists $args{scalarref}
+        || exists $args{arrayref} || exists $args{filename}) {
+        $self->_error_template_sources;
+    }
+    $args{filehandle} = $filehandle;
+    $args{path} = $self->build_path($args{path});
+    $self->setFilehandle( $args{filehandle} );
+    $self->setCache(0);
+    $self->setCache_dir( $args{cache_dir} );
+    if (my $t = $self->from_cache()) {
+        return $t;
+    }
+    $self->init(%args);
+    $self->from_scratch;
+    return $self;
 }
 
 sub new_array_ref {
-    return shift->new( arrayref => @_ );
+    my ($class, $arrayref, %args) = @_;
+    if (exists $args{scalarref}
+        || exists $args{filehandle} || exists $args{filename}) {
+        $class->_error_template_sources;
+    }
+    my $scalarref = \( join '', @$arrayref );
+    delete $args{arrayref};
+    return $class->new_scalar_ref($scalarref, %args);
 }
 
 sub new_scalar_ref {
-    return shift->new( scalarref => @_ );
+    my ($class, $scalarref, %args) = @_;
+    my $self = bless [], $class;
+    $self->_check_deprecated_args(%args);
+    if (exists $args{arrayref}
+        || exists $args{filehandle} || exists $args{filename}) {
+        $self->_error_template_sources;
+    }
+    $args{scalarref} = $scalarref;
+    $args{path} = $self->build_path($args{path});
+    $self->setCache( exists $args{cache} ? $args{cache} : 1 );
+    $self->setCache_dir( $args{cache_dir} );
+    $self->setScalar( $args{scalarref} );
+    my $text = $self->getScalar;
+    my $md5  = Digest::MD5::md5_base64($$text);
+    $self->setFilename($md5);
+    D && $self->log("md5: $md5");
+    $self->setPath( $args{path} );
+    if (my $t = $self->from_cache()) {
+        return $t;
+    }
+    $self->init(%args);
+    $self->from_scratch;
+    return $self;
 }
 
-sub create {
-    my ( $self, %args ) = @_;
+sub build_path {
+    my ($self, $path) = @_;
+    unless (defined $path) {
+        $path = [];
+    }
+    elsif (!ref $path) {
+        $path = [$path];
+    }
+    defined $ENV{'HTML_TEMPLATE_ROOT'}
+        and push @$path, $ENV{'HTML_TEMPLATE_ROOT'};
+    return $path;
+}
 
-    #D && $self->log("create(filename=>$args{filename})");
-    D && $self->stack;
-    if (%args) {
-        $self->setCache( exists $args{cache} ? $args{cache} : 1 );
-        $self->setCache_dir( $args{cache_dir} );
-        if ( defined $args{filename}) {
-            $self->setFilename( $args{filename} );
-            D && $self->log( "filename: " . $self->getFilename );
-            $self->setPath( $args{path} );
-        }
-        elsif ( $args{scalarref} || $args{arrayref} ) {
-            $args{scalarref} = \( join '', @{ $args{arrayref} } )
-              if $args{arrayref};
-            $self->setScalar( $args{scalarref} );
-            my $text = $self->getScalar;
-            my $md5  = Digest::MD5::md5_base64($$text);
-            D && $self->log("md5: $md5");
-            $self->setFilename($md5);
-            $self->setPath( $args{path} );
-        }
-        elsif ( $args{filehandle} ) {
-            $self->setFilehandle( $args{filehandle} );
-            $self->setCache(0);
-        }
-    }
-    D && $self->log("trying from_cache()");
-    my $t = $self->from_cache();
-    if ($t) {
-        $t = $t->clone;
-    }
-    D && $self->log(\%args);
-    if ($t) {
-        if ( my $fm = $args{formatter} || $self->getFormatter ) {
-            unless ( $t->getFormatter ) {
-                $t->setFormatter($fm);
-            }
-        }
-        if ( my $dumper = $args{dumper} || $self->getDumper ) {
-            unless ( $t->getDumper ) {
-                $t->setDumper($dumper);
-            }
-        }
-        if ( my $filter = $args{filter} || $self->getFilter ) {
-            unless ( $t->getFilter ) {
-                $t->setDumper($filter);
-            }
-        }
-    }
-    return $t if $t;
-    D && $self->log("tried from_cache()");
 
-    #D && $self->log("tried from_cache() filename=".$self->getFilename);
-    # ok, seems we have nothing in cache, so compile
-    $self->init(%args) if %args;
-    return $self->from_scratch;
+sub init_runtime_args {
+    my ($self, %args) = @_;
+    D && $self->log("init_runtime_args()");
+    if ( my $fm = $args{formatter} ) {
+        unless ( $self->getFormatter ) {
+            $self->setFormatter($fm);
+        }
+    }
+    if ( my $dumper = $args{dumper} ) {
+        unless ( $self->getDumper ) {
+            $self->setDumper($dumper);
+        }
+    }
+    if ( my $filter = $args{filter} ) {
+        unless ( $self->getFilter ) {
+            $self->setFilter($filter);
+        }
+    }
+    return $self;
 }
 
 sub from_scratch {
     my ($self) = @_;
+    D && $self->log("from_scratch filename=".$self->getFilename);
     my $fname = $self->getFilename;
     if ( defined $fname and !$self->getScalar and !$self->getFilehandle ) {
 
@@ -292,6 +325,7 @@ sub from_scratch {
     $self->compile();
     return $self;
 }
+
 sub from_cache {
     my ($self) = @_;
     my $t;
@@ -300,14 +334,19 @@ sub from_cache {
     # try to get memory cache
     if ( $self->getCache ) {
         $t = $self->from_mem_cache();
-        return $t if $t;
+        if ($t) {
+            return $t;
+        }
     }
     D && $self->log( "from_cache() 2 filename=" . $self->getFilename );
 
     # not in memory cache, try file cache
     if ( $self->getCache_dir ) {
-        $t = $self->include();
-        return $t if $t;
+        #$self->init_runtime_args(%args);
+        $t = $self->from_file_cache();
+        if ($t) {
+            return $t;
+        }
     }
     D && $self->log( "from_cache() 3 filename=" . $self->getFilename );
     return;
@@ -315,6 +354,9 @@ sub from_cache {
 
 {
     my $cache;
+    # {
+    #   $cachedir => {
+    #     $filename => $htc_object,
     my $times;
 
     sub from_mem_cache {
@@ -326,23 +368,25 @@ sub from_cache {
         my $times  = $times->{$dir}->{$fname};
         D && $self->log("\$cached=$cached \$times=$times \$fname=$fname\n");
         if ( $cached && $self->uptodate($times) ) {
-            return $cached;
+            return $cached->clone;
         }
         D && $self->log("no or old memcache");
         return;
     }
+
     sub add_mem_cache {
         my ( $self, %times ) = @_;
         D && $self->stack(1);
         my $dir = $self->getCache_dir;
         $dir = '' unless defined $dir;
         my $fname = $self->getFilename;
-        D && $self->log( "add_mem_cache " . $fname );
+        D && $self->log( "add_mem_cache $fname" );
         my $clone = $self->clone;
         $clone->clear_params();
         $cache->{$dir}->{$fname} = $clone;
         $times->{$dir}->{$fname} = \%times;
     }
+
     sub clear_cache {
         my $dir = $_[0]->getCache_dir;
 
@@ -353,6 +397,7 @@ sub from_cache {
         $cache->{$dir} = {};
         $times->{$dir} = {};
     }
+
     sub clear_filecache {
         my ( $self, $dir ) = @_;
         defined $dir
@@ -458,6 +503,7 @@ sub compile {
 
     }
 }
+
 sub add_file_cache {
     my ( $self, $source, %times ) = @_;
     $self->lock;
@@ -470,11 +516,7 @@ sub add_file_cache {
     open my $fh, ">$cache/$plfile.pl" or die $!;    # TODO File::Spec
     my $path     = $self->getPath;
     my $path_str = '['
-      . (
-        ref $path eq 'ARRAY'
-        ? ( join ', ', map { $self->quote_file($_) } @$path )
-        : $self->quote_file($path)
-      )
+      . ( join ', ', map { $self->quote_file($_) } @$path )
       . ']';
     my $isScalar = $self->getScalar ? 1 : 0;
     my $query_info = $self->getUse_query;
@@ -529,7 +571,7 @@ EOM
     $self->unlock;
 }
 
-sub include {
+sub from_file_cache {
     my ($self) = @_;
     D && $self->stack;
     my $file = $self->getScalar || $self->getFilehandle
@@ -567,19 +609,17 @@ sub include_file {
     }
     if ($@) {
         # we had an error while including
-        die "Eror while inclundig '$req': $@";
+        die "Error while including '$req': $@";
     }
     my $cached_version = $r->{version};
     my $class = $r->{class} || 'HTML::Template::Compiled';
     my $args = $r->{htc};
     # we first just create from cached perl-code
-    my $t = $class->new(%$args);
-    unless ($VERSION eq $cached_version && $t->uptodate( $r->{times} )) {
+    my $t = $class->new_from_perl(%$args);
+    if ($VERSION ne $cached_version || !$t->uptodate( $r->{times} )) {
         # is not uptodate
-        # print STDERR "$t is not uptodate\n";
-        $t->compile;
+        return;
     }
-    # recompile if timestamps have changed or HTC version
     $t->add_mem_cache(
         checked => $r->{times}->{checked},
         mtime   => $r->{times}->{mtime},
@@ -634,14 +674,24 @@ sub dump {
     }
 }
 
+sub _check_deprecated_args {
+    my ($self, %args) = @_;
+    for (qw(method_call deref formatter_path)) {
+        if (exists $args{method_call}) {
+            carp "Option $_ is deprecated, please inherit and"
+                . " overwrite the method '$_'";
+        }
+    }
+}
+
 sub init {
     my ( $self, %args ) = @_;
     my %defaults = (
 
         # defaults
-        method_call            => '.',
-        deref                  => '.',
-        formatter_path         => '/',
+        method_call            => $self->method_call(),
+        deref                  => $self->deref(),
+        formatter_path         => $self->formatter_path(),
         search_path_on_include => $SEARCHPATH,
         loop_context_vars      => 0,
         case_sensitive         => $CASE_SENSITIVE_DEFAULT,
@@ -702,6 +752,10 @@ sub get_code {
 }
 
 sub compile_early { 1 }
+
+sub method_call { '.' }
+sub deref { '.' }
+sub formatter_path { '/' }
 
 sub _compile {
     my ( $self, $text, $fname ) = @_;
@@ -819,18 +873,6 @@ EOM
                 $code .= qq#${indent}  my \$C = \\$varstr;\n#;
             }
 
-            # --------- TMPL_LOOP_CONTEXT
-            elsif ($is_open && $tname eq T_LOOP_CONTEXT) {
-                my $indent = INDENT x $level;
-                $code .= <<"EOM";
-${indent}local \$__counter__ = \$ix+1;
-${indent}local \$__first__   = \$ix == \$[;
-${indent}local \$__last__    = \$ix == \$size;
-${indent}local \$__odd__     = !(\$ix & 1);
-${indent}local \$__inner__   = !\$__first__ && !\$__last__;
-EOM
-            }
-
             # --------- TMPL_LOOP TMPL_WHILE
             elsif ($is_open && ($tname eq T_LOOP || $tname eq T_WHILE)
                 && exists $attr->{NAME}) {
@@ -881,16 +923,6 @@ ${indent}${ind}for my \$ix (\$[..\$size) \{
 ${indent}${ind}${ind}my \$C = \\ (\$array->[\$ix]);
 $lexi
 EOM
-                    if ($self->getLoop_context) {
-                        my $indent = INDENT x $level;
-                        $code .= <<"EOM";
-${indent}local \$__counter__ = \$ix+1;
-${indent}local \$__first__   = \$ix == \$[;
-${indent}local \$__last__    = \$ix == \$size;
-${indent}local \$__odd__     = !(\$ix & 1);
-${indent}local \$__inner__   = !\$__first__ && !\$__last__;
-EOM
-                    }
                 }
             }
 
@@ -1045,7 +1077,6 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 my $varstr;
                 my $path = $self->getPath();
                 my $dir;
-                $path = [$path] unless ref $path eq 'ARRAY';
                 my $dynamic = $tname eq T_INCLUDE_VAR ? 1 : 0;
 
                 if ($dynamic) {
@@ -1072,7 +1103,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                         D && $self->log("compile include $filename!!");
                         $self->compile_early()
                             and my $cached_or_new =
-                          $self->clone_init( $path, $filename,
+                          $self->new_from_object( $path, $filename,
                             $self->getCache_dir );
                     }
                 }
@@ -1090,7 +1121,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 $code .= <<"EOM";
 ${indent}\{
 ${indent}  if (defined (my \$file = $varstr)) \{
-${indent}    my \$new = \$t->clone_init($path,\$file,$cache);
+${indent}    my \$new = \$t->new_from_object($path,\$file,$cache);
 ${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
 ${indent}  \}
 ${indent}\}
@@ -1168,6 +1199,8 @@ EOM
     else {
         $code = "";
     }
+    my $l = length $code;
+    #print STDERR "length $fname: $l\n";
     my $sub = eval $code;
     die "code: $@" if $@;
     return $code, $sub;
@@ -1224,21 +1257,27 @@ sub quote_file {
 # parameter hash. the third argument to get_var is 'final'.
 # <tmpl_var foo> is a 'final' path, and <tmpl_with foo> is not.
 # so final means it's in 'print-context'.
+
 sub _make_path {
     my ( $self, %args ) = @_;
     my $lexicals = $args{lexicals};
-    my $local_loop_context = 0;
     if ( grep { defined $_ && $args{var} eq $_ } @$lexicals ) {
         return "\$$args{var}";
     }
     my $root = 0;
+    my %loop_context = (
+        __counter__ => '$ix+1',
+        __first__   => '$ix == $[',
+        __last__    => '$ix == $size',
+        __odd__     => '!($ix & 1)',
+        __inner__   => '$ix != $[ && $ix != $size',
+    );
     if ( $self->getLoop_context && $args{var} =~ m/^__(\w+)__$/ ) {
-        return "\$\L$args{var}\E";
+        my $lc = $loop_context{ $args{var} };
+        return $lc;
     }
-    elsif ( $args{var} =~ m/^__(\w+)__$/ ) {
-        $local_loop_context = 1;
-    }
-    elsif ( $args{var} =~ s/^_// ) {
+    elsif ( $args{var} =~ m/^_/ && $args{var} !~ m/^__(\w+)__$/) {
+        $args{var} =~ s/^_//;
         $root = 0;
     }
     elsif ($args{var} =~ m/^(\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)(\1?)/) {
@@ -1266,12 +1305,7 @@ sub _make_path {
     $getvar .= $self->getGlobal_vars&1 ? '_global' : '';
     my $varstr =
       "\$t->$getvar(\$P," . ( $root ? '$P' : '$$C' ) . ",$final,@paths)";
-    if ($local_loop_context) {
-        return "defined \$\L$args{var}\E ? \$\L$args{var}\E : $varstr";
-    }
-    else {
-        return $varstr;
-    }
+    return $varstr;
 }
 
 
@@ -1464,23 +1498,23 @@ sub clone {
     return bless [@$self], ref $self;
 }
 
-sub clone_init {
+# create from existing object (TMPL_INCLUDE)
+sub new_from_object {
     my ( $self, $path, $filename, $cache ) = @_;
     unless (defined $filename) {
-#        return;
         my ($file) = (caller(1))[3];
         croak "Filename is undef (in template $file)" unless defined $filename;
     }
-    my $new = bless [@$self], ref $self;
-    D && $self->log("clone_init($path,$filename,$cache)");
+    my $new = $self->clone;
+    D && $self->log("new_from_object($path,$filename,$cache)");
     $new->setFilename($filename);
     $new->setScalar();
     $new->setFilehandle();
     $new->setPath($path);
     $new->setPerl(undef);
-    $new = $new->create();
-    my $stack = $self->getGlobalstack || [];
-    $new->setGlobalstack($stack);
+    my $cached = $new->from_cache;
+    return $cached if $cached;
+    $new = $new->from_scratch;
     $new;
 }
 
@@ -1627,7 +1661,6 @@ sub uchash {
 
 sub output {
     my ( $self, $fh ) = @_;
-    my $perl = $self->getPerl;
     my $p = $self->[PARAM] || {};
     # if we only have an object as parameter
     $p = ref $p eq 'HASH'
@@ -1759,8 +1792,8 @@ for what you need to know if you want the same behaviour). Internally
 it works different, because it turns the template into perl code,
 and once that is done, generating the output is much faster than with
 HTML::Template (3-7 times at the moment, at least with my tests, and 3.5 times (see
-L<"Benchmarks"> for some examples), when both are run with loop_context_vars 0. See
-L<"TMPL_LOOP_CONTEXT"> for a special feature). It also can generate perl files so that
+L<"Benchmarks"> for some examples), when both are run with loop_context_vars 0.
+It also can generate perl files so that
 the next time the template is loaded it doesn't have to be parsed again. The best
 performance gain is probably reached in applications running under mod_perl, for example.
 
@@ -1859,6 +1892,8 @@ see L<"TMPL_NOPARSE">
 see L<"TMPL_VERBATIM">
 
 =item TMPL_LOOP_CONTEXT
+
+Not supported any more.
 
 turn on loop_context in template, see L<"TMPL_LOOP_CONTEXT">
 
@@ -2104,6 +2139,31 @@ It's just not documented, and internal method names might change in
 the near future. I'll try to fix the API and document which methods
 you can inherit.
 
+=head3 METHODS TO INHERIT
+
+=over 4
+
+=item method_call
+
+Default is C<sub method_call { '.' }>
+
+=item deref
+
+Default is C<sub deref { '.' }>
+
+=item formatter_path
+
+Default is C<sub formatter_path { '/' }>
+
+=item compile_early
+
+Define if every included file should be checked parsed at compile time
+of the including template or later when it is really used.
+
+L<HTML::Template::Compiled::Lazy> uses this.
+
+=back
+
 =head2 DEBUGGING
 
 For printing out the contents of all the parameters you can do:
@@ -2145,6 +2205,8 @@ to add a loop_context variable C<__current__>, if that makes sense.
 Seems more readable to non perlers than C<_>.
 
 =head2 TMPL_LOOP_CONTEXT
+
+Not supported any more.
 
 NOTE: I might drop this feature; I only added it for speed; maybe I can gain
 that speed by a different technique. Backgrund is that if loop_context_vars
@@ -2317,8 +2379,6 @@ Vars like C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>
 To enable loop_context_vars is a slow down, too (about 10%). See L<"TMPL_LOOP_CONTEXT"> for
 how to avoid this.
 
-See L<"TMPL_LOOP_CONTEXT"> for special features.
-
 =item global_vars (fixed)
 
 If set to 1, every outer variable can be accessed from anywhere in the enclosing scope.
@@ -2348,12 +2408,16 @@ or C<ESCAPE=URL>.
 
 =item deref (fixed)
 
+Deprecated. Please inherit and overwrite method 'deref'. See L<"INHERITANCE">
+
 Define the string you want to use for dereferencing, default is C<.> at the
 moment:
 
  <TMPL_VAR hash.key>
 
 =item method_call (fixed)
+
+Deprecated. Please inherit and overwrite method 'method_call'. See L<"INHERITANCE">
 
 Define the string you want to use for method calls, default is . at
 the moment:
@@ -2523,6 +2587,8 @@ methods.
   # Fullname: <tmpl_var obj/fullname>
 
 =item formatter_path (fixed)
+
+Deprecated. Please inherit and overwrite method 'formatter_path'. See L<"INHERITANCE">
 
 see formatter. Defaults to '/'
 

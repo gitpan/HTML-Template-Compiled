@@ -1,5 +1,12 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.71
+- Change: dropped TMPL_LOOP_CONTEXT (not really useful)
+- Bug Fix: Filters didn't work correctly when used with file caching
+- Change: deprecate options
+  method_call, deref and formatter_path. You must use inheritance
+  now instead
+
 0.70 Wed Jul  5 21:12:05 CEST 2006
 - Bug Fix: php-tag style wasn't parsed
 - New Feature: lazy loading with HTML::Template::Compiled::Lazy

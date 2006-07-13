@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 13_loop.t,v 1.5 2006/06/01 19:02:10 tinita Exp $
+# $Id: 13_loop.t,v 1.6 2006/07/11 19:40:05 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 4;
@@ -13,7 +13,8 @@ BEGIN { use_ok('HTML::Template::Compiled') };
 <tmpl_var iterator>
 </tmpl_loop>
 EOM
-		#debug => 1,
+		debug => 0,
+        loop_context_vars => 1,
 	);
 	$htc->param(array => [qw(a b c)]);
 	my $out = $htc->output;
@@ -21,23 +22,17 @@ EOM
 	cmp_ok($out, "eq", "abc", "tmpl_loop array alias=iterator");
 	#print "out: $out\n";
 }
-
 my $text1 = <<'EOM';
 <tmpl_loop array>
 <tmpl_var __counter__>
 <tmpl_var _.x>
 </tmpl_loop>
 EOM
-my $text2 = <<'EOM';
-<tmpl_loop array><tmpl_loop_context>
-<tmpl_var __counter__>
-<tmpl_var _.x>
-</tmpl_loop>
-EOM
-for ($text1, $text2) {
+for (0,1) {
 	my $htc = HTML::Template::Compiled->new(
-		scalarref => \$_,
+		scalarref => \$text1,
         debug => 0,
+        loop_context_vars => $_,
 	);
 	$htc->param(array => [
         {x=>"a","__counter__"=>"A"},
@@ -47,7 +42,7 @@ for ($text1, $text2) {
 	my $out = $htc->output;
 	$out =~ s/\s+//g;
 	my $exp;
-	if (m/<tmpl_loop_context>/) {
+	if ($_ == 1) {
 		$exp = "1a2b3c";
 	}
 	else {
