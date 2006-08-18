@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Lazy;
-# $Id: Lazy.pm,v 1.1 2006/07/04 01:57:21 tinita Exp $
+# $Id: Lazy.pm,v 1.3 2006/08/18 18:53:26 tinita Exp $
 use strict;
 use warnings;
 our $VERSION = "0.01";
@@ -13,6 +13,15 @@ sub from_scratch {
 }
 
 sub compile_early { 0 }
+
+sub query {
+    my ( $self, @args ) = @_;
+    my $perl = $self->getPerl;
+    unless ($perl) {
+        $self = $self->SUPER::from_scratch();
+    }
+    $self->SUPER::query(@args);
+}
 
 sub output {
     my ( $self, @args ) = @_;
@@ -39,12 +48,12 @@ __END__
 
 =head1 NAME
 
-HTML::Template::Compiled::Lazy
+HTML::Template::Compiled::Lazy - Lazy Loading for HTML::Template::Compiled
 
 =head1 SYNOPSIS
 
     use HTML::Template::Compiled::Lazy;
-    my $htcc = HTML::Template::Compiled::Lazy->new(
+    my $htcl = HTML::Template::Compiled::Lazy->new(
         # usual parameters for HTML::Template::Compiled
     );
     $htcl->param(...);

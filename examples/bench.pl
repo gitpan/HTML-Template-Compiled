@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.12 2006/07/13 18:05:27 tinita Exp $
+# $Id: bench.pl,v 1.13 2006/08/18 20:12:19 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -110,9 +110,15 @@ sub new_htj {
 
 sub new_tt {
 	my $tt= Template->new(
-		COMPILE_EXT => '.ttc',
-		COMPILE_DIR => 'cache/tt',
-		#CACHE_SIZE => 0,
+        $FILE_CACHE
+            ? (
+                COMPILE_EXT => '.ttc',
+                COMPILE_DIR => 'cache/tt',
+            )
+            : (),
+        $MEM_CACHE
+            ? ()
+            : (CACHE_SIZE => 0),
 		INCLUDE_PATH => 'examples',
 	);
 	#my $size = total_size($tt);
@@ -194,7 +200,7 @@ timethese ($ARGV[0]||-1, {
             # deactivate memory cache
             #new_htc_w_clear_cache => sub {my $t = new_htc();$t->clear_cache},
             # normal, with memory cache
-            #new_htc => sub {my $t = new_htc()},
+            # new_htc => sub {my $t = new_htc()},
             #output_htc => sub {output($global_htc)},
             all_htc => sub {my $t = new_htc();output($t)},
         ) : (),
@@ -202,12 +208,12 @@ timethese ($ARGV[0]||-1, {
             # deactivate memory cache
             #new_htc_w_clear_cache => sub {my $t = new_htc();$t->clear_cache},
             # normal, with memory cache
-            #new_htc => sub {my $t = new_htc()},
+            # new_htcc => sub {my $t = new_htcc()},
             #output_htc => sub {output($global_htc)},
             all_htcc => sub {my $t = new_htcc();output($t)},
         ) : (),
 		$use{'HTML::Template'} ? (
-			#new_ht => sub {my $t = new_ht()},
+            # new_ht => sub {my $t = new_ht()},
 			#output_ht => sub {output($global_ht)},
 						all_ht => sub {my $t = new_ht();output($t)},
         ) : (),

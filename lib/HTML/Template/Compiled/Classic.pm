@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Classic;
-# $Id: Classic.pm,v 1.6 2006/07/11 22:41:16 tinita Exp $
+# $Id: Classic.pm,v 1.7 2006/08/18 19:57:16 tinita Exp $
 use strict;
 use warnings;
 our $VERSION = "0.02";
@@ -29,11 +29,11 @@ sub _get_var_global_sub {
 sub _make_path {
     my ( $self, %args ) = @_;
     my %loop_context = (
-        __counter__ => '$ix+1',
-        __first__   => '$ix == $[',
-        __last__    => '$ix == $size',
-        __odd__     => '!($ix & 1)',
-        __inner__   => '$ix != $[ && $ix != $size',
+        __counter__ => '$__ix__+1',
+        __first__   => '$__ix__ == $[',
+        __last__    => '$__ix__ == $size',
+        __odd__     => '!($__ix__ & 1)',
+        __inner__   => '$__ix__ != $[ && $__ix__ != $size',
     );
 
     if ( $self->getLoop_context && $args{var} =~ m/^__(\w+)__$/ ) {

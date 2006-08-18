@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.211 2006/07/13 18:49:43 tinita Exp $
+# $Id: Compiled.pm,v 1.230 2006/08/18 19:15:50 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.71"
+$VERSION = "0.72"
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.71";
+our $VERSION = "0.72";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -26,7 +26,8 @@ use Fcntl qw(:seek :flock);
 use File::Spec;
 use File::Basename qw(dirname);
 use HTML::Template::Compiled::Utils qw(:walkpath :log :escape);
-use HTML::Template::Compiled::Expression::Expressions;
+use HTML::Template::Compiled::Expression qw(:expressions);
+use HTML::Template::Compiled::Compiler;
 # TODO
 eval {
     require Digest::MD5;
@@ -36,7 +37,6 @@ eval {
 use HTML::Template::Compiled::Parser qw(
     $CASE_SENSITIVE_DEFAULT
     $NEW_CHECK
-    $ENABLE_SUB
     $DEBUG_DEFAULT
     $SEARCHPATH
     %FILESTACK %SUBSTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
@@ -44,32 +44,12 @@ use HTML::Template::Compiled::Parser qw(
   $UNDEF
 
 );
+use vars qw($__ix__);
 
 use constant MTIME    => 0;
 use constant CHECKED  => 1;
 use constant LMTIME   => 2;
 use constant LCHECKED => 3;
-
-use constant T_VAR     => 'VAR';
-use constant T_IF       => 'IF';
-use constant T_UNLESS   => 'UNLESS';
-use constant T_ELSIF    => 'ELSIF';
-use constant T_ELSE     => 'ELSE';
-use constant T_IF_DEFINED => 'IF_DEFINED';
-use constant T_END      => '__EOT__';
-use constant T_WITH     => 'WITH';
-use constant T_SWITCH   => 'SWITCH';
-use constant T_CASE     => 'CASE';
-use constant T_INCLUDE  => 'INCLUDE';
-use constant T_LOOP    => 'LOOP';
-use constant T_WHILE   => 'WHILE';
-use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
-
-use constant INDENT   => '    ';
-
-use constant NO_TAG      => 0;
-use constant OPENING_TAG => 1;
-use constant CLOSING_TAG => 2;
 
 # options / object attributes
 use constant PARAM => 0;
@@ -95,7 +75,7 @@ BEGIN {
           loop_context case_sensitive dumper global_vars
           method_call deref formatter_path default_path
           debug perl out_fh default_escape
-          filter formatter
+          filter formatter plugin
           globalstack use_query parser
           )
     );
@@ -136,6 +116,19 @@ sub new {
         return $class->new_scalar_ref($args{scalarref}, %args);
     }
     croak("$class->new called with not enough arguments");
+}
+
+sub _error_no_query {
+    my ($self) = @_;
+    my $class = ref $self || $self;
+    carp "You are using query() but have not specified that you want to use it"
+    . " (specify with use_query => 1)";
+}
+
+sub _error_not_compiled {
+    my ($self) = @_;
+    my $class = ref $self || $self;
+    carp "Template was not compiled yet";
 }
 
 sub _error_wrong_source {
@@ -686,6 +679,10 @@ sub _check_deprecated_args {
 
 sub init {
     my ( $self, %args ) = @_;
+    my $cachedir = $self->getCache_dir;
+    if (defined $cachedir and not -d $cachedir) {
+        croak "Cachedir '$cachedir' does not exist";
+    }
     my %defaults = (
 
         # defaults
@@ -726,16 +723,49 @@ sub init {
     my $parser;
     if (ref $tagstyle eq 'ARRAY') {
         # user specified named styles or regexes
-        $parser = HTML::Template::Compiled::Parser->new(
+        $parser = $self->parser_class->new(
             tagstyle => $tagstyle,
         );
     }
-    if (ref $args{parser} eq 'HTML::Template::Compiled::Parser') {
+    if (UNIVERSAL::isa($args{parser}, 'HTML::Template::Compiled::Parser')) {
         $parser = $args{parser};
     }
-    $parser ||= HTML::Template::Compiled::Parser->default();
+    $parser ||= $self->parser_class->default();
     $self->setParser($parser);
+    if ($defaults{plugin}) {
+        #$self->setPlugin($defaults{plugin}) if $defaults{plugin};
+        for my $plug (ref $defaults{plugin} eq 'ARRAY'
+            ? @{ $defaults{plugin} }
+            : $defaults{plugin}
+        ) {
+            my $actions = $self->get_plugin_actions($plug);
+            warn Data::Dumper->Dump([\$actions], ['actions']);
+            if (my $tagnames = $actions->{tagnames}) {
+                $parser->add_tagnames($tagnames);
+            }
+        }
+    }
 }
+
+{
+    my $classes = {};
+
+    sub register {
+        my ($class, $plugins) = @_;
+        $plugins = [$plugins] unless ref $plugins eq 'ARRAY';
+        for my $plug (@$plugins) {
+            eval "require $plug";
+            my $actions = $plug->register;
+            $classes->{$plug} = $actions;
+        }
+    }
+
+    sub get_plugin_actions {
+        my ($self, $pclass) = @_;
+        return $classes->{$pclass};
+    }
+}
+    
 
 sub _readfile {
     my ( $self, $file ) = @_;
@@ -757,487 +787,14 @@ sub method_call { '.' }
 sub deref { '.' }
 sub formatter_path { '/' }
 
+sub parser_class { 'HTML::Template::Compiled::Parser' }
+
 sub _compile {
-    my ( $self, $text, $fname ) = @_;
-    D && $self->log("_compile($fname)");
-    if ( my $filter = $self->getFilter ) {
-        $filter->filter($text);
-    }
-    my $parser = $self->getParser;
-    my @p = $parser->tags($text);
-    my $level = 1;
-    my $code  = '';
-    my $stack = [T_END];
-    my $info = {}; # for query()
-    my $info_stack = [$info];
-
-    # got this trick from perlmonks.org
-    my $anon = D
-      || $self->getDebug ? qq{local *__ANON__ = "htc_$fname";\n} : '';
-
-    no warnings 'uninitialized';
-    my $output = '$OUT .= ';
-    my $out_fh = $self->getOut_fh;
-    if ($out_fh) {
-        $output = 'print $OFH ';
-    }
-    my $header = <<"EOM";
-sub {
-    no warnings;
-$anon
-    my (\$t, \$P, \$C, \$OFH) = \@_;
-    my \$OUT = '';
-    #my \$C = \\\$P;
-EOM
-
-    my $line_save = 0;
-    my @lexicals;
-    my @switches;
-    my %comment = (
-        comment => 0,
-        noparse => 0,
-        verbatim => 0,
-    );
-    for my $p (@p) {
-        my ($text, $tt, $line, $open, $tname, $attr, $close) = @$p;
-        #print STDERR "tags: ($text, $tt, $line, $open, $tname, $attr, $close)\n";
-        $line_save = $line;
-        local $_ = $text;
-        #print STDERR "p: '$_'\n";
-        my $indent = INDENT x $level;
-        my $is_tag = $tt != NO_TAG;
-        my $is_open = $is_tag && $tt == OPENING_TAG;
-        my $is_close = $is_tag && $tt == CLOSING_TAG;
-        my $meth     = $self->getMethod_call;
-        my $deref    = $self->getDeref;
-        my $format   = $self->getFormatter_path;
-        my %var_args = (
-            deref          => $deref,
-            method_call    => $meth,
-            formatter_path => $format,
-            lexicals       => \@lexicals,
-            final          => 0,   
-        );
-        # --------- TMPL_VAR
-        if ( !$comment{comment} && !$comment{noparse} && !$comment{verbatim}) {
-            if ($is_open && $tname eq T_VAR && exists $attr->{NAME}) {
-                #print STDERR "===== VAR ($_)\n";
-                my $var = $attr->{NAME};
-                if ($self->getUse_query) {
-                    $info_stack->[-1]->{lc $var}->{type} = T_VAR;
-                }
-                my $escape = $self->getDefault_escape;
-                if (exists $attr->{ESCAPE}) {
-                    $escape = $attr->{ESCAPE};
-                }
-                my $default;
-                if (exists $attr->{DEFAULT}) {
-                    $default = _expr_string($attr->{DEFAULT});
-                }
-                my $varstr = $self->_make_path(
-                    %var_args,
-                    var   => $var,
-                    final => 1,
-                );
-
-                #print "line: $_ var: $var ($varstr)\n";
-                my $exp = _expr_literal($varstr);
-                if ( defined $default ) {
-                    $exp = _expr_ternary(
-                        _expr_defined($exp),
-                        $exp,
-                        $default,
-                    );
-                }
-                $exp = $self->_escape_expression($exp, $escape);
-                $code .= qq#${indent}$output #
-                    . $exp->to_string($level) . qq#;\n#;
-            }
-            # --------- TMPL_WITH
-            elsif ($is_open && $tname eq T_WITH && exists $attr->{NAME}) {
-                push @$stack, T_WITH;
-                $level++;
-                my $var    = $attr->{NAME};
-                my $varstr = $self->_make_path(
-                    %var_args,
-                    var => $var,
-                );
-                $code .= qq#${indent}\{ \# WITH $var\n#;
-                if ($self->getGlobal_vars) {
-                    $code .= _expr_method(
-                        'pushGlobalstack',
-                        _expr_literal('$t'),
-                        _expr_literal('$$C')
-                    )->to_string($level) . ";\n";
-                }
-                $code .= qq#${indent}  my \$C = \\$varstr;\n#;
-            }
-
-            # --------- TMPL_LOOP TMPL_WHILE
-            elsif ($is_open && ($tname eq T_LOOP || $tname eq T_WHILE)
-                && exists $attr->{NAME}) {
-                push @$stack, $tname;
-                my $var     = $attr->{NAME};
-                my $varstr = $self->_make_path(
-                    %var_args,
-                    var   => $var,
-                );
-                $level += 2;
-                my $ind    = INDENT;
-                if ($self->getUse_query) {
-                    $info_stack->[-1]->{lc $var}->{type} = T_LOOP;
-                    $info_stack->[-1]->{lc $var}->{children} ||= {};
-                    push @$info_stack, $info_stack->[-1]->{lc $var}->{children};
-                }
-                my $lexical = $attr->{ALIAS};
-                push @lexicals, $lexical;
-                my $pop_global = _expr_method(
-                    'pushGlobalstack',
-                    _expr_literal('$t'),
-                    _expr_literal('$$C')
-                );
-                my $lexi =
-                  defined $lexical ? "${indent}my \$$lexical = \$\$C;\n" : "";
-                my $global = $self->getGlobal_vars
-                    ? $pop_global->to_string($level).";\n"
-                    : '';
-                if ($tname eq T_WHILE) {
-                    $code .= <<"EOM";
-${indent}${ind}# while $var
-${indent}${ind}\{
-$global
-${indent}${ind}while (my \$next = $varstr) {
-${indent}${indent}my \$C = \\\$next;
-$lexi
-EOM
-                }
-                else {
-
-                    $code .= <<"EOM";
-${indent}if (UNIVERSAL::isa(my \$array = $varstr, 'ARRAY') )\{
-${indent}${ind}my \$size = \$#{ \$array };
-$global
-
-${indent}${ind}# loop over $var
-${indent}${ind}for my \$ix (\$[..\$size) \{
-${indent}${ind}${ind}my \$C = \\ (\$array->[\$ix]);
-$lexi
-EOM
-                }
-            }
-
-            # --------- TMPL_ELSE
-            elsif ($is_open && $tname eq T_ELSE) {
-                $self->_checkstack( $fname, $line, $stack, T_ELSE );
-                pop @$stack;
-                push @$stack, T_ELSE;
-                my $exp = _expr_else();
-                $code .= $exp->to_string($level);
-            }
-
-            # --------- / TMPL_IF TMPL UNLESS TMPL_WITH
-            elsif ($is_close && $tname =~ m/^(?:IF|UNLESS|WITH)$/) {
-                my $var = $attr->{NAME};
-                $var = '' unless defined $var;
-                #print STDERR "============ IF ($_)\n";
-                $self->_checkstack( $fname, $line, $stack, $tname );
-                pop @$stack;
-                $level--;
-                my $indent = INDENT x $level;
-                my $exp = _expr_close();
-                $code .= $exp->to_string($level) . qq{# end $var\n};
-                if ($self->getGlobal_vars && $tname eq 'WITH') {
-                    $code .= $indent . qq#\$t->popGlobalstack;\n#;
-                }
-            }
-
-			# --------- / TMPL_LOOP TMPL_WHILE
-            elsif ($is_close && ($tname eq T_LOOP || $tname eq T_WHILE)) {
-                $self->_checkstack($fname,$line,$stack, $tname);
-                pop @$stack;
-                pop @lexicals;
-                if ($self->getUse_query) {
-                    pop @$info_stack;
-                }
-                $level--;
-                $level--;
-                my $indent = INDENT x $level;
-                my $global = $self->getGlobal_vars ? <<"EOM" : '';
-${indent}\$t->popGlobalstack;
-EOM
-                $code .= <<"EOM";
-${indent}@{[INDENT()]}\}
-${indent}\} # end loop
-$global
-EOM
-            }
-			# --------- TMPL_IF TMPL_UNLESS TMPL_ELSIF TMPL_IF_DEFINED
-            elsif ($is_open && $tname =~ m/^(?:IF_DEFINED|IF DEFINED|IF|UNLESS|ELSIF)$/ && exists $attr->{NAME}) {
-                #print STDERR "============ IF ($_)\n";
-                my $def    = $tname =~ m/DEFINED$/;
-                if ($tname eq 'IF DEFINED') {
-                    carp "use of TMPL_IF DEFINED is deprecated. use TMPL_IF_DEFINED instead";
-                }
-                my $var    = $attr->{NAME};
-                my $varstr = $self->_make_path(
-                    %var_args,
-                    var   => $var,
-                );
-                my $if = {
-                    IF => 'If',
-                    UNLESS => 'Unless',
-                    ELSIF => 'Elsif',
-                    IF_DEFINED => 'If',
-                    'IF DEFINED' => 'If',
-                }->{ $tname };
-                my $operand = _expr_literal($varstr);
-                my $eclass = "HTML::Template::Compiled::Expression::$if";
-                my $elsif = $tname eq 'ELSIF' ? 1 : 0;
-                if ($def) {
-                    $operand = _expr_defined($operand);
-                }
-                if ($elsif) {
-                    $self->_checkstack( $fname, $line, $stack, $tname );
-                }
-                else {
-                    push @$stack, $tname;
-                    $level++;
-                }
-                my $exp = $eclass->new($operand);
-                my $str = $exp->to_string($level);
-                $code .= $str . $/;
-            }
-
-            # --------- TMPL_SWITCH
-            elsif ( $is_open && $tname eq T_SWITCH && exists $attr->{NAME}) {
-                my $var = $attr->{NAME};
-                push @$stack, $tname;
-                push @switches, 0;
-                $level++;
-                my $varstr = $self->_make_path(
-                    %var_args,
-                    var   => $var,
-                );
-                $code .= <<"EOM";
-${indent}SWITCH: for my \$_switch ($varstr) \{
-EOM
-            }
-            
-            # --------- / TMPL_SWITCH
-            elsif ($is_close && $tname eq T_SWITCH) {
-                $self->_checkstack( $fname, $line, $stack, $tname );
-                pop @$stack;
-                $level--;
-                if ( $switches[$#switches] ) {
-
-                    # we had at least one CASE, so we close the last if
-                    $code .= qq#${indent}\} \# last case\n#;
-                }
-                $code .= qq#${indent}\}\n#;
-                pop @switches;
-            }
-            
-            # --------- TMPL_CASE
-            elsif ($is_open && $tname eq T_CASE) {
-                my $val = $attr->{NAME};
-                #$val =~ s/^\s+//;
-                $self->_checkstack( $fname, $line, $stack, $tname );
-                if ( $switches[$#switches] ) {
-
-                    # we aren't the first case
-                    $code .= qq#${indent}last SWITCH;\n${indent}\}\n#;
-                }
-                else {
-                    $switches[$#switches] = 1;
-                    $level++;
-                }
-                if ( !length $val or uc $val eq 'DEFAULT' ) {
-                    $code .= qq#${indent}if (1) \{\n#;
-                }
-                else {
-                    my @splitted = split ",", $val;
-                    my $is_default = '';
-                    @splitted = grep {
-                        uc $_ eq 'DEFAULT'
-                            ? do {
-                                $is_default = ' or 1 ';
-                                0;
-                            }
-                            : 1
-                    } @splitted;
-                    my $values = join ",", map { qq#'$_'# } @splitted;
-                    $code .=
-qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
-                }
-            }
-
-            # --------- TMPL_INCLUDE_VAR
-            elsif ($is_open && $tname =~ m/^INCLUDE/ && exists $attr->{NAME}) {
-                my $filename;
-                my $varstr;
-                my $path = $self->getPath();
-                my $dir;
-                my $dynamic = $tname eq T_INCLUDE_VAR ? 1 : 0;
-
-                if ($dynamic) {
-                    # dynamic filename
-                    my $dfilename = $attr->{NAME};
-                    $varstr = $self->_make_path(
-                        %var_args,
-                        var   => $dfilename,
-                    );
-                }
-                else {
-                    # static filename
-                    $filename = $attr->{NAME};
-                    $varstr   = $self->quote_file($filename);
-                    $dir      = dirname $fname;
-                    if ( defined $dir and !grep { $dir eq $_ } @$path ) {
-                        # add the current directory to top of paths
-                        $path =
-                          [ $dir, @$path ]
-                          ;    # create new $path, don't alter original ref
-                    }
-                    # generate included template
-                    {
-                        D && $self->log("compile include $filename!!");
-                        $self->compile_early()
-                            and my $cached_or_new =
-                          $self->new_from_object( $path, $filename,
-                            $self->getCache_dir );
-                    }
-                }
-                #print STDERR "include $varstr\n";
-                my $cache = $self->getCache_dir;
-                $path = defined $path
-                  ? !ref $path
-                  ? $self->quote_file($path)
-
-                  : '['
-                  . join( ',', map { $self->quote_file($_) } @$path ) . ']'
-                  : 'undef';
-                $cache =
-                  defined $cache ? $self->quote_file($cache) : 'undef';
-                $code .= <<"EOM";
-${indent}\{
-${indent}  if (defined (my \$file = $varstr)) \{
-${indent}    my \$new = \$t->new_from_object($path,\$file,$cache);
-${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
-${indent}  \}
-${indent}\}
-EOM
-            }
-
-            # --------- TMPL_COMMENT|NOPARSE|VERBATIM
-            elsif ($is_open && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/) {
-                my $name = $attr->{NAME};
-                $name = '' unless defined $name;
-                $comment{lc $tname}++;
-                $code .= qq{ # comment $name (level $comment{lc $tname})\n};
-            }
-
-            # --------- / TMPL_COMMENT|NOPARSE|VERBATIM
-            elsif ($is_close && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/) {
-                my $name = $attr->{NAME};
-                $name = '' unless defined $name;
-                $code .= qq{ # end comment $name (level $comment{lc $tname})\n};
-                $comment{lc $tname}--;
-            }
-            else {
-                if ( length $_ ) {
-                    my $exp = _expr_string($_);
-                    $code .= qq#$indent$output # . $exp->to_string($level) . $/;
-                }
-            }
-        }
-        else {
-
-            # --------- TMPL_COMMENT|NOPARSE|VERBATIM
-            if ($is_open && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/) {
-                my $name = $attr->{NAME};
-                $name = '' unless defined $name;
-                $comment{lc $tname}++;
-                $code .= qq{ # comment $name (level $comment{lc$tname})\n};
-            }
-
-            # --------- / TMPL_COMMENT|NOPARSE|VERBATIM
-            elsif ($is_close && $tname =~ m/^(?:COMMENT|NOPARSE|VERBATIM)$/) {
-                my $name = $attr->{NAME};
-                $name = '' unless defined $name;
-                $code .= qq{ # end comment $name (level $comment{lc$tname})\n};
-                $comment{lc $tname}--;
-            }
-            else {
-                # don't output anything if we are in a comment
-                # but output if we are in noparse or verbatim
-                if ( !$comment{comment} && length $_ ) {
-                    if ($comment{verbatim}) {
-                        HTML::Entities::encode_entities($_);
-                    }
-                    my $exp = _expr_string($_);
-                    $code .= qq#$indent$output # . $exp->to_string($level) . $/;
-                }
-            }
-        }
-    }
-    $self->_checkstack( $fname, $line_save, $stack, T_END );
-    if ($self->getUse_query) {
-        $self->setUse_query($info);
-    }
-    #warn Data::Dumper->Dump([\$info], ['info']);
-    $code .= qq#return \$OUT;\n#;
-    $code = $header . $code . "\n} # end of sub\n";
-
-    #$code .= "\n} # end of sub\n";
-    print STDERR "# ----- code \n$code\n# end code\n" if $self->getDebug;
-
-    # untaint code
-    if ( $code =~ m/(\A.*\z)/ms ) {
-        # we trust our template
-        $code = $1;
-    }
-    else {
-        $code = "";
-    }
-    my $l = length $code;
-    #print STDERR "length $fname: $l\n";
-    my $sub = eval $code;
-    die "code: $@" if $@;
-    return $code, $sub;
+    return HTML::Template::Compiled::Compiler->_compile(@_);
 }
 
 sub _escape_expression {
-    my ($self, $exp, $escape) = @_;
-    return $exp unless $escape;
-    my @escapes = split m/\|/, uc $escape;
-    for (@escapes) {
-        if ( $_ eq 'HTML' ) {
-            $exp = _expr_function(
-                'HTML::Template::Compiled::Utils::escape_html',
-                $exp,
-            );
-        }
-        elsif ( $_ eq 'URL' ) {
-            $exp = _expr_function(
-                'HTML::Template::Compiled::Utils::escape_uri',
-                $exp,
-            );
-        }
-        elsif ( $_ eq 'JS' ) {
-            $exp = _expr_function(
-                'HTML::Template::Compiled::Utils::escape_js',
-                $exp,
-            );
-        }
-        elsif ( $_ eq 'DUMP' ) {
-            $exp = _expr_method(
-                'dump',
-                _expr_literal('$t'),
-                $exp,
-            );
-        }
-    }
-    return $exp;
+    return HTML::Template::Compiled::Compiler->_escape_expression(@_);
 }
 
 sub quote_file {
@@ -1259,53 +816,7 @@ sub quote_file {
 # so final means it's in 'print-context'.
 
 sub _make_path {
-    my ( $self, %args ) = @_;
-    my $lexicals = $args{lexicals};
-    if ( grep { defined $_ && $args{var} eq $_ } @$lexicals ) {
-        return "\$$args{var}";
-    }
-    my $root = 0;
-    my %loop_context = (
-        __counter__ => '$ix+1',
-        __first__   => '$ix == $[',
-        __last__    => '$ix == $size',
-        __odd__     => '!($ix & 1)',
-        __inner__   => '$ix != $[ && $ix != $size',
-    );
-    if ( $self->getLoop_context && $args{var} =~ m/^__(\w+)__$/ ) {
-        my $lc = $loop_context{ $args{var} };
-        return $lc;
-    }
-    elsif ( $args{var} =~ m/^_/ && $args{var} !~ m/^__(\w+)__$/) {
-        $args{var} =~ s/^_//;
-        $root = 0;
-    }
-    elsif ($args{var} =~ m/^(\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)(\1?)/) {
-        $root = 1 unless length $2;
-    }
-    my @split = split m/(?=\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)/, $args{var};
-    my @paths;
-    for my $p (@split) {
-        if ( $p =~ s/^\Q$args{method_call}// ) {
-            push @paths, '[' . PATH_METHOD . ",'$p']";
-        }
-        elsif ($p =~ s/^\Q$args{deref}//) {
-            push @paths, '['.PATH_DEREF.",'".($self->getCase_sensitive?$p:uc$p)."']";
-        }
-        elsif ($p =~ s/^\Q$args{formatter_path}//) {
-            push @paths, '['.PATH_FORMATTER.",'".($self->getCase_sensitive?$p:uc$p)."']";
-        }
-        else {
-            push @paths, '['. $self->getDefault_path() .", '".($self->getCase_sensitive?$p:uc$p)."']";
-        }
-    }
-    local $" = ",";
-    my $final = $args{final} ? 1 : 0;
-    my $getvar = '_get_var';
-    $getvar .= $self->getGlobal_vars&1 ? '_global' : '';
-    my $varstr =
-      "\$t->$getvar(\$P," . ( $root ? '$P' : '$$C' ) . ",$final,@paths)";
-    return $varstr;
+    return HTML::Template::Compiled::Compiler->_make_path(@_);
 }
 
 
@@ -1437,43 +948,6 @@ EOM
 
 # end ugly code, phooey
 
-{
-    my %map = (
-        IF         => [ T_IF, T_UNLESS, T_ELSE ],
-        UNLESS     => [T_UNLESS, T_ELSE, T_IF_DEFINED],
-        ELSIF      => [ T_IF, T_UNLESS, T_IF_DEFINED ],
-        ELSE       => [ T_IF, T_UNLESS, T_ELSIF, T_IF_DEFINED ],
-        LOOP       => [T_LOOP],
-        WHILE      => [T_WHILE],
-        WITH       => [T_WITH],
-        T_SWITCH() => [T_SWITCH],
-        T_CASE()   => [T_SWITCH],
-        T_END()    => [T_END],
-    );
-
-    sub _checkstack {
-        my ( $self, $fname, $line, $stack, $check ) = @_;
-
-        # $self->stack(1);
-        my @allowed = @{ $map{$check} };
-        return 1 if @$stack == 0 and @allowed == 0;
-        die
-"Closing tag 'TMPL_$check' does not have opening tag at $fname line $line\n"
-          unless @$stack;
-        if ( $allowed[0] eq T_END and $stack->[-1] ne T_END ) {
-
-         # we hit the end of the template but still have an opening tag to close
-            die
-"Missing closing tag for '$stack->[-1]' at end of $fname line $line\n";
-        }
-        for (@allowed) {
-            return 1 if $_ eq $stack->[-1];
-        }
-        croak
-"'TMPL_$check' does not match opening tag ($stack->[-1]) at $fname line $line\n";
-    }
-}
-
 sub escape_filename {
     my ( $t, $f ) = @_;
     $f =~ s#([/:\\])#'%'.uc sprintf"%02x",ord $1#ge;
@@ -1503,7 +977,7 @@ sub new_from_object {
     my ( $self, $path, $filename, $cache ) = @_;
     unless (defined $filename) {
         my ($file) = (caller(1))[3];
-        croak "Filename is undef (in template $file)" unless defined $filename;
+        croak "Filename is undef (in template $file)";
     }
     my $new = $self->clone;
     D && $self->log("new_from_object($path,$filename,$cache)");
@@ -1512,10 +986,10 @@ sub new_from_object {
     $new->setFilehandle();
     $new->setPath($path);
     $new->setPerl(undef);
-    my $cached = $new->from_cache;
-    return $cached if $cached;
-    $new = $new->from_scratch;
-    $new;
+    if (my $cached = $new->from_cache) {
+        return $cached
+    }
+    return $new->from_scratch;
 }
 
 sub preload {
@@ -1600,7 +1074,15 @@ sub query {
     return unless defined wantarray();
     #print STDERR "query(@_)\n";
     my $info = $self->getUse_query
-        or carp "You are using query() but have not specified that you want to use it";
+        or do {
+            $self->_error_no_query();
+            return;
+        };
+    unless (ref $info) {
+        # not compiled yet!
+        $self->_error_not_compiled();
+        return;
+    }
     my $pointer = {children => $info};
     $tags = [] unless defined $tags;
     $tags = [$tags] unless ref $tags eq 'ARRAY';
@@ -1693,8 +1175,6 @@ sub ExpireTime {
 
 sub EnableSub {
     carp "Warning: Subref variables are not supported any more, use HTML::Template::Compiled::Classic instead";
-    my ($class, $bool) = @_;
-    $ENABLE_SUB = $bool ? 1 : 0;
 }
 
 sub CaseSensitive {
@@ -1919,7 +1399,7 @@ see L<"INCLUDE">
 
 =item TMPL_IF DEFINED
 
-Deprecated, use C<TMPL_IF_DEFINED>
+Was deprecated, is removed as of version 0.72
 
 =item TMPL_IF_DEFINED
 
@@ -2157,8 +1637,17 @@ Default is C<sub formatter_path { '/' }>
 
 =item compile_early
 
-Define if every included file should be checked parsed at compile time
+Define if every included file should be checked and parsed at compile time
 of the including template or later when it is really used.
+
+Default is C<sub compile_early { 1 }>
+
+=item parser_class
+
+Default is C<sub parser_class { 'HTML::Template::Compiled::Parser' }>
+
+You can write your own parser class (whuch must inherit from
+L<HTML::Template::Compiled::Parser>) and use this.
 
 L<HTML::Template::Compiled::Lazy> uses this.
 
@@ -2651,6 +2140,9 @@ go into "shared memory"
 
 If you don't do preloading in mod_perl, memory usage might go up if you have a lot
 of templates.
+
+Note: the directory is *not* the template directory. It should be the directory
+which you give as the cache_dir option.
 
 =item precompile
 

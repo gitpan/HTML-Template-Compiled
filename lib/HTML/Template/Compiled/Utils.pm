@@ -1,6 +1,6 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm,v 1.9 2006/06/19 21:13:42 tinita Exp $
-$VERSION = "0.02";
+# $Id: Utils.pm,v 1.10 2006/07/14 16:27:29 markjugg Exp $
+$VERSION = "0.03";
 use strict;
 use warnings;
 use Data::Dumper;
@@ -20,9 +20,37 @@ my @paths = qw(PATH_METHOD PATH_DEREF PATH_FORMATTER);
 	escape => [qw(&escape_html &escape_uri &escape_js)],
 );
 
+# These should be better documented
 use constant PATH_METHOD => 1;
 use constant PATH_DEREF => 2;
 use constant PATH_FORMATTER => 3;
+
+=pod
+
+=head1 NAME
+
+HTML::Template::Compiled::Utils - Utility functions for HTML::Template::Compiled
+
+=head1 SYNOPSIS
+ 
+ # import log() and stack()
+ use HTML::Template::Compiled::Utils qw(:log);
+
+ # import the escapign functions
+ use HTML::Template::Compiled::Utils qw(:escape);
+
+
+=head1 DEBUGGING FUNCTIONS
+
+=cut
+
+=head2 stack
+
+    $self->stack;
+
+For HTML::Template:Compiled developers, prints a stack trace to STDERR.
+
+=cut
 
 sub stack {
     my ( $self, $force ) = @_;
@@ -35,6 +63,14 @@ sub stack {
     }
     print STDERR $out;
 }
+
+=head2 log
+
+ $self->log(@msg)
+
+For HTML::Template::Compiled developers, print log from C<@msg> to STDERR.
+
+=cut
 
 sub log {
     #return unless D;
@@ -64,8 +100,18 @@ sub log {
     }
 }
 
+=head1 ESCAPING FUNCTIONS
+
+=head2 escape_html
+
+  my $escaped_html = escape_html($raw_html);
+
+HTML-escapes the input string and returns it;
+
+=cut
+
 sub escape_html {
-    my ( $var ) = @_;
+    my $var = shift;
     my $new = $var;
 
     # we have to do this cause HTML::Entities changes its arg
@@ -75,9 +121,25 @@ sub escape_html {
     return $new;
 }
 
+=head2 escape_uri
+
+  my $escaped_uri = escape_uri($raw_uri);
+
+URI-escapes the input string and returns it;
+
+=cut
+
 sub escape_uri {
     return URI::Escape::uri_escape( $_[0] );
 }
+
+=head2 escape_js
+
+  my $escaped_js = escape_js($raw_js);
+
+JavaScript-escapes the input string and returns it;
+
+=cut
 
 sub escape_js {
     my ($var) = @_;
@@ -90,11 +152,4 @@ sub escape_js {
 1;
 __END__
 
-=pod
-
-=head1 NAME
-
-HTML::Template::Compiled::Utils - Utility functions for HTML::Template::Compiled
-
-=cut
 

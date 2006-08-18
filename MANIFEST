@@ -6,6 +6,7 @@ lib/HTML/Template/Compiled.pm
 lib/HTML/Template/Compiled/Utils.pm
 lib/HTML/Template/Compiled/Filter.pm
 lib/HTML/Template/Compiled/Parser.pm
+lib/HTML/Template/Compiled/Compiler.pm
 lib/HTML/Template/Compiled/Plugin/DHTML.pm
 lib/HTML/Template/Compiled/Expression/Expressions.pm
 lib/HTML/Template/Compiled/Expression/Conditional.pm
@@ -18,6 +19,7 @@ examples/test.htc
 examples/test.htcc
 examples/test.htc.20
 examples/included.htc
+examples/included.htcc
 examples/included.tt
 examples/bench.pl
 examples/bench_mem.pl
@@ -48,6 +50,7 @@ t/20_precompile.t
 t/21_while.t
 t/22_pod.t
 t/23_tagstyles.t
+t/24_pod_cover.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html

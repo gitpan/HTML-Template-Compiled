@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 15_comment.t,v 1.4 2006/01/06 13:35:10 tinita Exp $
+# $Id: 15_comment.t,v 1.5 2006/07/31 20:47:03 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 4;
@@ -19,9 +19,9 @@ my $cache = File::Spec->catfile('t', 'cache');
 <tmpl_if comment>
 	<tmpl_var wanted>
 	<tmpl_comment outer>
-		<tmpl_comment inner>
+		<tmpl_comment >
 			<tmpl_var unwanted>
-		</tmpl_comment inner>
+		</tmpl_comment >
 		<tmpl_var unwanted>
 	</tmpl_comment outer>
 <tmpl_elsif noparse>

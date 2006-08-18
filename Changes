@@ -1,6 +1,14 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
-0.71
+0.72 Fri Aug 18 22:16:35 CEST 2006
+- Documentation: Debugging and Escaping functions are now documented
+  in HTML::Template::Compiled::Utils (Mark Stosberg)
+- Change: Remove deprecated TMPL_IF DEFINED
+- Change: HTC will die if you use wrong syntax in tags (like H::T)
+- Bugfix: HTML::Template::Compiled::Lazy and query()
+- Bugfix: loop variables should survive different template files
+
+0.71 Thu Jul 13 20:54:44 CEST 2006
 - Change: dropped TMPL_LOOP_CONTEXT (not really useful)
 - Bug Fix: Filters didn't work correctly when used with file caching
 - Change: deprecate options

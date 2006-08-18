@@ -1,12 +1,13 @@
-# $Id: 19_query.t,v 1.5 2006/04/27 20:14:05 tinita Exp $
+# $Id: 19_query.t,v 1.6 2006/08/18 18:53:59 tinita Exp $
 use warnings;
 use strict;
 use lib 'blib/lib';
-use Test::More tests => 3;
+use Test::More tests => 4;
 
 HTML::Template::Compiled->clear_filecache('t/cache');
 # test query() (From HTML::Template test suite)
 use HTML::Template::Compiled;
+use HTML::Template::Compiled::Lazy;
 $HTML::Template::Compiled::NEW_CHECK = 1;
 #$HTML::Template::Compiled::NEW_CHECK = 10000;
 use File::Copy;
@@ -17,6 +18,19 @@ copy($file_orig, $file_copy);
 my $ok1 = query_template();
 ok($ok1, "query 1");
 #print `ls t/cache`;
+
+
+{
+    my $htc = HTML::Template::Compiled::Lazy->new(
+        scalarref => \"<%= foo%>",
+        use_query => 1,
+    );
+    my @params;
+    eval {
+        @params = $htc->query;
+    };
+    cmp_ok("@params", 'eq', 'foo', 'HTC::Lazy and query()');
+}
 {
     open my $fh, '+<', $file_copy or die $!;
     local $/;
@@ -75,4 +89,5 @@ sub query_template {
     eval { %p = map {$_ => 1} $template->query(loop => ['LOOP_FOO', 'LOOP_BAR']); };
     ok(exists $p{foo} and exists $p{bar} and exists $p{bash});
 }
+
 HTML::Template::Compiled->clear_filecache('t/cache');

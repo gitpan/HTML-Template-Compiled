@@ -1,9 +1,9 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 09_wrong.t,v 1.6 2005/11/23 20:20:11 tinita Exp $
+# $Id: 09_wrong.t,v 1.9 2006/08/07 01:41:42 tinita Exp $
 
 use lib 'blib/lib';
-use Test::More tests => 5;
+use Test::More tests => 9;
 BEGIN { use_ok('HTML::Template::Compiled') };
 eval {
 	my $htc = HTML::Template::Compiled->new(
@@ -55,3 +55,21 @@ print "err: $@\n" unless $ENV{HARNESS_ACTIVE};
 ok($@ =~ m/not found/ , "template from include not found");
 
 
+{
+    my @wrong = (
+        "<TMPL_VA foo>",
+        "<TMPL_VAR foo oops>",
+        "<TMPL_IF blah escape=html>",
+        "foo<TMPL_IF >",
+    );
+    for my $wrong (@wrong) {
+        eval {
+            my $htc = HTML::Template::Compiled->new(
+                scalarref => \$wrong,
+                debug => 0,
+            );
+        };
+        print STDERR "Error? $@\n" unless $ENV{HARNESS_ACTIVE};;
+        cmp_ok($@, "=~", qr{\Q: Syntax error in <TMPL_*> tag at }, "die when syntax is wrong");
+    }
+}
