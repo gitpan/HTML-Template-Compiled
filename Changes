@@ -1,5 +1,11 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.73 Sat Aug 26 16:07:57 CEST 2006
+- Bugfix: in 0.72 only __first__ worked, but not __FIRST__
+- Change: query() now also reports INCLUDE_VARs
+- New feature: __index__ loop variable
+- New feature: Plugins for escape-attribute
+
 0.72 Fri Aug 18 22:16:35 CEST 2006
 - Documentation: Debugging and Escaping functions are now documented
   in HTML::Template::Compiled::Utils (Mark Stosberg)

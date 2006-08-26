@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.13 2006/08/18 20:12:19 tinita Exp $
+# $Id: bench.pl,v 1.15 2006/08/24 20:32:19 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -20,7 +20,7 @@ my %use = (
 	'HTML::Template'           => 0,
 	'HTML::Template::Compiled' => 0,
 	'HTML::Template::Compiled::Classic' => 0,
-	'HTML::Template::JIT'      => 0,
+#	'HTML::Template::JIT'      => 0,
 	'Template'                 => 0,
 	# not yet
 	'Text::ScriptTemplate'     => 0,
@@ -92,6 +92,7 @@ sub new_ht {
         (file_cache => $FILE_CACHE,
         file_cache_dir => 'cache/ht') : (),
         global_vars => $GLOBAL_VARS,
+        die_on_bad_params => 0,
 	);
 	return $t2;
 }

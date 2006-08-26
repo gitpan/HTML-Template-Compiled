@@ -1,8 +1,9 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.4 2006/08/18 19:52:46 tinita Exp $
+# $Id: Compiler.pm,v 1.8 2006/08/26 11:11:50 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
+use Carp qw(croak carp);
 use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
@@ -31,11 +32,33 @@ use constant NO_TAG        => 0;
 use constant OPENING_TAG   => 1;
 use constant CLOSING_TAG   => 2;
 
+use constant ESCAPES => 0;
+
+sub set_escapes { $_[0]->[ESCAPES] = $_[1] }
+sub get_escapes { $_[0]->[ESCAPES] }
+
+sub add_escapes {
+    my ($self, $new_escapes) = @_;
+    my $escapes = $self->get_escapes;
+    for my $key (%$new_escapes) {
+        my $sub = $new_escapes->{$key};
+        if (ref $sub eq 'CODE') {
+            my $subname = "HTML::Template::Compiled::Compiler::subs::$key";
+            no strict 'refs';
+            *$subname = $sub;
+            $escapes->{$key} = $subname;
+        }
+        else {
+            $escapes->{$key} = $sub;
+        }
+    }
+}
 
 sub new {
     my $class = shift;
     my $self = [];
     bless $self, $class;
+    $self->set_escapes({});
     return $self;
 }
 
@@ -43,6 +66,7 @@ sub _escape_expression {
     my ( $self, $t, $exp, $escape ) = @_;
     return $exp unless $escape;
     my @escapes = split m/\|/, uc $escape;
+    my $escapes = $self->get_escapes();
     for (@escapes) {
         if ( $_ eq 'HTML' ) {
             $exp =
@@ -62,6 +86,9 @@ sub _escape_expression {
         elsif ( $_ eq 'DUMP' ) {
             $exp = _expr_method( 'dump', _expr_literal('$t'), $exp, );
         }
+        elsif (my $sub = $escapes->{$_}) {
+            $exp = _expr_function( $sub, $exp );
+        }
     } ## end for (@escapes)
     return $exp;
 } ## end sub _escape_expression
@@ -74,6 +101,7 @@ sub _make_path {
     }
     my $root         = 0;
     my %loop_context = (
+        __index__   => '$__ix__',
         __counter__ => '$__ix__+1',
         __first__   => '$__ix__ == $[',
         __last__    => '$__ix__ == $size',
@@ -81,7 +109,7 @@ sub _make_path {
         __inner__   => '$__ix__ != $[ && $__ix__ != $size',
     );
     if ( $t->getLoop_context && $args{var} =~ m/^__(\w+)__$/ ) {
-        my $lc = $loop_context{ $args{var} };
+        my $lc = $loop_context{ lc $args{var} };
         return $lc;
     }
     elsif ( $args{var} =~ m/^_/ && $args{var} !~ m/^__(\w+)__$/ ) {
@@ -429,10 +457,14 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
             my $path = $self->getPath();
             my $dir;
             my $dynamic = $tname eq T_INCLUDE_VAR ? 1 : 0;
+            my $fullpath = "''";
 
             if ($dynamic) {
                 # dynamic filename
                 my $dfilename = $attr->{NAME};
+                if ($self->getUse_query) {
+                    $info_stack->[-1]->{lc $dfilename}->{type} = T_INCLUDE_VAR;
+                }
                 $varstr = $self->_make_path(
                     %var_args,
                     var   => $dfilename,
@@ -440,6 +472,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
             }
             else {
                 # static filename
+                $info_stack->[-1]->{lc $filename}->{type} = T_INCLUDE;
                 $filename = $attr->{NAME};
                 $varstr   = $self->quote_file($filename);
                 $dir      = dirname $fname;
@@ -454,8 +487,9 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                     D && $self->log("compile include $filename!!");
                     $self->compile_early()
                         and my $cached_or_new =
-                      $self->new_from_object( $path, $filename,
+                      $self->new_from_object( $path, $filename, '',
                         $self->getCache_dir );
+                    $fullpath = $self->quote_file($cached_or_new->getFile);
                 }
             }
             #print STDERR "include $varstr\n";
@@ -472,7 +506,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
             $code .= <<"EOM";
 ${indent}\{
 ${indent}  if (defined (my \$file = $varstr)) \{
-${indent}    my \$new = \$t->new_from_object($path,\$file,$cache);
+${indent}    my \$new = \$t->new_from_object($path,\$file,$fullpath,$cache);
 ${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
 ${indent}  \}
 ${indent}\}

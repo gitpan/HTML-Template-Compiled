@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.230 2006/08/18 19:15:50 tinita Exp $
+# $Id: Compiled.pm,v 1.239 2006/08/26 12:08:26 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.72"
+$VERSION = "0.73"
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.72";
+our $VERSION = "0.73";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 use constant D => 0;
@@ -76,7 +76,7 @@ BEGIN {
           method_call deref formatter_path default_path
           debug perl out_fh default_escape
           filter formatter plugin
-          globalstack use_query parser
+          globalstack use_query parser compiler
           )
     );
 
@@ -326,7 +326,10 @@ sub from_cache {
 
     # try to get memory cache
     if ( $self->getCache ) {
-        $t = $self->from_mem_cache();
+        my $dir = $self->getCache_dir;
+        $dir = '' unless defined $dir;
+        my $fname  = $self->getFilename;
+        $t = $self->from_mem_cache($dir,$fname);
         if ($t) {
             return $t;
         }
@@ -336,7 +339,11 @@ sub from_cache {
     # not in memory cache, try file cache
     if ( $self->getCache_dir ) {
         #$self->init_runtime_args(%args);
-        $t = $self->from_file_cache();
+        my $file = $self->getScalar || $self->getFilehandle
+            ? $self->getFilename
+            : $self->createFilename( $self->getPath, $self->getFilename );
+        my $dir     = $self->getCache_dir;
+        $t = $self->from_file_cache($dir, $file);
         if ($t) {
             return $t;
         }
@@ -353,10 +360,7 @@ sub from_cache {
     my $times;
 
     sub from_mem_cache {
-        my ($self) = @_;
-        my $dir = $self->getCache_dir;
-        $dir = '' unless defined $dir;
-        my $fname  = $self->getFilename;
+        my ($self, $dir, $fname) = @_;
         my $cached = $cache->{$dir}->{$fname};
         my $times  = $times->{$dir}->{$fname};
         D && $self->log("\$cached=$cached \$times=$times \$fname=$fname\n");
@@ -410,14 +414,14 @@ sub from_cache {
     sub uptodate {
         my ( $self, $cached_times ) = @_;
         return 1 if $self->getScalar;
-        unless ($cached_times) {
-            my $dir = $self->getCache_dir;
-            $dir = '' unless defined $dir;
-            my $fname  = $self->getFilename;
-            my $cached = $cache->{$dir}->{$fname};
-            $cached_times  = $times->{$dir}->{$fname};
-            return unless $cached;
-        }
+#         unless ($cached_times) {
+#             my $dir = $self->getCache_dir;
+#             $dir = '' unless defined $dir;
+#             my $fname  = $self->getFilename;
+#             my $cached = $cache->{$dir}->{$fname};
+#             $cached_times  = $times->{$dir}->{$fname};
+#             return unless $cached;
+#         }
         my $now = time;
         if ( $now - $cached_times->{checked} < $NEW_CHECK ) {
             return 1;
@@ -565,15 +569,10 @@ EOM
 }
 
 sub from_file_cache {
-    my ($self) = @_;
+    my ($self, $dir, $file) = @_;
     D && $self->stack;
-    my $file = $self->getScalar || $self->getFilehandle
-        ? $self->getFilename
-        : $self->createFilename( $self->getPath, $self->getFilename );
     D && $self->log("include file: $file");
 
-    #$self->setFile($file);
-    my $dir     = $self->getCache_dir;
     my $escaped = $self->escape_filename($file);
     my $req     = File::Spec->catfile( $dir, "$escaped.pl" );
     return unless -f $req;
@@ -732,16 +731,19 @@ sub init {
     }
     $parser ||= $self->parser_class->default();
     $self->setParser($parser);
+    my $compiler = HTML::Template::Compiled::Compiler->new;
+    $self->setCompiler($compiler);
     if ($defaults{plugin}) {
-        #$self->setPlugin($defaults{plugin}) if $defaults{plugin};
         for my $plug (ref $defaults{plugin} eq 'ARRAY'
             ? @{ $defaults{plugin} }
             : $defaults{plugin}
         ) {
             my $actions = $self->get_plugin_actions($plug);
-            warn Data::Dumper->Dump([\$actions], ['actions']);
             if (my $tagnames = $actions->{tagnames}) {
                 $parser->add_tagnames($tagnames);
+            }
+            if (my $escape = $actions->{escape}) {
+                $compiler->add_escapes($escape);
             }
         }
     }
@@ -790,11 +792,11 @@ sub formatter_path { '/' }
 sub parser_class { 'HTML::Template::Compiled::Parser' }
 
 sub _compile {
-    return HTML::Template::Compiled::Compiler->_compile(@_);
+    return $_[0]->getCompiler->_compile(@_);
 }
 
 sub _escape_expression {
-    return HTML::Template::Compiled::Compiler->_escape_expression(@_);
+    return $_[0]->getCompiler->_escape_expression(@_);
 }
 
 sub quote_file {
@@ -816,7 +818,7 @@ sub quote_file {
 # so final means it's in 'print-context'.
 
 sub _make_path {
-    return HTML::Template::Compiled::Compiler->_make_path(@_);
+    return $_[0]->getCompiler->_make_path(@_);
 }
 
 
@@ -875,6 +877,7 @@ sub {
 	my ($self, $P, $ref, $final, @paths) = @_;
 	my $walk = $ref;
 
+    my $stackpos = -1;
 	for my $path (@paths) {
         last unless defined $walk;
         #print STDERR "ref: $walk, key: $path->[1]\n";
@@ -886,7 +889,8 @@ sub {
                 unless (length $path->[1]) {
                     my $stack = $self->getGlobalstack || [];
                     # we have tmpl_var ..foo, get one level up the stack
-                    $walk = $stack->[-1];
+                    $walk = $stack->[$stackpos];
+                    $stackpos--;
                 }
                 else {
 *** walk ***
@@ -974,14 +978,17 @@ sub clone {
 
 # create from existing object (TMPL_INCLUDE)
 sub new_from_object {
-    my ( $self, $path, $filename, $cache ) = @_;
+    my ( $self, $path, $filename, $fullpath, $cache ) = @_;
     unless (defined $filename) {
         my ($file) = (caller(1))[3];
         croak "Filename is undef (in template $file)";
     }
     my $new = $self->clone;
-    D && $self->log("new_from_object($path,$filename,$cache)");
+    D && $self->log("new_from_object($path,$filename,$fullpath,$cache)");
     $new->setFilename($filename);
+    #if ($fullpath) {
+    #    $self->setFile($fullpath);
+    #}
     $new->setScalar();
     $new->setFilehandle();
     $new->setPath($path);
@@ -1370,6 +1377,8 @@ see L<"TMPL_NOPARSE">
 =item TMPL_VERBATIM
 
 see L<"TMPL_VERBATIM">
+
+=item C<__index__>
 
 =item TMPL_LOOP_CONTEXT
 
@@ -1863,10 +1872,14 @@ templates created like this.
 
 =item loop_context_vars (fixed)
 
-Vars like C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>
+Vars like C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>,
+C<__index__>
 
 To enable loop_context_vars is a slow down, too (about 10%). See L<"TMPL_LOOP_CONTEXT"> for
 how to avoid this.
+
+The variable C<__index__> works just like C<__counter__>, only that it starts
+at 0 instead of 1.
 
 =item global_vars (fixed)
 
@@ -2185,6 +2198,13 @@ will check after 10 minutes if the tmpl file was modified. Set it to a
 very high value will then ignore any changes, until you delete the
 generated code.
 
+=head1 PLUGINS
+
+At the moment you can use and write plugins for the C<ESCAPE> attribute. See
+L<HTML::Template::Compiled::Plugin::XMLEscape> for an example how to
+use it; and have a look at the source code if you want to know how to
+write a plugin yourself.
+
 =head1 LAZY LOADING
 
 Let's say you're in a CGI environment and have a lot of includes in your
@@ -2196,8 +2216,8 @@ require, use L<HTML::Template::Compiled::Lazy>.
 
 =head1 TODO
 
-fix C<path> option, associate, methods with simple parameters,
-expressions, lazy-loading, pluggable, ...
+associate, methods with simple parameters,
+expressions, pluggable, ...
 
 =head1 SECURITY
 
