@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.8 2006/08/26 11:11:50 tinita Exp $
+# $Id: Compiler.pm,v 1.12 2006/09/10 22:07:46 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -126,6 +126,8 @@ sub _make_path {
         $args{var};
     my @paths;
     for my $p (@split) {
+        $p =~ s#\\#\\\\#g;
+        $p =~ s#'#\\'#g;
         if ( $p =~ s/^\Q$args{method_call}// ) {
             push @paths, '[' . PATH_METHOD . ",'$p']";
         }
@@ -478,39 +480,59 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 $dir      = dirname $fname;
                 if ( defined $dir and !grep { $dir eq $_ } @$path ) {
                     # add the current directory to top of paths
-                    $path =
-                      [ $dir, @$path ]
-                      ;    # create new $path, don't alter original ref
+                    # create new $path, don't alter original ref
+                    $path = [ $dir, @$path ] ;
                 }
                 # generate included template
                 {
                     D && $self->log("compile include $filename!!");
-                    $self->compile_early()
-                        and my $cached_or_new =
-                      $self->new_from_object( $path, $filename, '',
-                        $self->getCache_dir );
-                    $fullpath = $self->quote_file($cached_or_new->getFile);
+                    $self->compile_early() and my $cached_or_new
+                        = $self->new_from_object(
+                          $path, $filename, '', $self->getCache_dir
+                      );
+                    $fullpath = $cached_or_new->getFile;
+                    $self->getIncludes()->{$fullpath}
+                        = [$path, $filename, $cached_or_new];
+                        $fullpath = $self->quote_file($fullpath);
                 }
             }
             #print STDERR "include $varstr\n";
             my $cache = $self->getCache_dir;
             $path = defined $path
-              ? !ref $path
-              ? $self->quote_file($path)
-
-              : '['
+              ? '['
               . join( ',', map { $self->quote_file($_) } @$path ) . ']'
               : 'undef';
-            $cache =
-              defined $cache ? $self->quote_file($cache) : 'undef';
-            $code .= <<"EOM";
+            $cache = defined $cache ? $self->quote_file($cache) : 'undef';
+            if ($dynamic) {
+                $code .= <<"EOM";
 ${indent}\{
 ${indent}  if (defined (my \$file = $varstr)) \{
-${indent}    my \$new = \$t->new_from_object($path,\$file,$fullpath,$cache);
+${indent}    my \$include = \$t->getIncludes()->{$fullpath};
+${indent}    my \$new = \$include ? \$include->[2] : undef;
+#print STDERR "+++++++got new? \$new\\n";
+${indent}    if (!\$new || HTML::Template::Compiled::needs_new_check($cache||'',\$file)) {
+${indent}      \$new = \$t->new_from_object($path,\$file,$fullpath,$cache);
+${indent}    }
+#print STDERR "got new? \$new\\n";
 ${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
 ${indent}  \}
 ${indent}\}
 EOM
+            }
+            else {
+                $code .= <<"EOM";
+${indent}\{
+${indent}    my \$include = \$t->getIncludes()->{$fullpath};
+${indent}    my \$new = \$include ? \$include->[2] : undef;
+#print STDERR "got new? \$new\\n";
+${indent}    if (!\$new) {
+${indent}      \$new = \$t->new_from_object($path,$varstr,$fullpath,$cache);
+${indent}    }
+#print STDERR "got new? \$new\\n";
+${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
+${indent}\}
+EOM
+            }
         }
 
         else {

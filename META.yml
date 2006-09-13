@@ -1,14 +1,66 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         HTML-Template-Compiled
-version:      0.73
-version_from: lib/HTML/Template/Compiled.pm
-installdirs:  site
+---
+name: HTML-Template-Compiled
+version: 0.74
+author: ~
+abstract: Template System Compiles HTML::Template files to Perl code
+license: perl
 requires:
-    Carp:                          0
-    File::Basename:                0
-    File::Spec:                    0
-    Test::More:                    0
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.17
+  Carp: 0
+  File::Basename: 0
+  File::Spec: 0
+  Test::More: 0
+provides:
+  HTML::Template::Compiled:
+    file: lib/HTML/Template/Compiled.pm
+    version: 0.74
+  HTML::Template::Compiled::Classic:
+    file: lib/HTML/Template/Compiled/Classic.pm
+    version: 0.02
+  HTML::Template::Compiled::Compiler:
+    file: lib/HTML/Template/Compiled/Compiler.pm
+  HTML::Template::Compiled::Expression:
+    file: lib/HTML/Template/Compiled/Expression.pm
+  HTML::Template::Compiled::Expression::Close:
+    file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+  HTML::Template::Compiled::Expression::Conditional:
+    file: lib/HTML/Template/Compiled/Expression/Conditional.pm
+  HTML::Template::Compiled::Expression::Defined:
+    file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+  HTML::Template::Compiled::Expression::Else:
+    file: lib/HTML/Template/Compiled/Expression/Conditional.pm
+  HTML::Template::Compiled::Expression::Elsif:
+    file: lib/HTML/Template/Compiled/Expression/Conditional.pm
+  HTML::Template::Compiled::Expression::Function:
+    file: lib/HTML/Template/Compiled/Expression/Function.pm
+  HTML::Template::Compiled::Expression::If:
+    file: lib/HTML/Template/Compiled/Expression/Conditional.pm
+  HTML::Template::Compiled::Expression::Literal:
+    file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+  HTML::Template::Compiled::Expression::Method:
+    file: lib/HTML/Template/Compiled/Expression/Function.pm
+  HTML::Template::Compiled::Expression::Open:
+    file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+  HTML::Template::Compiled::Expression::String:
+    file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+  HTML::Template::Compiled::Expression::Ternary:
+    file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+  HTML::Template::Compiled::Expression::Unless:
+    file: lib/HTML/Template/Compiled/Expression/Conditional.pm
+  HTML::Template::Compiled::Filter:
+    file: lib/HTML/Template/Compiled/Filter.pm
+    version: 0.03
+  HTML::Template::Compiled::Lazy:
+    file: lib/HTML/Template/Compiled/Lazy.pm
+    version: 0.01
+  HTML::Template::Compiled::Parser:
+    file: lib/HTML/Template/Compiled/Parser.pm
+    version: 0.02
+  HTML::Template::Compiled::Plugin::DHTML:
+    file: lib/HTML/Template/Compiled/Plugin/DHTML.pm
+    version: 0.01
+  HTML::Template::Compiled::Plugin::XMLEscape:
+    file: lib/HTML/Template/Compiled/Plugin/XMLEscape.pm
+  HTML::Template::Compiled::Utils:
+    file: lib/HTML/Template/Compiled/Utils.pm
+    version: 0.03
+generated_by: Module::Build version 0.2611

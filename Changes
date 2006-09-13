@@ -1,5 +1,11 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.74 Wed Sep 13 20:51:04 CEST 2006
+- Internal Changes
+- Security fix: Escape dangerous characters in template
+- default for search_path_on_include is now 0 like in H::T
+- added examples/objects.pl
+
 0.73 Sat Aug 26 16:07:57 CEST 2006
 - Bugfix: in 0.72 only __first__ worked, but not __FIRST__
 - Change: query() now also reports INCLUDE_VARs

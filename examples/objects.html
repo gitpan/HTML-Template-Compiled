@@ -1,0 +1,105 @@
+<html><head><title>HTC example with objects</title></head>
+<body>
+<h2>Script: examples/objects.pl</h2><p>
+Found 4 persons:
+<table>
+<tr><th>Name</th><th>Age</th></tr>
+
+<tr>
+    <td>Simpson, Bart</td>
+    <td>10</td>
+</tr>
+
+<tr>
+    <td>Simpson, Maggie</td>
+    <td>10</td>
+</tr>
+
+<tr>
+    <td>Simpson, March</td>
+    <td>42</td>
+</tr>
+
+<tr>
+    <td>Simpson, Homer</td>
+    <td>42</td>
+</tr>
+
+</table>
+<hr>
+<h2>The Script:</h2>
+<pre>
+#!/usr/bin/perl
+
+package HTC::Object;
+use strict;
+use warnings;
+use base qw(Class::Accessor);
+__PACKAGE__-&gt;follow_best_practice;
+__PACKAGE__-&gt;mk_accessors(qw(first last age));
+
+package main;
+use strict;
+use warnings;
+use HTML::Template::Compiled;
+use Fcntl qw(:seek);
+
+my ($template, $perlcode);
+{
+    local $/;
+    $template = &lt;DATA&gt;;
+    seek DATA, 0, SEEK_SET;
+    $perlcode = &lt;DATA&gt;;
+}
+
+my $htc = HTML::Template::Compiled-&gt;new(
+    scalarref =&gt; \$template,
+    tagstyle =&gt; [qw(+tt)],
+    formatter =&gt; {
+        'HTC::Object' =&gt; {
+            fullname =&gt; sub {
+                my $first = $_[0]-&gt;get_first;
+                my $last = $_[0]-&gt;get_last;
+                return &quot;$last, $first&quot;;
+            },
+        },
+    },
+);
+my $persons = [
+    HTC::Object-&gt;new({first =&gt; 'Bart',   last =&gt; 'Simpson', age =&gt; 10}),
+    HTC::Object-&gt;new({first =&gt; 'Maggie', last =&gt; 'Simpson', age =&gt; 10}),
+    HTC::Object-&gt;new({first =&gt; 'March',  last =&gt; 'Simpson', age =&gt; 42}),
+    HTC::Object-&gt;new({first =&gt; 'Homer',  last =&gt; 'Simpson', age =&gt; 42}),
+];
+$htc-&gt;param(
+    count =&gt; scalar @$persons,
+    items =&gt; $persons,
+    script =&gt; $0,
+    perlcode =&gt; $perlcode,
+);
+my $output = $htc-&gt;output;
+print $output;
+
+__DATA__
+&lt;html&gt;&lt;head&gt;&lt;title&gt;HTC example with objects&lt;/title&gt;&lt;/head&gt;
+&lt;body&gt;
+&lt;h2&gt;Script: [%= .script %]&lt;/h2&gt;&lt;p&gt;
+Found [%= .count %] persons:
+&lt;table&gt;
+&lt;tr&gt;&lt;th&gt;Name&lt;/th&gt;&lt;th&gt;Age&lt;/th&gt;&lt;/tr&gt;
+[%loop items%]
+&lt;tr&gt;
+    &lt;td&gt;[%= _/fullname %]&lt;/td&gt;
+    &lt;td&gt;[%= get_age %]&lt;/td&gt;
+&lt;/tr&gt;
+[%/loop items%]
+&lt;/table&gt;
+&lt;hr&gt;
+&lt;h2&gt;The Script:&lt;/h2&gt;
+&lt;pre&gt;
+[%= perlcode escape=html %]
+&lt;/pre&gt;
+&lt;/body&gt;&lt;/html&gt;
+
+</pre>
+</body></html>

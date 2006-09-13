@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.239 2006/08/26 12:08:26 tinita Exp $
+# $Id: Compiled.pm,v 1.246 2006/09/13 19:45:57 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,15 +9,17 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.73"
+$VERSION = "0.74"
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.73";
+our $VERSION = "0.74";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
-use constant D => 0;
+BEGIN {
+use constant D => $ENV{HTC_DEBUG} || 0;
+}
 use strict;
 use warnings;
 
@@ -76,7 +78,7 @@ BEGIN {
           method_call deref formatter_path default_path
           debug perl out_fh default_escape
           filter formatter plugin
-          globalstack use_query parser compiler
+          globalstack use_query parser compiler includes
           )
     );
 
@@ -200,10 +202,12 @@ sub new_file {
     $self->setCache_dir( $args{cache_dir} );
     $self->setPath( $args{path} );
     if (my $t = $self->from_cache()) {
+        $t->init_includes;
         return $t;
     }
     $self->init(%args);
     $self->from_scratch;
+    $self->init_includes;
     return $self;
 }
 
@@ -225,6 +229,7 @@ sub new_filehandle {
     }
     $self->init(%args);
     $self->from_scratch;
+    $self->init_includes;
     return $self;
 }
 
@@ -262,7 +267,24 @@ sub new_scalar_ref {
     }
     $self->init(%args);
     $self->from_scratch;
+    $self->init_includes;
     return $self;
+}
+
+sub init_includes {
+    my ($self) = @_;
+    my $includes = $self->getIncludes;
+    my $cache = $self->getCache_dir||'';
+    for my $fullpath (keys %$includes) {
+        my ($path, $filename, $htc) = @{ $includes->{$fullpath} };
+        D && $self->log("checking $fullpath ($filename) $htc?");
+        if (HTML::Template::Compiled::needs_new_check(
+                $cache||'',$filename)
+        ) {
+            $htc = $self->new_from_object($path,$filename,$fullpath,$cache);
+        }
+        $includes->{$fullpath}->[2] = $htc;
+    }
 }
 
 sub build_path {
@@ -358,6 +380,14 @@ sub from_cache {
     #   $cachedir => {
     #     $filename => $htc_object,
     my $times;
+
+    sub needs_new_check {
+        my ($dir, $fname) = @_;
+        my $times  = $times->{$dir}->{$fname} or return 1;
+        my $now = time;
+        return 0 if $now - $times->{checked} < $NEW_CHECK;
+        return 1;
+    }
 
     sub from_mem_cache {
         my ($self, $dir, $fname) = @_;
@@ -520,6 +550,14 @@ sub add_file_cache {
     $query_info = Data::Dumper->Dump([\$query_info], ['query_info']);
     my $parser =$self->getParser;
     $parser = Data::Dumper->Dump([\$parser], ['parser']);
+    my $includes = $self->getIncludes;
+    my $includes_to_string = Data::Dumper->Dump(
+        [ {map {
+                $_ => [$includes->{$_}->[0], $includes->{$_}->[1], 0],
+            } keys %$includes} ],
+        ['includes']
+    );
+    #$includes_to_string =~ s/\$includes = //;
     my $gl = $self->getGlobal_vars;
     my $file_args = $isScalar
       ? <<"EOM"
@@ -535,6 +573,7 @@ EOM
 # last checked date $lchecked
 my $query_info;
 my $parser;
+my $includes_to_string;
 my \$args = {
     # HTC version
     class => '@{[ref $self]}',
@@ -557,6 +596,7 @@ $file_args
     use_query => \$query_info,
     parser => \$parser,
     global_vars => $gl,
+    includes => \$includes,
     # TODO
     # dumper => ...
     # template subroutine
@@ -612,6 +652,8 @@ sub include_file {
         # is not uptodate
         return;
     }
+    $t->setIncludes( $args->{includes} );
+    $t->init_includes;
     $t->add_mem_cache(
         checked => $r->{times}->{checked},
         mtime   => $r->{times}->{mtime},
@@ -709,6 +751,7 @@ sub init {
     $self->setDefault_path( $defaults{default_path} );
     $self->setUse_query( $defaults{use_query} );
     $self->setSearch_path_on_include( $defaults{search_path_on_include} );
+    $self->setIncludes({});
     if ( $args{filter} ) {
         require HTML::Template::Compiled::Filter;
         $self->setFilter(
@@ -996,7 +1039,9 @@ sub new_from_object {
     if (my $cached = $new->from_cache) {
         return $cached
     }
-    return $new->from_scratch;
+    $new = return $new->from_scratch;
+    $new->init_includes;
+    return $new;
 }
 
 sub preload {
@@ -1273,32 +1318,36 @@ __END__
 
 For a quick reference, see L<HTML::Template::Compiled::Reference>.
 
+HTML::Template::Compiled (HTC) does not implement all features of
+L<HTML::Template>, and
+it has got some additional features which are explained below:
+L<"ADDITIONAL FEATURES">
+
 HTML::Template::Compiled (HTC) is a template system which uses the same
 template syntax as HTML::Template and the same perl API (see L<"COMPATIBILITY">
-for what you need to know if you want the same behaviour). Internally
+for what you need to know if you want (almost) the same behaviour). Internally
 it works different, because it turns the template into perl code,
 and once that is done, generating the output is much faster than with
-HTML::Template (3-7 times at the moment, at least with my tests, and 3.5 times (see
+HTML::Template (3-6 times at the moment, depending on the options you use (see
 L<"Benchmarks"> for some examples), when both are run with loop_context_vars 0.
 It also can generate perl files so that
 the next time the template is loaded it doesn't have to be parsed again. The best
 performance gain is probably reached in applications running under mod_perl, for example.
 
 If you don't use caching at all (e.g. CGI environment without file caching), HTC
-will be even slower than H::T (but still a bit faster than Template-Toolkit.
+will be even slower than H::T.
 You might want to use L<HTML::Template::Compiled::Lazy> for CGI environments
-as it doesn't parse the template before calling output.
+as it doesn't parse the template before calling output. But note that HTC::Lazy
+is still in development; there might be bugs with certain combinations
+of includes and file caching.
 
 HTC will use a lot of memory because it keeps all template objects in memory.
 If you are on mod_perl, and have a lot of templates, you should preload them at server
 startup to be sure that it is in shared memory. At the moment HTC is not fully tested for
-keeping all data in shared memory (e.g. when a copy-on-write occurs), but i'll test
-that soon. It seems like it's behaving well, but still no guarantee.
+keeping all data in shared memory (e.g. when a copy-on-write occurs),
+but it seems like it's behaving well.
 For preloading you can now use
   HTML::Template::Compiled->preload($dir).
-
-HTC does not implement all features of HTML::Template, and
-it has got some additional features which are explained below.
 
 Generating code, writing it on disk and later eval() it can open security holes, for example
 if you have more users on the same machine that can access the same files (usually an
@@ -1350,13 +1399,19 @@ use option case_sensitive => 0 to use this feature (slow down)
 
 =item C<query>
 
+Has a bug (doesn't return parameters in included files)
+
 =back
 
 =head2 ADDITIONAL FEATURES
 
+What can HTC do for you additionally to HTML::Template?
+
 =over 4
 
 =item TMPL_ELSIF
+
+No need to have cascading "if-else-if-else"s
 
 =item TMPL_WITH
 
@@ -1366,25 +1421,13 @@ see L<"TMPL_WITH">
 
 see L<"TMPL_WHILE">
 
-=item TMPL_COMMENT
+=item TMPL_COMMENT, TMPL_NOPARSE, TMPL_VERBATIM
 
-see L<"TMPL_COMMENT">
-
-=item TMPL_NOPARSE
-
-see L<"TMPL_NOPARSE">
-
-=item TMPL_VERBATIM
-
-see L<"TMPL_VERBATIM">
+see L<"TMPL_COMMENT">, L<"TMPL_NOPARSE">, L<"TMPL_VERBATIM">
 
 =item C<__index__>
 
-=item TMPL_LOOP_CONTEXT
-
-Not supported any more.
-
-turn on loop_context in template, see L<"TMPL_LOOP_CONTEXT">
+Additional loop variable (C<__counter__ -1>)
 
 =item TMPL_SWITCH, TMPL_CASE
 
@@ -1392,15 +1435,19 @@ see L<"TMPL_SWITCH">
 
 =item Generating perl code
 
+See L<"IMPLEMENTATION">
+
 =item more variable access
 
-see L<"VARIABLE ACCESS">
+dot-notation for accessing hash values. See L<"VARIABLE ACCESS">
 
 =item rendering objcets
 
-see L<"RENDERING OBJECTS">
+dot-notation for accessing object methods. See L<"RENDERING OBJECTS">
 
 =item output to filehandle
+
+See L<"OPTIONS">
 
 =item Dynamic includes
 
@@ -1430,21 +1477,25 @@ functionally equivalent:
 This works only with C<TMPL_LOOP> at the moment. I probably will
 implement this for C<TMPL_WITH>, C<TMPL_WHILE> too.
 
-=item asp/jsp-like templates
-
-For those who like it (i like it because it is shorter than TMPL_), you
-can use E<lt>% %E<gt> tags and the E<lt>%= tag instead of E<lt>%VAR (which will work, too):
-
- <%IF blah%>  <%= VARIABLE%>  <%/IF%>
-
 =item Chained escaping
 
 See L<"ESCAPING">
 
 =item tagstyles
 
+For those who like it (i like it because it is shorter than TMPL_), you
+can use E<lt>% %E<gt> tags and the E<lt>%= tag instead of E<lt>%VAR (which will work, too):
+
+ <%IF blah%>  <%= VARIABLE%>  <%/IF%>
+
 Define your own tagstyles and/or deactivate predefined ones.
 See L<"OPTIONS"> tagstyle.
+
+=item TMPL_LOOP_CONTEXT
+
+Not supported any more.
+
+turn on loop_context in template, see L<"TMPL_LOOP_CONTEXT">
 
 =back
 
@@ -1499,8 +1550,8 @@ of HTC.
 
 =item search_path_on_include
 
-default is 1 (on). Set it via
-    HTML::Template::Compiled->SearchPathOnInclude(0);
+default is now 0, like in HTML::Template. Set it to 1 by
+    HTML::Template::Compiled->SearchPathOnInclude(1);
 
 =item use_query
 
@@ -1832,7 +1883,7 @@ Path to template files
 =item search_path_on_include
 
 Search the list of paths specified with C<path> when including a template.
-Default is 1 (different from HTML::Template).
+Default is 0
 
 =item cache_dir
 
@@ -2219,6 +2270,17 @@ require, use L<HTML::Template::Compiled::Lazy>.
 associate, methods with simple parameters,
 expressions, pluggable, ...
 
+=head1 IMPLEMENTATION
+
+HTC generates a perl subroutine out of every template. Each included template
+is a subroutine for itself. You can look at the generated code by activating
+file caching and looking into the cache directory. When you call C<output()>,
+the subroutine is called. The subroutine either creates a string and adds
+each template text or the results of the tags to the string, or it prints
+it directly to a filehandle. Because of the implementation you have to know
+at creation time of the module if you want to get a string back or if you
+want to print to a filehandle.
+
 =head1 SECURITY
 
 HTML::Template::Compiled uses basically the same file caching model as, for example, Template-
@@ -2269,6 +2331,11 @@ you save ca. 86%, under CGI about 10%), if you use case_sensitive = 1, loop_cont
 global_vars = 1.
 
 See the C<examples/bench.pl> contained in this distribution.
+
+=head1 EXAMPLES
+
+See L<examples/objects.html> (and C<examples/objects.pl>) for an example
+how to feed objects to HTC.
 
 =head1 BUGS
 

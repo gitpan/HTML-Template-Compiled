@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 12_path.t,v 1.2 2005/11/23 21:34:46 tinita Exp $
+# $Id: 12_path.t,v 1.3 2006/09/13 18:21:40 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 3;
@@ -21,6 +21,7 @@ ok($@ =~ m{'dummy.tmpl' not found}, "search_path_on_include off");
 my $htc = HTML::Template::Compiled->new(
 	path => File::Spec->catfile(qw(t templates)),
 	filename => File::Spec->catfile(qw(subdir a file1.html)),
+    search_path_on_include => 1,
 	#debug => 1,
 );
 my $out = $htc->output;

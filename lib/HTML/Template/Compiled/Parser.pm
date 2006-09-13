@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.33 2006/08/07 01:53:00 tinita Exp $
+# $Id: Parser.pm,v 1.34 2006/09/13 18:21:40 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -25,7 +25,7 @@ $NEW_CHECK              = 60 * 10; # 10 minutes default
 $DEBUG_DEFAULT          = 0;
 $CASE_SENSITIVE_DEFAULT = 1; # set to 0 for H::T compatibility
 $ENABLE_SUB             = 0;
-$SEARCHPATH             = 1;
+$SEARCHPATH             = 0;
 $DEFAULT_ESCAPE         = 0;
 $UNDEF                  = ''; # set for debugging
 $UNTAINT                = 0;

@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.15 2006/07/13 18:48:19 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.16 2006/09/10 20:25:00 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 6;
@@ -62,6 +62,7 @@ sleep 2;
 my $subclass = 'HTML::Template::Compiled::subclass';
 sub HTML::Template::Compiled::subclass::method_call { '/' }
 sub HTML::Template::Compiled::subclass::deref { '.' }
+HTML::Template::Compiled->clear_filecache($cache);
 
 my $htc = $subclass->new(%args);
 ok($htc, "template created");

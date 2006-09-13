@@ -1,5 +1,6 @@
 Changes
 Makefile.PL
+Build.PL
 MANIFEST
 README
 lib/HTML/Template/Compiled.pm
@@ -16,6 +17,8 @@ lib/HTML/Template/Compiled/Expression.pm
 lib/HTML/Template/Compiled/Reference.pod
 lib/HTML/Template/Compiled/Classic.pm
 lib/HTML/Template/Compiled/Lazy.pm
+examples/objects.pl
+examples/objects.html
 examples/test.htc
 examples/test.htcc
 examples/test.htc.20

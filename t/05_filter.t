@@ -1,4 +1,4 @@
-# $Id: 05_filter.t,v 1.6 2006/07/13 13:53:31 tinita Exp $
+# $Id: 05_filter.t,v 1.7 2006/09/10 21:29:20 tinita Exp $
 use lib 'blib/lib';
 use Test::More tests => 4;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -49,7 +49,7 @@ Included Name: Caesar
 
 EOM
 	my $out = $htc->output();
-	ok($out eq $exp, "filter $i");
+	cmp_ok($out, 'eq', $exp, "filter $i");
 	$htc->clear_cache();
     #print "\n($out)\n($exp)\n";
 }
