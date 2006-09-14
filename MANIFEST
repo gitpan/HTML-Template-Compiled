@@ -8,6 +8,7 @@ lib/HTML/Template/Compiled/Utils.pm
 lib/HTML/Template/Compiled/Filter.pm
 lib/HTML/Template/Compiled/Parser.pm
 lib/HTML/Template/Compiled/Compiler.pm
+lib/HTML/Template/Compiled/Compiler/Classic.pm
 lib/HTML/Template/Compiled/Plugin/DHTML.pm
 lib/HTML/Template/Compiled/Plugin/XMLEscape.pm
 lib/HTML/Template/Compiled/Expression/Expressions.pm

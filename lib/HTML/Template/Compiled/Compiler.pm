@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.12 2006/09/10 22:07:46 tinita Exp $
+# $Id: Compiler.pm,v 1.15 2006/09/14 20:44:08 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -63,7 +63,7 @@ sub new {
 }
 
 sub _escape_expression {
-    my ( $self, $t, $exp, $escape ) = @_;
+    my ( $self, $exp, $escape ) = @_;
     return $exp unless $escape;
     my @escapes = split m/\|/, uc $escape;
     my $escapes = $self->get_escapes();
@@ -159,9 +159,9 @@ sub _make_path {
     return $varstr;
 } ## end sub _make_path
 
-sub _compile {
+sub compile {
     my ( $class, $self, $text, $fname ) = @_;
-    D && $self->log("_compile($fname)");
+    D && $self->log("compile($fname)");
     if ( my $filter = $self->getFilter ) {
         $filter->filter($text);
     }
@@ -229,7 +229,7 @@ EOM
             if (exists $attr->{DEFAULT}) {
                 $default = _expr_string($attr->{DEFAULT});
             }
-            my $varstr = $self->_make_path(
+            my $varstr = $class->_make_path($self,
                 %var_args,
                 var   => $var,
                 final => 1,
@@ -244,7 +244,7 @@ EOM
                     $default,
                 );
             }
-            $exp = $self->_escape_expression($exp, $escape);
+            $exp = $class->_escape_expression($exp, $escape);
             $code .= qq#${indent}$output #
                 . $exp->to_string($level) . qq#;\n#;
         }
@@ -252,7 +252,7 @@ EOM
         elsif ($is_open && $tname eq T_WITH && exists $attr->{NAME}) {
             $level++;
             my $var    = $attr->{NAME};
-            my $varstr = $self->_make_path(
+            my $varstr = $class->_make_path($self,
                 %var_args,
                 var => $var,
             );
@@ -271,7 +271,7 @@ EOM
         elsif ($is_open && ($tname eq T_LOOP || $tname eq T_WHILE)
             && exists $attr->{NAME}) {
             my $var     = $attr->{NAME};
-            my $varstr = $self->_make_path(
+            my $varstr = $class->_make_path($self,
                 %var_args,
                 var   => $var,
             );
@@ -359,7 +359,7 @@ EOM
             #print STDERR "============ IF ($text)\n";
             my $def    = $tname =~ m/DEFINED$/;
             my $var    = $attr->{NAME};
-            my $varstr = $self->_make_path(
+            my $varstr = $class->_make_path($self,
                 %var_args,
                 var   => $var,
             );
@@ -382,7 +382,7 @@ EOM
         # --------- TMPL_ELSIF
         elsif ($is_open && $tname eq T_ELSIF && exists $attr->{NAME}) {
             my $var    = $attr->{NAME};
-            my $varstr = $self->_make_path(
+            my $varstr = $class->_make_path($self,
                 %var_args,
                 var   => $var,
             );
@@ -397,7 +397,7 @@ EOM
             my $var = $attr->{NAME};
             push @switches, 0;
             $level++;
-            my $varstr = $self->_make_path(
+            my $varstr = $class->_make_path($self,
                 %var_args,
                 var   => $var,
             );
@@ -467,7 +467,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 if ($self->getUse_query) {
                     $info_stack->[-1]->{lc $dfilename}->{type} = T_INCLUDE_VAR;
                 }
-                $varstr = $self->_make_path(
+                $varstr = $class->_make_path($self,
                     %var_args,
                     var   => $dfilename,
                 );

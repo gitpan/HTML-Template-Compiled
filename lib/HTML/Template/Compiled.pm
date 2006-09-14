@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.246 2006/09/13 19:45:57 tinita Exp $
+# $Id: Compiled.pm,v 1.255 2006/09/14 20:44:08 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.74"
+$VERSION = "0.75"
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.74";
+our $VERSION = "0.75";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 BEGIN {
@@ -479,6 +479,7 @@ sub from_cache {
 sub compile {
     my ($self) = @_;
     my ( $source, $compiled );
+    my $compiler = $self->getCompiler;
     if ( my $file = $self->getFile and !$self->getScalar ) {
 
         # thanks to sam tregars testsuite
@@ -490,7 +491,7 @@ sub compile {
         my $text  = $self->_readfile($file);
         die "HTML::Template: recursive include of " . $file . " $recursed times"
           if $recursed > 10;
-        my ( $source, $compiled ) = $self->_compile( $text, $file );
+        my ( $source, $compiled ) = $compiler->compile( $self, $text, $file );
         --$FILESTACK{$file} or delete $FILESTACK{$file};
         $self->setPerl($compiled);
         $self->getCache and $self->add_mem_cache(
@@ -511,7 +512,7 @@ sub compile {
     elsif ( my $text = $self->getScalar ) {
         my $md5 = $self->getFilename;    # yeah, weird
         D && $self->log("compiled $md5");
-        my ( $source, $compiled ) = $self->_compile( $$text, $md5 );
+        my ( $source, $compiled ) = $compiler->compile( $self, $$text, $md5 );
         $self->setPerl($compiled);
         if ( $self->getCache_dir ) {
             D && $self->log("add_file_cache($file)");
@@ -525,7 +526,7 @@ sub compile {
     elsif ( my $fh = $self->getFilehandle ) {
         local $/;
         my $data = <$fh>;
-        my ( $source, $compiled ) = $self->_compile( $data, '' );
+        my ( $source, $compiled ) = $compiler->compile( $self, $data, '' );
         $self->setPerl($compiled);
 
     }
@@ -550,6 +551,7 @@ sub add_file_cache {
     $query_info = Data::Dumper->Dump([\$query_info], ['query_info']);
     my $parser =$self->getParser;
     $parser = Data::Dumper->Dump([\$parser], ['parser']);
+    local $Data::Dumper::Deepcopy = 1;
     my $includes = $self->getIncludes;
     my $includes_to_string = Data::Dumper->Dump(
         [ {map {
@@ -558,6 +560,7 @@ sub add_file_cache {
         ['includes']
     );
     #$includes_to_string =~ s/\$includes = //;
+    my $search_path = $self->getSearch_path_on_include || 0;
     my $gl = $self->getGlobal_vars;
     my $file_args = $isScalar
       ? <<"EOM"
@@ -597,6 +600,7 @@ $file_args
     parser => \$parser,
     global_vars => $gl,
     includes => \$includes,
+    search_path_on_include => $search_path,
     # TODO
     # dumper => ...
     # template subroutine
@@ -774,7 +778,7 @@ sub init {
     }
     $parser ||= $self->parser_class->default();
     $self->setParser($parser);
-    my $compiler = HTML::Template::Compiled::Compiler->new;
+    my $compiler = $self->compiler_class->new;
     $self->setCompiler($compiler);
     if ($defaults{plugin}) {
         for my $plug (ref $defaults{plugin} eq 'ARRAY'
@@ -834,13 +838,7 @@ sub formatter_path { '/' }
 
 sub parser_class { 'HTML::Template::Compiled::Parser' }
 
-sub _compile {
-    return $_[0]->getCompiler->_compile(@_);
-}
-
-sub _escape_expression {
-    return $_[0]->getCompiler->_escape_expression(@_);
-}
+sub compiler_class { 'HTML::Template::Compiled::Compiler' }
 
 sub quote_file {
     defined(my $f = $_[1]) or return '';
@@ -859,10 +857,6 @@ sub quote_file {
 # parameter hash. the third argument to get_var is 'final'.
 # <tmpl_var foo> is a 'final' path, and <tmpl_with foo> is not.
 # so final means it's in 'print-context'.
-
-sub _make_path {
-    return $_[0]->getCompiler->_make_path(@_);
-}
 
 
 # -------- warning, ugly code
@@ -1301,7 +1295,7 @@ __END__
   my $htc = HTML::Template::Compiled->new(filename => 'test.tmpl');
   $htc->param(
     BAND => $name,
-    ALBUMS = [
+    ALBUMS => [
       { TITLE => $t1, YEAR => $y1 },
       { TITLE => $t2, YEAR => $y2 },
     ],
@@ -1437,7 +1431,7 @@ see L<"TMPL_SWITCH">
 
 See L<"IMPLEMENTATION">
 
-=item more variable access
+=item better variable access
 
 dot-notation for accessing hash values. See L<"VARIABLE ACCESS">
 
@@ -1452,10 +1446,6 @@ See L<"OPTIONS">
 =item Dynamic includes
 
 see L<"INCLUDE">
-
-=item TMPL_IF DEFINED
-
-Was deprecated, is removed as of version 0.72
 
 =item TMPL_IF_DEFINED
 
@@ -1490,12 +1480,6 @@ can use E<lt>% %E<gt> tags and the E<lt>%= tag instead of E<lt>%VAR (which will 
 
 Define your own tagstyles and/or deactivate predefined ones.
 See L<"OPTIONS"> tagstyle.
-
-=item TMPL_LOOP_CONTEXT
-
-Not supported any more.
-
-turn on loop_context in template, see L<"TMPL_LOOP_CONTEXT">
 
 =back
 
@@ -1706,7 +1690,7 @@ Default is C<sub compile_early { 1 }>
 
 Default is C<sub parser_class { 'HTML::Template::Compiled::Parser' }>
 
-You can write your own parser class (whuch must inherit from
+You can write your own parser class (which must inherit from
 L<HTML::Template::Compiled::Parser>) and use this.
 
 L<HTML::Template::Compiled::Lazy> uses this.
@@ -1752,35 +1736,6 @@ The special name C<_> gives you the current paramater. In loops you can use it l
 Also you can give the current item an alias. See L<"ALIAS">. I also would like
 to add a loop_context variable C<__current__>, if that makes sense.
 Seems more readable to non perlers than C<_>.
-
-=head2 TMPL_LOOP_CONTEXT
-
-Not supported any more.
-
-NOTE: I might drop this feature; I only added it for speed; maybe I can gain
-that speed by a different technique. Backgrund is that if loop_context_vars
-is on, I calculate all 5 loop-variables for every loop, even if they aren't
-used.
-
-With the directive
-
- <TMPL_LOOP_CONTEXT>
-
-you can turn on loop_context_vars directly in the template. You usually would do that
-directly after the loop tag (but you can do it anywhere in a loop):
-
- <tmpl_loop foo><tmpl_loop_context>
-   <tmpl_var __counter__>
- </tmpl_loop foo>
- <tmpl_loop bar>
-   <tmpl_if need_count>
-     <tmpl_loop_context>
-     <tmpl_var __counter__>
-   </tmpl_if>
- </tmpl_loop bar>
-
-If you only have a small number of loops that need the loop_context then this can
-save you a bit of CPU, too. Set loop_context_vars to 0 and use the directive only.
 
 =head2 TMPL_WHILE
 
@@ -1925,9 +1880,6 @@ templates created like this.
 
 Vars like C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>,
 C<__index__>
-
-To enable loop_context_vars is a slow down, too (about 10%). See L<"TMPL_LOOP_CONTEXT"> for
-how to avoid this.
 
 The variable C<__index__> works just like C<__counter__>, only that it starts
 at 0 instead of 1.

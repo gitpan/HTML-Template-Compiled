@@ -1,10 +1,13 @@
 package HTML::Template::Compiled::Classic;
-# $Id: Classic.pm,v 1.9 2006/08/25 18:52:14 tinita Exp $
+# $Id: Classic.pm,v 1.10 2006/09/13 22:06:17 tinita Exp $
 use strict;
 use warnings;
-our $VERSION = "0.02";
+our $VERSION = "0.03";
 
 use base 'HTML::Template::Compiled';
+use HTML::Template::Compiled::Compiler::Classic;
+
+sub compiler_class { 'HTML::Template::Compiled::Compiler::Classic' }
 
 sub _get_var_sub {
     my ($self, $P, $ref, $final, @paths) = @_;
@@ -24,29 +27,6 @@ sub _get_var_global_sub {
         return $var;
     }
     return;
-}
-
-sub _make_path {
-    my ( $self, %args ) = @_;
-    my %loop_context = (
-        __index__   => '$__ix__',
-        __counter__ => '$__ix__+1',
-        __first__   => '$__ix__ == $[',
-        __last__    => '$__ix__ == $size',
-        __odd__     => '!($__ix__ & 1)',
-        __inner__   => '$__ix__ != $[ && $__ix__ != $size',
-    );
-
-    if ( $self->getLoop_context && $args{var} =~ m/^__(\w+)__$/ ) {
-        my $lc = $loop_context{ lc $args{var} };
-        return $lc;
-    }
-    my $getvar = '_get_var'
-        . ($self->getGlobal_vars&1 ? '_global' : '')
-        . '_sub';
-    my $varstr =
-        "\$t->$getvar(" . '$P,$$C,0,'."[undef,'$args{var}'])";
-    return $varstr;
 }
 
 
@@ -96,6 +76,16 @@ In L<HTML::Template>, the following works:
 
 This doesn't work in L<HTML::Template::Compiled> (in the past it did,
 but as of HTC version 0.70 it won't any more, sorry).
+
+=back
+
+=head1 METHODS
+
+=over 4
+
+=item compiler_class
+
+returns HTML::Template::Compiled::Compiler::Classic
 
 =back
 
