@@ -1,11 +1,12 @@
 package HTML::Template::Compiled::Expression;
-# $Id: Expression.pm,v 1.2 2006/07/17 22:57:15 tinita Exp $
+# $Id: Expression.pm,v 1.5 2006/10/02 15:48:02 tinita Exp $
 use strict;
 use warnings;
 
 use constant OPERANDS => 0;
 use constant ATTRIBUTES => 1;
 use base 'Exporter';
+our $VERSION = 0.02;
 use  HTML::Template::Compiled::Expression::Expressions;
 my @expressions = qw(
     &_expr_close
@@ -23,8 +24,6 @@ our @EXPORT_OK = @expressions;
 our %EXPORT_TAGS = (
     expressions => \@expressions,
 );
-use HTML::Template::Compiled::Expression::Conditional;
-use HTML::Template::Compiled::Expression::Function;
 
 sub _expr_close { HTML::Template::Compiled::Expression::Close->new }
 sub _expr_open { HTML::Template::Compiled::Expression::Open->new }
@@ -70,7 +69,88 @@ sub level2indent {
     my ($self, $level) = @_;
     return "  " x $level;
 }
+
+
+package HTML::Template::Compiled::Expression::Conditional;
+use base qw(HTML::Template::Compiled::Expression);
+
+sub init {
+    my ($self, $op) = @_;
+    $self->set_operands([$op]);
+}
+
+package HTML::Template::Compiled::Expression::If;
+our @ISA = qw(HTML::Template::Compiled::Expression::Conditional);
+
+sub to_string {
+    my ($self, $level) = @_;
+    my $indent = $self->level2indent($level);
+    my ($op) = $self->get_operands;
+    return $indent . 'if ( ' . $op->to_string . ' ) {';
+}
+
+package HTML::Template::Compiled::Expression::Unless;
+our @ISA = qw(HTML::Template::Compiled::Expression::Conditional);
+
+sub to_string {
+    my ($self, $level) = @_;
+    my $indent = $self->level2indent($level);
+    my ($op) = $self->get_operands;
+    return $indent . 'unless ( ' . $op->to_string . ' ) {';
+}
+
+package HTML::Template::Compiled::Expression::Elsif;
+our @ISA = qw(HTML::Template::Compiled::Expression::Conditional);
+
+sub to_string {
+    my ($self, $level) = @_;
+    my $indent = $self->level2indent($level);
+    my ($op) = $self->get_operands;
+    return $indent . '}' . $/ . $indent . 'elsif ( ' . $op->to_string . ' ) {';
+}
+
+package HTML::Template::Compiled::Expression::Else;
+our @ISA = qw(HTML::Template::Compiled::Expression::Conditional);
+
+sub to_string {
+    my ($self, $level) = @_;
+    my $indent = $self->level2indent($level);
+    return $indent . '}' . $/ . $indent . 'else {';
+}
+
+package HTML::Template::Compiled::Expression::Function;
+our @ISA = qw(HTML::Template::Compiled::Expression);
+
+sub init {
+    my ($self, @ops) = @_;
+    $self->set_operands([@ops]);
+}
+sub to_string {
+    my ($self, $level) = @_;
+    my $indent = $self->level2indent($level);
+    my ($function, @ops) = $self->get_operands;
+    return "$indent$function( " .
+        join(", ", map {
+                $_->to_string($level)
+        } @ops) . " )";
+}
+
+package HTML::Template::Compiled::Expression::Method;
+our @ISA = qw(HTML::Template::Compiled::Expression::Function);
+
+sub to_string {
+    my ($self, $level) = @_;
+    my $indent = $self->level2indent($level);
+    my ($function, $object, @args) = $self->get_operands;
+    return $indent . $object->to_string($level) .
+        "->$function( " .
+        join(", ", map {
+                $_->to_string($level)
+        } @args) . " )";
+}
+
 1;
+
 
 __END__
 

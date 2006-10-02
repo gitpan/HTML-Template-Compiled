@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.15 2006/09/14 20:44:08 tinita Exp $
+# $Id: Compiler.pm,v 1.23 2006/10/02 15:18:08 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -7,6 +7,8 @@ use Carp qw(croak carp);
 use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
+
+our $VERSION = '0.03';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -96,6 +98,7 @@ sub _escape_expression {
 sub _make_path {
     my ( $self, $t, %args ) = @_;
     my $lexicals = $args{lexicals};
+    my $context = $args{context};
     if ( grep { defined $_ && $args{var} eq $_ } @$lexicals ) {
         return "\$$args{var}";
     }
@@ -151,7 +154,7 @@ sub _make_path {
         } ## end else [ if ( $p =~ s/^\Q$args{method_call}//)
     } ## end for my $p (@split)
     local $" = ",";
-    my $final = $args{final} ? 1 : 0;
+    my $final = $context->get_name eq 'VAR' ? 1 : 0;
     my $getvar = '_get_var';
     $getvar .= $t->getGlobal_vars & 1 ? '_global' : '';
     my $varstr =
@@ -192,18 +195,15 @@ $anon
     #my \$C = \\\$P;
 EOM
 
-    my $line_save = 0;
     my @lexicals;
     my @switches;
-    for my $p (@p) {
-        my ($text, $tt, $line, $open, $tname, $attr, $close) = @$p;
-        #print STDERR "tags: ($text, $tt, $line, $open, $tname, $attr, $close)\n";
-        $line_save = $line;
+    for my $token (@p) {
+        my ($text, $line, $open, $tname, $attr, $close) = @$token;
+        #print STDERR "tags: ($text, $line, $open, $tname, $attr, $close)\n";
         #print STDERR "p: '$text'\n";
         my $indent = INDENT x $level;
-        my $is_tag = $tt != NO_TAG;
-        my $is_open = $is_tag && $tt == OPENING_TAG;
-        my $is_close = $is_tag && $tt == CLOSING_TAG;
+        my $is_open = $token->is_open;
+        my $is_close = $token->is_close;
         my $meth     = $self->getMethod_call;
         my $deref    = $self->getDeref;
         my $format   = $self->getFormatter_path;
@@ -212,7 +212,6 @@ EOM
             method_call    => $meth,
             formatter_path => $format,
             lexicals       => \@lexicals,
-            final          => 0,   
         );
         # --------- TMPL_VAR
         if ($is_open && $tname eq T_VAR && exists $attr->{NAME}) {
@@ -221,28 +220,29 @@ EOM
             if ($self->getUse_query) {
                 $info_stack->[-1]->{lc $var}->{type} = T_VAR;
             }
-            my $escape = $self->getDefault_escape;
-            if (exists $attr->{ESCAPE}) {
-                $escape = $attr->{ESCAPE};
-            }
+            my $varstr = $class->_make_path($self,
+                %var_args,
+                var   => $var,
+                context => $token,
+            );
+            #print "line: $text var: $var ($varstr)\n";
+            my $exp = _expr_literal($varstr);
+            # ---- default
             my $default;
             if (exists $attr->{DEFAULT}) {
                 $default = _expr_string($attr->{DEFAULT});
             }
-            my $varstr = $class->_make_path($self,
-                %var_args,
-                var   => $var,
-                final => 1,
-            );
-
-            #print "line: $text var: $var ($varstr)\n";
-            my $exp = _expr_literal($varstr);
             if ( defined $default ) {
                 $exp = _expr_ternary(
                     _expr_defined($exp),
                     $exp,
                     $default,
                 );
+            }
+            # ---- escapes
+            my $escape = $self->getDefault_escape;
+            if (exists $attr->{ESCAPE}) {
+                $escape = $attr->{ESCAPE};
             }
             $exp = $class->_escape_expression($exp, $escape);
             $code .= qq#${indent}$output #
@@ -255,6 +255,7 @@ EOM
             my $varstr = $class->_make_path($self,
                 %var_args,
                 var => $var,
+                context => $token,
             );
             $code .= _expr_open()->to_string($level) .qq# \# WITH $var\n#;
             if ($self->getGlobal_vars) {
@@ -274,6 +275,7 @@ EOM
             my $varstr = $class->_make_path($self,
                 %var_args,
                 var   => $var,
+                context => $token,
             );
             $level += 2;
             my $ind    = INDENT;
@@ -298,7 +300,9 @@ EOM
                 $code .= _expr_open()->to_string($level) . "# while $var\n";
                 $code .= <<"EOM";
 $global
+${indent}${indent}local \$__ix__ = -1;
 ${indent}${ind}while (my \$next = $varstr) {
+${indent}${indent}\$__ix__++;
 ${indent}${indent}my \$C = \\\$next;
 $lexi
 EOM
@@ -311,7 +315,7 @@ ${indent}${ind}my \$size = \$#{ \$array };
 $global
 
 ${indent}${ind}# loop over $var
-${indent}${ind}for \$__ix__ (\$[..\$size) \{
+${indent}${ind}for \$__ix__ (\$[..\$size + \$[) \{
 ${indent}${ind}${ind}my \$C = \\ (\$array->[\$__ix__]);
 $lexi
 EOM
@@ -362,6 +366,7 @@ EOM
             my $varstr = $class->_make_path($self,
                 %var_args,
                 var   => $var,
+                context => $token,
             );
             my $if = {
                 IF => 'If',
@@ -385,6 +390,7 @@ EOM
             my $varstr = $class->_make_path($self,
                 %var_args,
                 var   => $var,
+                context => $token,
             );
             my $operand = _expr_literal($varstr);
             my $exp = _expr_elsif($operand);
@@ -400,6 +406,7 @@ EOM
             my $varstr = $class->_make_path($self,
                 %var_args,
                 var   => $var,
+                context => $token,
             );
             $code .= <<"EOM";
 ${indent}SWITCH: for my \$_switch ($varstr) \{
@@ -470,6 +477,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 $varstr = $class->_make_path($self,
                     %var_args,
                     var   => $dfilename,
+                    context => $token,
                 );
             }
             else {
@@ -478,10 +486,15 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 $filename = $attr->{NAME};
                 $varstr   = $self->quote_file($filename);
                 $dir      = dirname $fname;
-                if ( defined $dir and !grep { $dir eq $_ } @$path ) {
-                    # add the current directory to top of paths
-                    # create new $path, don't alter original ref
-                    $path = [ $dir, @$path ] ;
+                if ($self->getSearch_path_on_include) {
+                    if ( defined $dir and !grep { $dir eq $_ } @$path ) {
+                        # add the current directory to top of paths
+                        # create new $path, don't alter original ref
+                        $path = [ $dir, @$path ] ;
+                    }
+                }
+                else {
+                        $path = [ $dir ] ;
                 }
                 # generate included template
                 {

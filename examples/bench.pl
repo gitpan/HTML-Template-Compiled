@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.15 2006/08/24 20:32:19 tinita Exp $
+# $Id: bench.pl,v 1.17 2006/10/02 15:27:07 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -18,6 +18,7 @@ mkdir "cache/htc";
 mkdir "cache/jit";
 my %use = (
 	'HTML::Template'           => 0,
+	'HTML::Template::Pro'      => 0,
 	'HTML::Template::Compiled' => 0,
 	'HTML::Template::Compiled::Classic' => 0,
 #	'HTML::Template::JIT'      => 0,
@@ -69,6 +70,7 @@ sub new_htcc {
 		out_fh => 1,
         global_vars => $GLOBAL_VARS,
         debug => 0,
+        #debug => 1,
 	);
 	return $t1;
 }
@@ -81,9 +83,25 @@ sub new_tst {
 	return $t;
 }
 
+sub new_htp {
+	my $t2 = HTML::Template::Pro->new(
+		case_sensitive => $CASE_SENSITIVE,
+		loop_context_vars => $LOOP_CONTEXT,
+		#path => 'examples',
+		filename => $ht_file,
+#		cache => $MEM_CACHE,
+#        $FILE_CACHE ?
+#        (file_cache => $FILE_CACHE,
+#        file_cache_dir => 'cache/ht') : (),
+        global_vars => $GLOBAL_VARS,
+#        die_on_bad_params => 0,
+	);
+	return $t2;
+}
+
 sub new_ht {
 	my $t2 = HTML::Template->new(
-		case_sensitive => $CASE_SENSITIVE, # slow down
+		case_sensitive => $CASE_SENSITIVE,
 		loop_context_vars => $LOOP_CONTEXT,
 		#path => 'examples',
 		filename => $ht_file,
@@ -158,7 +176,8 @@ sub output {
 	$params{name} = (ref $t).' '.$count++;
 	$t->param(%params);
 	#print $t->{code} if exists $t->{code};
-	my $out = $t=~m/Compiled/?$t->output(\*OUT):$t->output;
+    my $out = $t=~m/Compiled/?$t->output(\*OUT):$t->output;
+    #my $out = $t=~m/Compiled/?$t->output(\*STDOUT):$t->output;
 	print OUT $out;
 	#print "output():$out\n";
 	#my $size = total_size($t);
@@ -218,16 +237,23 @@ timethese ($ARGV[0]||-1, {
 			#output_ht => sub {output($global_ht)},
 						all_ht => sub {my $t = new_ht();output($t)},
         ) : (),
+		$use{'HTML::Template::Pro'} ? (
+            # new_ht => sub {my $t = new_ht()},
+			#output_ht => sub {output($global_ht)},
+						all_htp => sub {my $t = new_htp();output($t)},
+        ) : (),
         $use{'HTML::Template::JIT'} ? (
 					#new_htj => sub {my $t = new_htj();},
 					#output_htj => sub {output($global_htj)},
 						all_htj => sub {my $t = new_htj();output($t)},
         ) : (),
         $use{'Template'} ? (
-					#new_tt => sub {my $t = new_tt();},
-					#output_tt => sub {output_tt($global_tt)},
-						process_tt => sub {output_tt($global_tt)},
-#						all_tt_new_object => sub {my $t = new_tt();output_tt($t)},
+            #new_tt => sub {my $t = new_tt();},
+            #output_tt => sub {output_tt($global_tt)},
+            process_tt => sub {output_tt($global_tt)},
+            $MEM_CACHE
+                ? ()
+                : (all_tt_new_object => sub {my $t = new_tt();output_tt($t)}),
         ): (),
         $use{'Text::ScriptTemplate'} ? (
 					#new_tst => sub {my $t = new_tst();},

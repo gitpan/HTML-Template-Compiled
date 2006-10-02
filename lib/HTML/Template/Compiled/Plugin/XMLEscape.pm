@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Plugin::XMLEscape;
-# $Id: XMLEscape.pm,v 1.4 2006/08/26 14:07:14 tinita Exp $
+# $Id: XMLEscape.pm,v 1.5 2006/10/02 16:08:18 tinita Exp $
 use strict;
 use warnings;
 use Carp qw(croak carp);
@@ -52,7 +52,6 @@ HTML::Template::Compiled::Plugin::XMLEscape - XML-Escaping for HTC
 =head1 SYNOPSIS
 
     use HTML::Template::Compiled::Plugin::XMLEscape;
-    HTML::Template::Compiled->register('HTML::Template::Compiled::Plugin::XMLEscape');
 
     my $htc = HTML::Template::Compiled->new(
         plugin => [qw(HTML::Template::Compiled::Plugin::XMLEscape)],

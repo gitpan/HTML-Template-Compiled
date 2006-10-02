@@ -1,10 +1,11 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.34 2006/09/13 18:21:40 tinita Exp $
+# $Id: Parser.pm,v 1.38 2006/09/28 23:59:04 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
 use base qw(Exporter);
-our $VERSION = 0.02;
+use HTML::Template::Compiled::Token;
+our $VERSION = 0.03;
 my @vars;
 BEGIN {
 @vars = qw(
@@ -33,25 +34,23 @@ $DEFAULT_QUERY          = 0;
 $DEFAULT_TAGSTYLE       = [qw(classic comment asp)];
 
 use constant NO_TAG      => 0;
-use constant OPENING_TAG => 1;
-use constant CLOSING_TAG => 2;
 
 use constant ATTR_TAGSTYLE => 0;
 use constant ATTR_TAGNAMES => 1;
 
-use constant T_VAR     => 'VAR';
-use constant T_IF       => 'IF';
-use constant T_UNLESS   => 'UNLESS';
-use constant T_ELSIF    => 'ELSIF';
-use constant T_ELSE     => 'ELSE';
-use constant T_IF_DEFINED => 'IF_DEFINED';
-use constant T_END      => '__EOT__';
-use constant T_WITH     => 'WITH';
-use constant T_SWITCH   => 'SWITCH';
-use constant T_CASE     => 'CASE';
-use constant T_INCLUDE  => 'INCLUDE';
-use constant T_LOOP    => 'LOOP';
-use constant T_WHILE   => 'WHILE';
+use constant T_VAR         => 'VAR';
+use constant T_IF          => 'IF';
+use constant T_UNLESS      => 'UNLESS';
+use constant T_ELSIF       => 'ELSIF';
+use constant T_ELSE        => 'ELSE';
+use constant T_IF_DEFINED  => 'IF_DEFINED';
+use constant T_END         => '__EOT__';
+use constant T_WITH        => 'WITH';
+use constant T_SWITCH      => 'SWITCH';
+use constant T_CASE        => 'CASE';
+use constant T_INCLUDE     => 'INCLUDE';
+use constant T_LOOP        => 'LOOP';
+use constant T_WHILE       => 'WHILE';
 use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
 
 
@@ -218,13 +217,12 @@ sub find_attributes {
         }
         last unless defined $name;
     }
-    return 1 if $open_or_close == CLOSING_TAG;
+    return 1 if $open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG;
     return !keys %not_found;
 }
 
 {
 
-    # make (?i:IF_DEFINED|LOOP|IF|=|...) out of the list of identifiers
     sub parse {
         my ($self, $fname, $text) = @_;
         my $tagnames = $self->get_tagnames;
@@ -232,6 +230,7 @@ sub find_attributes {
             length $b <=> length $a
         } keys %$tagnames) . ")";
         my $tagstyle = $self->get_tagstyle;
+        # make (?i:IF_DEFINED|LOOP|IF|=|...) out of the list of identifiers
         my $start_close_re = '(?i:' . join("|", sort {
                 length($b) <=> length($a)
             } map {
@@ -241,8 +240,12 @@ sub find_attributes {
         my $token = "";
         my %open_close = map {
             (
-                $_->[0] => [OPENING_TAG, $_->[1]],
-                $_->[2] => [CLOSING_TAG, $_->[3]],
+                $_->[0] => [
+                    HTML::Template::Compiled::Token::OPENING_TAG, $_->[1]
+                ],
+                $_->[2] => [
+                    HTML::Template::Compiled::Token::CLOSING_TAG, $_->[3]
+                ],
             ),
         } @$tagstyle;
         my $line = 1;
@@ -253,9 +256,10 @@ sub find_attributes {
                 my ($self, %args) = @_;
                 ${$args{line}} += ${$args{token}} =~ tr/\n//;
                 #print STDERR "we found text: '${$args{token}}'\n";
-                push @{$args{tags}}, [
-                    ${$args{token}}, NO_TAG, ${$args{line}}
-                ];
+                push @{$args{tags}},
+                HTML::Template::Compiled::Token::Text->new([
+                    ${$args{token}}, ${$args{line}}
+                ]);
                 ${$args{token}} = "";
             }
         ];
@@ -264,10 +268,15 @@ sub find_attributes {
             my ($self, %args) = @_;
             #print STDERR "####found tag ${$args{name}}\n";
             ${$args{line}} += ${$args{token}} =~ tr/\n//;
-            push @{$args{tags}}, [
-                ${$args{token}}, ${$args{open_or_close}}, ${$args{line}},
+            my $class = 'HTML::Template::Compiled::Token::' .
+                (${$args{open_or_close}} == HTML::Template::Compiled::Token::OPENING_TAG
+                    ? 'open'
+                    : 'close');
+
+            push @{$args{tags}}, $class->new([
+                ${$args{token}}, ${$args{line}},
                 ${$args{open}}, ${$args{name}}, $args{attr}, ${$args{close}}
-            ];
+            ]);
             $self->checkstack(
                 $args{fname}, ${$args{line}}, $args{stack},
                 ${$args{name}}, ${$args{open_or_close}}
@@ -294,11 +303,11 @@ sub find_attributes {
             my $open_or_close = ${ $args{open_or_close} };
             if ( $name eq 'COMMENT' ) {
                 #print STDERR "======== $args{name} $args{open_or_close}\n";
-                if ( $open_or_close == OPENING_TAG ) {
+                if ( $open_or_close == HTML::Template::Compiled::Token::OPENING_TAG ) {
                     ++$comment_info->{$name} == 1
                         and push @$callbacks_found_text, $ignore_tag;
                 } ## end if ( $open_or_close ==...
-                elsif ( $open_or_close == CLOSING_TAG ) {
+                elsif ( $open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG ) {
                     --$comment_info->{$name} == 0
                         and pop @$callbacks_found_text;
                 }
@@ -309,7 +318,7 @@ sub find_attributes {
                 ${ $args{token} } = "";
             }
             elsif ($name eq 'NOPARSE') {
-                if ( $open_or_close == OPENING_TAG ) {
+                if ( $open_or_close == HTML::Template::Compiled::Token::OPENING_TAG ) {
                     if (++$comment_info->{$name} == 1) {
                         ${ $args{token} } = "";
                     }
@@ -318,7 +327,7 @@ sub find_attributes {
                         #${ $args{token} } = "";
                     }
                 }
-                elsif ( $open_or_close == CLOSING_TAG ) {
+                elsif ( $open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG ) {
                     if (--$comment_info->{$name} == 0) {
                         ${ $args{token} } = "";
                     }
@@ -331,7 +340,7 @@ sub find_attributes {
                 $callbacks_found_text->[0]->(@_);
             }
             elsif ($name eq 'VERBATIM') {
-                if ( $open_or_close == OPENING_TAG ) {
+                if ( $open_or_close == HTML::Template::Compiled::Token::OPENING_TAG ) {
                     if (++$comment_info->{$name} == 1) {
                         ${ $args{token} } = "";
                     }
@@ -339,7 +348,7 @@ sub find_attributes {
                         $encode_tag->(@_);
                     }
                 }
-                elsif ( $open_or_close == CLOSING_TAG ) {
+                elsif ( $open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG ) {
                     if (--$comment_info->{$name} == 0) {
                         ${ $args{token} } = "";
                     }
@@ -453,7 +462,7 @@ sub find_attributes {
             }
 
         }
-        $self->checkstack($fname, $line, $stack, T_END, CLOSING_TAG);
+        $self->checkstack($fname, $line, $stack, T_END, HTML::Template::Compiled::Token::CLOSING_TAG);
         return @tags;
     }
 }
@@ -498,11 +507,11 @@ sub find_attribute {
 
 {
     my @map;
-    $map[OPENING_TAG] = {
+    $map[HTML::Template::Compiled::Token::OPENING_TAG] = {
         ELSE       => [ T_IF, T_UNLESS, T_ELSIF, T_IF_DEFINED ],
         T_CASE()   => [T_SWITCH],
     };
-    $map[CLOSING_TAG] = {
+    $map[HTML::Template::Compiled::Token::CLOSING_TAG] = {
         IF         => [ T_IF, T_UNLESS, T_ELSE ],
         UNLESS     => [T_UNLESS, T_ELSE, T_IF_DEFINED],
         ELSIF      => [ T_IF, T_UNLESS, T_IF_DEFINED ],
@@ -537,7 +546,7 @@ sub find_attribute {
     sub checkstack {
         my ( $self, $fname, $line, $stack, $check, $open_or_close ) = @_;
         my $ok = $self->validate_stack($fname, $line, $stack, $check, $open_or_close);
-        if ($open_or_close == OPENING_TAG) {
+        if ($open_or_close == HTML::Template::Compiled::Token::OPENING_TAG) {
             if (
                 grep { $check eq $_ } (
                     T_WITH, T_LOOP, T_WHILE, T_IF, T_UNLESS, T_SWITCH, T_IF_DEFINED
@@ -550,7 +559,7 @@ sub find_attribute {
                 push @$stack, T_ELSE;
             }
         }
-        elsif ($open_or_close == CLOSING_TAG) {
+        elsif ($open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG) {
             if (grep { $check eq $_ } (
                     T_IF, T_UNLESS, T_WITH, T_LOOP, T_WHILE, T_SWITCH
                 )) {

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler::Classic;
-# $Id: Classic.pm,v 1.1 2006/09/13 22:00:56 tinita Exp $
+# $Id: Classic.pm,v 1.2 2006/09/29 00:00:37 tinita Exp $
 use strict;
 use warnings;
 our $VERSION = "0.01";
@@ -8,6 +8,7 @@ use base 'HTML::Template::Compiled::Compiler';
 
 sub _make_path {
     my ( $self, $t, %args ) = @_;
+    my $context = $args{context};
     my %loop_context = (
         __index__   => '$__ix__',
         __counter__ => '$__ix__+1',
@@ -21,12 +22,31 @@ sub _make_path {
         my $lc = $loop_context{ lc $args{var} };
         return $lc;
     }
-    my $getvar = '_get_var'
-        . ($t->getGlobal_vars&1 ? '_global' : '')
-        . '_sub';
-    my $varstr =
-        "\$t->$getvar(" . '$P,$$C,0,'."[undef,'$args{var}'])";
-    return $varstr;
+    if ($t->getGlobal_vars & 1) {
+        my $varstr =
+            "\$t->_get_var_global_sub(" . '$P,$$C,0,'."[undef,'$args{var}'])";
+        return $varstr;
+    }
+    else {
+        my $var = $args{var};
+        $var =~ s/\\/\\\\/g;
+        $var =~ s/'/\\'/g;
+        my $varstr = '$$C->{' . "'$var'" . '}';
+        my $string = <<"EOM";
+do { my \$var = $varstr;
+  \$var = (ref \$var eq 'CODE')
+  ?
+  \$var->()
+  : \$var;
+EOM
+        if ($context->get_name !~ m/^(?:LOOP|WITH)$/) {
+            $string .= <<"EOM";
+(ref \$var eq 'ARRAY' ? \@\$var : \$var)
+EOM
+ }
+            $string .= '}';
+        return $string;
+    }
 }
 
 

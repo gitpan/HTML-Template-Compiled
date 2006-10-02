@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.255 2006/09/14 20:44:08 tinita Exp $
+# $Id: Compiled.pm,v 1.258 2006/10/02 16:14:55 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.75"
+$VERSION = "0.76"
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.75";
+our $VERSION = "0.76";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 BEGIN {
@@ -82,7 +82,7 @@ BEGIN {
           )
     );
 
-    for my $i ( 1 .. @map ) {
+    for my $i ( 1 .. $#map ) {
         my $method = ucfirst $map[$i];
         my $get    = eval qq#sub { return \$_[0]->[$i] }#;
         my $set;
@@ -676,10 +676,9 @@ sub createFilename {
     }
     else {
         D && $self->log( "file: " . File::Spec->catfile( $path, $filename ) );
-        my $sp = $self->getSearch_path_on_include;
         my @paths = ref $path ? @$path : $path;
         if (@paths) {
-            for ( $sp ? @paths : $paths[0]) {
+            for ( @paths ) {
                 my $fp = File::Spec->catfile( $_, $filename );
                 return $fp if -f $fp;
             }
@@ -715,10 +714,13 @@ sub dump {
 sub _check_deprecated_args {
     my ($self, %args) = @_;
     for (qw(method_call deref formatter_path)) {
-        if (exists $args{method_call}) {
+        if (exists $args{$_}) {
             carp "Option $_ is deprecated, please inherit and"
                 . " overwrite the method '$_'";
         }
+    }
+    if (exists $args{dumper}) {
+        carp "Option dumper is deprecated, use a plugin instead";
     }
 }
 
@@ -1569,12 +1571,13 @@ array is true if it has content, in HTC it's true if it (the reference) is
 defined. I'll try to find a way to change that behaviour, though that might
 be for the cost of speed.
 
+In L<HTML::Template::Compiled::Classic> 0.04 it works as in HTML::Template.
+
 =head2 ESCAPING
 
 Like in HTML::Template, you have C<ESCAPE=HTML>, C<ESCAPE=URL> and C<ESCAPE_JS>.
 (C<ESCAPE=1> won't follow!  It's old and ugly...)
 Additionally you have C<ESCAPE=DUMP>, which by default will generate a Data::Dumper output.
-You can change that output by setting a different dumper function, see L<"OPTIONS"> dumper.
 
 You can also chain different escapings, like C<ESCAPE=DUMP|HTML>.
 
@@ -1964,6 +1967,9 @@ default is 1, set it to 0 to use this feature like in HTML::Template. Note that
 this can slow down your program a lot (50%).
 
 =item dumper
+
+This option is deprecated as of version 0.76. You must now use a plugin instead, like
+L<HTML::Template::Compiled::Plugin::DHTML>, for examle.
 
   my $t = HTML::Template::Compiled->new(
     ...

@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 12_path.t,v 1.3 2006/09/13 18:21:40 tinita Exp $
+# $Id: 12_path.t,v 1.4 2006/10/02 15:20:42 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 3;
@@ -9,7 +9,10 @@ use File::Spec ();
 
 eval {
 	my $htc = HTML::Template::Compiled->new(
-		path => File::Spec->catfile(qw(t templates)),
+		path => [
+            File::Spec->catfile(qw(t templates_foo)),
+            File::Spec->catfile(qw(t templates)),
+        ],
 		filename => File::Spec->catfile(qw(subdir a file1.html)),
 		search_path_on_include => 0,
 		#debug => 1,

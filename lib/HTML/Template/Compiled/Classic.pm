@@ -1,20 +1,20 @@
 package HTML::Template::Compiled::Classic;
-# $Id: Classic.pm,v 1.10 2006/09/13 22:06:17 tinita Exp $
+# $Id: Classic.pm,v 1.11 2006/09/29 00:01:31 tinita Exp $
 use strict;
 use warnings;
-our $VERSION = "0.03";
+our $VERSION = "0.04";
 
 use base 'HTML::Template::Compiled';
 use HTML::Template::Compiled::Compiler::Classic;
 
 sub compiler_class { 'HTML::Template::Compiled::Compiler::Classic' }
 
-sub _get_var_sub {
-    my ($self, $P, $ref, $final, @paths) = @_;
-    my $var = $ref->{$paths[0]->[1]};
-    ref $var eq 'CODE' and $var = $var->();
-    return $var;
-}
+#sub _get_var_sub {
+#    my ($self, $P, $ref, $final, @paths) = @_;
+#    my $var = $ref->{$paths[0]->[1]};
+#    ref $var eq 'CODE' and $var = $var->();
+#    return $var;
+#}
 
 sub _get_var_global_sub {
     my ($self, $P, $ref, $final, @paths) = @_;

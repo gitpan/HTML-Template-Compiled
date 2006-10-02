@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.16 2006/09/10 20:25:00 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.17 2006/10/02 16:11:12 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 6;
@@ -55,7 +55,6 @@ my %args = (
 	debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
 	# for testing without cache comment out
 	cache_dir => $cache,
-	dumper => sub {Data::Dumper->Dump([$_[0]],['DUMP'])},
 );
 sleep 2;
 @HTML::Template::Compiled::subclass::ISA = qw(HTML::Template::Compiled);

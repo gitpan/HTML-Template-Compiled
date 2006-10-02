@@ -1,10 +1,21 @@
 package HTML::Template::Compiled::Plugin::DHTML;
-# $Id: DHTML.pm,v 1.1.1.1 2005/09/10 16:52:29 tinita Exp $
+# $Id: DHTML.pm,v 1.2 2006/10/02 16:05:13 tinita Exp $
 use strict;
 use warnings;
-use vars '$VERSION';
-$VERSION = "0.01";
+our $VERSION = "0.02";
 use Data::TreeDumper;
+
+HTML::Template::Compiled->register(__PACKAGE__);
+
+sub register {
+    my ($class) = @_;
+    my %plugs = (
+        escape => {
+            DHTML => \&dumper,
+        },
+    );
+    return \%plugs;
+}
 
 sub dumper {
 	my ($var) = @_;
@@ -26,3 +37,37 @@ sub dumper {
 }
 
 1;
+
+__END__
+
+=pod
+
+=head1 NAME
+
+HTML::Template::Compiled::Plugin::DHTML - Dumps variables into clickable HTML output
+
+=head1 SYNOPSIS
+
+    use HTML::Template::Compiled::Plugin::DHTML;
+
+    my $htc = HTML::Template::Compiled->new(
+        plugin => [qw(HTML::Template::Compiled::Plugin::DHTML)],
+        ...
+    );
+
+=head1 METHODS
+
+=over 4
+
+=item register
+
+gets called by HTC
+
+=item dumper
+
+Dumps variables into clickable HTML. See L<examples/dhtml.html>.
+
+=back
+
+=cut
+
