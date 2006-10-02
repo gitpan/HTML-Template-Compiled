@@ -1,5 +1,8 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.77 Mon Oct  2 18:35:52 CEST 2006
+- fixed META.yaml (was broken by E::MakeMaker)
+
 0.76 Mon Oct  2 18:15:29 CEST 2006
 - Change: HTC::Classic: TMPL_IF arrayref will be true if arrayref contains elements
 - Change: __odd__, __first__, __count__ and __index__ work in TMPL_WHILE

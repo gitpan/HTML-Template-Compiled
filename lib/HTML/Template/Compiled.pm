@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.258 2006/10/02 16:14:55 tinita Exp $
+# $Id: Compiled.pm,v 1.259 2006/10/02 16:33:27 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.76"
+$VERSION = "0.77"
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.76";
+our $VERSION = "0.77";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 BEGIN {
@@ -57,10 +57,10 @@ use constant LCHECKED => 3;
 use constant PARAM => 0;
 use constant PATH => 1;
 # TODO
-# sub getPath {
+# sub get_path {
 #     return $_[0]->[PATH];
 # }
-# sub setPath {
+# sub set_path {
 #     if (ref $_[1] eq 'ARRAY') {
 #         $_[0]->[PATH] = $_[1]
 #     }
@@ -83,7 +83,7 @@ BEGIN {
     );
 
     for my $i ( 1 .. $#map ) {
-        my $method = ucfirst $map[$i];
+        my $method = $i < 2 ? "_$map[$i]" : ucfirst $map[$i];
         my $get    = eval qq#sub { return \$_[0]->[$i] }#;
         my $set;
             $set = eval qq#sub { \$_[0]->[$i] = \$_[1] }#;
@@ -174,12 +174,12 @@ sub new_from_perl {
     $self->setCache( exists $args{cache} ? $args{cache} : 1 );
     $self->setFilename( $args{filename} );
     $self->setCache_dir( $args{cache_dir} );
-    $self->setPath( $args{path} );
+    $self->set_path( $args{path} );
     $self->setScalar( $args{scalarref} );
 
     unless ( $self->getScalar ) {
         my $file =
-          $self->createFilename( $self->getPath, $self->getFilename );
+          $self->createFilename( $self->get_path, $self->getFilename );
         $self->setFile($file);
     }
     return $self;
@@ -200,7 +200,7 @@ sub new_file {
     $self->setFilename( $filename );
     $self->setCache( exists $args{cache} ? $args{cache} : 1 );
     $self->setCache_dir( $args{cache_dir} );
-    $self->setPath( $args{path} );
+    $self->set_path( $args{path} );
     if (my $t = $self->from_cache()) {
         $t->init_includes;
         return $t;
@@ -261,7 +261,7 @@ sub new_scalar_ref {
     my $md5  = Digest::MD5::md5_base64($$text);
     $self->setFilename($md5);
     D && $self->log("md5: $md5");
-    $self->setPath( $args{path} );
+    $self->set_path( $args{path} );
     if (my $t = $self->from_cache()) {
         return $t;
     }
@@ -329,7 +329,7 @@ sub from_scratch {
     if ( defined $fname and !$self->getScalar and !$self->getFilehandle ) {
 
         #D && $self->log("tried from_cache() filename=".$fname);
-        my $file = $self->createFilename( $self->getPath, $fname );
+        my $file = $self->createFilename( $self->get_path, $fname );
         D && $self->log("setFile $file ($fname)");
         $self->setFile($file);
     }
@@ -363,7 +363,7 @@ sub from_cache {
         #$self->init_runtime_args(%args);
         my $file = $self->getScalar || $self->getFilehandle
             ? $self->getFilename
-            : $self->createFilename( $self->getPath, $self->getFilename );
+            : $self->createFilename( $self->get_path, $self->getFilename );
         my $dir     = $self->getCache_dir;
         $t = $self->from_file_cache($dir, $file);
         if ($t) {
@@ -457,7 +457,7 @@ sub from_cache {
             return 1;
         }
         else {
-            my $file = $self->createFilename( $self->getPath, $self->getFilename );
+            my $file = $self->createFilename( $self->get_path, $self->getFilename );
             $self->setFile($file);
             #print STDERR "uptodate($file)\n";
             my @times = $self->_checktimes($file);
@@ -542,7 +542,7 @@ sub add_file_cache {
     my $lchecked = localtime $times{checked};
     D && $self->log("add_file_cache() $cache/$plfile");
     open my $fh, ">$cache/$plfile.pl" or die $!;    # TODO File::Spec
-    my $path     = $self->getPath;
+    my $path     = $self->get_path;
     my $path_str = '['
       . ( join ', ', map { $self->quote_file($_) } @$path )
       . ']';
@@ -1030,7 +1030,7 @@ sub new_from_object {
     #}
     $new->setScalar();
     $new->setFilehandle();
-    $new->setPath($path);
+    $new->set_path($path);
     $new->setPerl(undef);
     if (my $cached = $new->from_cache) {
         return $cached

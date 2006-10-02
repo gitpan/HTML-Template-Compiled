@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.23 2006/10/02 15:18:08 tinita Exp $
+# $Id: Compiler.pm,v 1.24 2006/10/02 16:33:27 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -463,7 +463,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
         elsif ($is_open && $tname =~ m/^INCLUDE/ && exists $attr->{NAME}) {
             my $filename;
             my $varstr;
-            my $path = $self->getPath();
+            my $path = $self->get_path();
             my $dir;
             my $dynamic = $tname eq T_INCLUDE_VAR ? 1 : 0;
             my $fullpath = "''";
