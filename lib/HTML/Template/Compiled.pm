@@ -1,5 +1,5 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.259 2006/10/02 16:33:27 tinita Exp $
+# $Id: Compiled.pm,v 1.265 2006/10/04 19:19:17 tinita Exp $
 my $version_pod = <<'=cut';
 =pod
 
@@ -9,12 +9,12 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.77"
+$VERSION = "0.78"
 
 =cut
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.77";
+our $VERSION = "0.78";
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 BEGIN {
@@ -41,7 +41,7 @@ use HTML::Template::Compiled::Parser qw(
     $NEW_CHECK
     $DEBUG_DEFAULT
     $SEARCHPATH
-    %FILESTACK %SUBSTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
+    %FILESTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
     $UNTAINT $DEFAULT_TAGSTYLE
   $UNDEF
 
@@ -75,7 +75,7 @@ BEGIN {
           path filename file scalar filehandle
           cache_dir cache search_path_on_include
           loop_context case_sensitive dumper global_vars
-          method_call deref formatter_path default_path
+          default_path
           debug perl out_fh default_escape
           filter formatter plugin
           globalstack use_query parser compiler includes
@@ -83,7 +83,7 @@ BEGIN {
     );
 
     for my $i ( 1 .. $#map ) {
-        my $method = $i < 2 ? "_$map[$i]" : ucfirst $map[$i];
+        my $method = $i < 3 ? "_$map[$i]" : ucfirst $map[$i];
         my $get    = eval qq#sub { return \$_[0]->[$i] }#;
         my $set;
             $set = eval qq#sub { \$_[0]->[$i] = \$_[1] }#;
@@ -172,14 +172,14 @@ sub new_from_perl {
     $self->init(%args);
     $self->setPerl( $args{perl} );
     $self->setCache( exists $args{cache} ? $args{cache} : 1 );
-    $self->setFilename( $args{filename} );
+    $self->set_filename( $args{filename} );
     $self->setCache_dir( $args{cache_dir} );
     $self->set_path( $args{path} );
     $self->setScalar( $args{scalarref} );
 
     unless ( $self->getScalar ) {
         my $file =
-          $self->createFilename( $self->get_path, $self->getFilename );
+          $self->createFilename( $self->get_path, $self->get_filename );
         $self->setFile($file);
     }
     return $self;
@@ -197,7 +197,7 @@ sub new_file {
         || exists $args{arrayref} || exists $args{filehandle}) {
         $self->_error_template_sources;
     }
-    $self->setFilename( $filename );
+    $self->set_filename( $filename );
     $self->setCache( exists $args{cache} ? $args{cache} : 1 );
     $self->setCache_dir( $args{cache_dir} );
     $self->set_path( $args{path} );
@@ -259,7 +259,7 @@ sub new_scalar_ref {
     $self->setScalar( $args{scalarref} );
     my $text = $self->getScalar;
     my $md5  = Digest::MD5::md5_base64($$text);
-    $self->setFilename($md5);
+    $self->set_filename($md5);
     D && $self->log("md5: $md5");
     $self->set_path( $args{path} );
     if (my $t = $self->from_cache()) {
@@ -324,8 +324,8 @@ sub init_runtime_args {
 
 sub from_scratch {
     my ($self) = @_;
-    D && $self->log("from_scratch filename=".$self->getFilename);
-    my $fname = $self->getFilename;
+    D && $self->log("from_scratch filename=".$self->get_filename);
+    my $fname = $self->get_filename;
     if ( defined $fname and !$self->getScalar and !$self->getFilehandle ) {
 
         #D && $self->log("tried from_cache() filename=".$fname);
@@ -336,7 +336,7 @@ sub from_scratch {
     elsif ( defined $fname ) {
         $self->setFile($fname);
     }
-    D && $self->log( "compiling... " . $self->getFilename );
+    D && $self->log( "compiling... " . $self->get_filename );
     $self->compile();
     return $self;
 }
@@ -344,33 +344,33 @@ sub from_scratch {
 sub from_cache {
     my ($self) = @_;
     my $t;
-    D && $self->log( "from_cache() filename=" . $self->getFilename );
+    D && $self->log( "from_cache() filename=" . $self->get_filename );
 
     # try to get memory cache
     if ( $self->getCache ) {
         my $dir = $self->getCache_dir;
         $dir = '' unless defined $dir;
-        my $fname  = $self->getFilename;
+        my $fname  = $self->get_filename;
         $t = $self->from_mem_cache($dir,$fname);
         if ($t) {
             return $t;
         }
     }
-    D && $self->log( "from_cache() 2 filename=" . $self->getFilename );
+    D && $self->log( "from_cache() 2 filename=" . $self->get_filename );
 
     # not in memory cache, try file cache
     if ( $self->getCache_dir ) {
         #$self->init_runtime_args(%args);
         my $file = $self->getScalar || $self->getFilehandle
-            ? $self->getFilename
-            : $self->createFilename( $self->get_path, $self->getFilename );
+            ? $self->get_filename
+            : $self->createFilename( $self->get_path, $self->get_filename );
         my $dir     = $self->getCache_dir;
         $t = $self->from_file_cache($dir, $file);
         if ($t) {
             return $t;
         }
     }
-    D && $self->log( "from_cache() 3 filename=" . $self->getFilename );
+    D && $self->log( "from_cache() 3 filename=" . $self->get_filename );
     return;
 }
 
@@ -401,12 +401,21 @@ sub from_cache {
         return;
     }
 
+    sub _debug_cache {
+        my ($self) = @_;
+        my $dir = $self->getCache_dir;
+        my $objects = $cache->{$dir};
+        my $times = $times->{$dir};
+        warn Data::Dumper->Dump([\$times], ['times']);
+        my @keys = keys %$objects;
+        warn Data::Dumper->Dump([\@keys], ['keys']);
+    }
     sub add_mem_cache {
         my ( $self, %times ) = @_;
         D && $self->stack(1);
         my $dir = $self->getCache_dir;
         $dir = '' unless defined $dir;
-        my $fname = $self->getFilename;
+        my $fname = $self->get_filename;
         D && $self->log( "add_mem_cache $fname" );
         my $clone = $self->clone;
         $clone->clear_params();
@@ -447,7 +456,7 @@ sub from_cache {
 #         unless ($cached_times) {
 #             my $dir = $self->getCache_dir;
 #             $dir = '' unless defined $dir;
-#             my $fname  = $self->getFilename;
+#             my $fname  = $self->get_filename;
 #             my $cached = $cache->{$dir}->{$fname};
 #             $cached_times  = $times->{$dir}->{$fname};
 #             return unless $cached;
@@ -457,7 +466,7 @@ sub from_cache {
             return 1;
         }
         else {
-            my $file = $self->createFilename( $self->get_path, $self->getFilename );
+            my $file = $self->createFilename( $self->get_path, $self->get_filename );
             $self->setFile($file);
             #print STDERR "uptodate($file)\n";
             my @times = $self->_checktimes($file);
@@ -510,7 +519,7 @@ sub compile {
         }
     }
     elsif ( my $text = $self->getScalar ) {
-        my $md5 = $self->getFilename;    # yeah, weird
+        my $md5 = $self->get_filename;    # yeah, weird
         D && $self->log("compiled $md5");
         my ( $source, $compiled ) = $compiler->compile( $self, $$text, $md5 );
         $self->setPerl($compiled);
@@ -537,7 +546,7 @@ sub add_file_cache {
     $self->lock;
     my $cache    = $self->getCache_dir;
     my $plfile   = $self->escape_filename( $self->getFile );
-    my $filename = $self->getFilename;
+    my $filename = $self->get_filename;
     my $lmtime   = localtime $times{mtime};
     my $lchecked = localtime $times{checked};
     D && $self->log("add_file_cache() $cache/$plfile");
@@ -565,10 +574,10 @@ sub add_file_cache {
     my $file_args = $isScalar
       ? <<"EOM"
         scalarref => $isScalar,
-        filename => '@{[$self->getFilename]}',
+        filename => '@{[$self->get_filename]}',
 EOM
       : <<"EOM";
-        filename => '@{[$self->getFilename]}',
+        filename => '@{[$self->get_filename]}',
 EOM
     print $fh <<"EOM";
     package HTML::Template::Compiled;
@@ -588,11 +597,9 @@ my \$args = {
     htc => {
         case_sensitive => @{[$self->getCase_sensitive]},
         cache_dir => '$cache',
+        cache => '@{[$self->getCache]}',
 $file_args
     path => $path_str,
-    formatter_path => '@{[$self->getFormatter_path]}',
-    method_call => '@{[$self->getMethod_call]}',
-    deref => '@{[$self->getDeref]}',
     out_fh => @{[$self->getOut_fh]},
     default_path   => '@{[$self->getDefault_path]}',
     default_escape => '@{[$self->getDefault_escape]}',
@@ -658,7 +665,7 @@ sub include_file {
     }
     $t->setIncludes( $args->{includes} );
     $t->init_includes;
-    $t->add_mem_cache(
+    $t->getCache and $t->add_mem_cache(
         checked => $r->{times}->{checked},
         mtime   => $r->{times}->{mtime},
     );
@@ -733,9 +740,6 @@ sub init {
     my %defaults = (
 
         # defaults
-        method_call            => $self->method_call(),
-        deref                  => $self->deref(),
-        formatter_path         => $self->formatter_path(),
         search_path_on_include => $SEARCHPATH,
         loop_context_vars      => 0,
         case_sensitive         => $CASE_SENSITIVE_DEFAULT,
@@ -747,8 +751,6 @@ sub init {
         use_query              => $DEFAULT_QUERY,
         %args,
     );
-    $self->setMethod_call( $defaults{method_call} );
-    $self->setDeref( $defaults{deref} );
     $self->setLoop_context(1) if $args{loop_context_vars};
     $self->setCase_sensitive( $defaults{case_sensitive} );
     $self->setDumper( $args{dumper} )       if $args{dumper};
@@ -766,7 +768,6 @@ sub init {
     $self->setDebug( $defaults{debug} );
     $self->setOut_fh( $defaults{out_fh} );
     $self->setGlobal_vars( $defaults{global_vars} );
-    $self->setFormatter_path( $defaults{formatter_path} );
     my $tagstyle = $args{tagstyle};
     my $parser;
     if (ref $tagstyle eq 'ARRAY') {
@@ -1024,10 +1025,11 @@ sub new_from_object {
     }
     my $new = $self->clone;
     D && $self->log("new_from_object($path,$filename,$fullpath,$cache)");
-    $new->setFilename($filename);
+    $new->set_filename($filename);
     #if ($fullpath) {
     #    $self->setFile($fullpath);
     #}
+    $new->setIncludes({});
     $new->setScalar();
     $new->setFilehandle();
     $new->set_path($path);
@@ -1634,12 +1636,10 @@ or C<ALBUMS.0.SONGS.0.NAME>
 This is still in development, so I might change the API here.
 
 Additionally to feeding a simple hash do HTC, you can feed it objects.
-To do method calls you can also use '.' in the template or define a different string
-if you don't like that.
+To do method calls you can also use '.' in the template.
 
   my $htc = HTML::Template::Compiled->new(
     ...
-    method_call => '.', # default .
   );
 
   $htc->param(
@@ -2090,7 +2090,6 @@ methods.
       last => Your::Class->can('last'),
       },
     },
-    formatter_path => '/', # default '/'
   );
   # $obj is a Your::Class object
   $htc->param(obj => $obj);
@@ -2343,7 +2342,9 @@ Sam Tregar big thanks for ideas and letting me use his L<HTML::Template> test su
 
 Bjoern Kriews for original idea and contributions
 
-Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Sascha Kiefer, Jan Willamowius for ideas and beta-testing
+Special Thanks to Sascha Kiefer - he finds all the bugs!
+
+Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Jan Willamowius for ideas and beta-testing
 
 perlmonks.org and perl-community.de for everyday learning
 

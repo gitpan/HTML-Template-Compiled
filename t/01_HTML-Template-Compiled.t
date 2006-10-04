@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.17 2006/10/02 16:11:12 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.18 2006/10/04 19:14:24 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 6;
@@ -55,6 +55,8 @@ my %args = (
 	debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
 	# for testing without cache comment out
 	cache_dir => $cache,
+    #cache => 0,
+    #search_path_on_include => 1,
 );
 sleep 2;
 @HTML::Template::Compiled::subclass::ISA = qw(HTML::Template::Compiled);
@@ -117,12 +119,14 @@ EOM
 	$out =~ s/^\s+//mg; $out =~ tr/\n\r//d;
 	cmp_ok($out, "eq", $exp, "output after update ok");
 	$exp =~ s/INCLUDED/INCLUDED_NEW/;
+
 	sleep 2;
 	$htc = $subclass->new(%args);
 	$htc->param(%$hash);
 	$out = $htc->output;
 	$out =~ s/^\s+//mg; $out =~ tr/\n\r//d;
 	cmp_ok($out,"eq", $exp, "output after update & sleep ok");
+
 	open $fh, '+<', $include or die $!;
 	local $/;
 	$txt = <$fh>;

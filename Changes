@@ -1,5 +1,9 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.78 Wed Oct  4 21:22:09 CEST 2006
+- Bugfix: endless loop when using file cache
+- Bugfix: correctly use cache attribute with filecache
+
 0.77 Mon Oct  2 18:35:52 CEST 2006
 - fixed META.yaml (was broken by E::MakeMaker)
 

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler::Classic;
-# $Id: Classic.pm,v 1.2 2006/09/29 00:00:37 tinita Exp $
+# $Id: Classic.pm,v 1.3 2006/10/02 17:44:33 tinita Exp $
 use strict;
 use warnings;
 our $VERSION = "0.01";
@@ -9,6 +9,12 @@ use base 'HTML::Template::Compiled::Compiler';
 sub _make_path {
     my ( $self, $t, %args ) = @_;
     my $context = $args{context};
+    # only allow '.', '/', '+', '-' and '_'
+    if ($args{var} =~ tr#a-zA-Z0-9._/-##c) {
+        $t->getParser->_error_wrong_tag_syntax(
+            $context->get_file, $context->get_line, "", $args{var}
+        );
+    }
     my %loop_context = (
         __index__   => '$__ix__',
         __counter__ => '$__ix__+1',

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.38 2006/09/28 23:59:04 tinita Exp $
+# $Id: Parser.pm,v 1.40 2006/10/02 17:39:38 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -14,7 +14,7 @@ BEGIN {
     $ENABLE_SUB
     $DEBUG_DEFAULT
     $SEARCHPATH
-    %FILESTACK %SUBSTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
+    %FILESTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
     $UNTAINT $DEFAULT_TAGSTYLE
     $UNDEF
 );
@@ -258,7 +258,8 @@ sub find_attributes {
                 #print STDERR "we found text: '${$args{token}}'\n";
                 push @{$args{tags}},
                 HTML::Template::Compiled::Token::Text->new([
-                    ${$args{token}}, ${$args{line}}
+                    ${$args{token}}, ${$args{line}},
+                    undef, undef, undef, undef, ${$args{fname}}
                 ]);
                 ${$args{token}} = "";
             }
@@ -275,7 +276,8 @@ sub find_attributes {
 
             push @{$args{tags}}, $class->new([
                 ${$args{token}}, ${$args{line}},
-                ${$args{open}}, ${$args{name}}, $args{attr}, ${$args{close}}
+                ${$args{open}}, ${$args{name}}, $args{attr}, ${$args{close}},
+                ${$args{fname}},
             ]);
             $self->checkstack(
                 $args{fname}, ${$args{line}}, $args{stack},
@@ -457,6 +459,7 @@ sub find_attributes {
                     token => \"$token$1",
                     line => \$line,
                     tags => \@tags,
+                    fname => \$fname,
                 );
                 #print "got no tag: '$token'\n";
             }

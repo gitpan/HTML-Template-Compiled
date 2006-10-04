@@ -1,6 +1,6 @@
 ---
 name: HTML-Template-Compiled
-version: 0.77
+version: 0.78
 author: ~
 abstract: Template System Compiles HTML::Template files to Perl code
 license: perl
@@ -12,7 +12,7 @@ requires:
 provides:
   HTML::Template::Compiled:
     file: lib/HTML/Template/Compiled.pm
-    version: 0.77
+    version: 0.78
   HTML::Template::Compiled::Classic:
     file: lib/HTML/Template/Compiled/Classic.pm
     version: 0.04

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Token;
-# $Id: Token.pm,v 1.4 2006/09/28 18:46:28 tinita Exp $
+# $Id: Token.pm,v 1.5 2006/10/02 17:39:59 tinita Exp $
 use strict;
 use warnings;
 use Carp qw(croak carp);
@@ -12,6 +12,7 @@ use constant ATTR_OPEN       => 2;
 use constant ATTR_NAME       => 3;
 use constant ATTR_ATTRIBUTES => 4;
 use constant ATTR_CLOSE      => 5;
+use constant ATTR_FILE      => 6;
 
 use constant NO_TAG        => 0;
 use constant OPENING_TAG   => 1;
@@ -42,6 +43,8 @@ sub get_close      { $_[0]->[ATTR_CLOSE] }
 sub set_close      { $_[0]->[ATTR_CLOSE] = $_[1] }
 sub get_attributes { $_[0]->[ATTR_ATTRIBUTES] }
 sub set_attributes { $_[0]->[ATTR_ATTRIBUTES] = $_[1] }
+sub get_file { $_[0]->[ATTR_FILE] }
+sub set_file { $_[0]->[ATTR_FILE] = $_[1] }
 
 package HTML::Template::Compiled::Token::Text;
 use Carp qw(croak carp);

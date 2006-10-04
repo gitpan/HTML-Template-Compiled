@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.24 2006/10/02 16:33:27 tinita Exp $
+# $Id: Compiler.pm,v 1.26 2006/10/02 17:43:16 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -99,6 +99,12 @@ sub _make_path {
     my ( $self, $t, %args ) = @_;
     my $lexicals = $args{lexicals};
     my $context = $args{context};
+    # only allow '.', '/', '+', '-' and '_'
+    if ($args{var} =~ tr#a-zA-Z0-9._/-##c) {
+        $t->getParser->_error_wrong_tag_syntax(
+            $context->get_file, $context->get_line, "", $args{var}
+        );
+    }
     if ( grep { defined $_ && $args{var} eq $_ } @$lexicals ) {
         return "\$$args{var}";
     }
@@ -204,9 +210,9 @@ EOM
         my $indent = INDENT x $level;
         my $is_open = $token->is_open;
         my $is_close = $token->is_close;
-        my $meth     = $self->getMethod_call;
-        my $deref    = $self->getDeref;
-        my $format   = $self->getFormatter_path;
+        my $meth     = $self->method_call;
+        my $deref    = $self->deref;
+        my $format   = $self->formatter_path;
         my %var_args = (
             deref          => $deref,
             method_call    => $meth,
