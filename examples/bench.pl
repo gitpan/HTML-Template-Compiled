@@ -1,8 +1,9 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.17 2006/10/02 15:27:07 tinita Exp $
+# $Id: bench.pl,v 1.19 2006/10/07 18:30:53 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
+use Getopt::Long;
 #use Devel::Size qw(size total_size);
 my $count = 0;
 my $ht_file = 'test.htc';
@@ -32,7 +33,8 @@ for my $key (sort keys %use) {
 	my $version = $use{$key} ? $key->VERSION : "-";
     printf "using %35s %s\n", $key, $version;
 }
-HTML::Template::Compiled->ExpireTime(10);
+HTML::Template::Compiled->ExpireTime(100);
+HTML::Template::Compiled->clear_filecache("cache/htc");
 use Benchmark;
 my $debug = 0;
 $ENV{'HTML_TEMPLATE_ROOT'} = "examples";
@@ -41,6 +43,23 @@ my $MEM_CACHE      = 1;
 my $LOOP_CONTEXT   = 1;
 my $GLOBAL_VARS    = 0;
 my $CASE_SENSITIVE = 1;
+GetOptions(
+    "file-cache=i" => \$FILE_CACHE,
+    "mem-cache=i" => \$MEM_CACHE,
+    "loop-context=i" => \$LOOP_CONTEXT,
+    "global-vars=i" => \$GLOBAL_VARS,
+    "case-sensitive=i" => \$CASE_SENSITIVE,
+);
+my $iterations = shift;
+
+print "running with:
+file-cache:     $FILE_CACHE
+mem-cache:      $MEM_CACHE
+loop-context:   $LOOP_CONTEXT
+global-vars:    $GLOBAL_VARS
+case-sensitive: $CASE_SENSITIVE
+";
+
 sub new_htc {
 	my $t1 = HTML::Template::Compiled->new_file( $ht_file,
 		#path => 'examples',
@@ -215,7 +234,7 @@ my $global_htj = $use{'HTML::Template::JIT'} ? new_htj : undef;
 my $global_tt = $use{'Template'} ? new_tt : undef;
 my $global_tst = $use{'Text::ScriptTemplate'} ? new_tst : undef;
 if(1) {
-timethese ($ARGV[0]||-1, {
+timethese ($iterations||-1, {
         $use{'HTML::Template::Compiled'} ? (
             # deactivate memory cache
             #new_htc_w_clear_cache => sub {my $t = new_htc();$t->clear_cache},

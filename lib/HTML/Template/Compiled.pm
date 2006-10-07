@@ -1,22 +1,9 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.265 2006/10/04 19:19:17 tinita Exp $
-my $version_pod = <<'=cut';
-=pod
-
-=head1 NAME
-
-HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl code
-
-=head1 VERSION
-
-$VERSION = "0.78"
-
-=cut
+# $Id: Compiled.pm,v 1.279 2006/10/07 18:25:18 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.78";
+our $VERSION = "0.79";
 use Data::Dumper;
-local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
 }
@@ -37,14 +24,10 @@ eval {
     require URI::Escape;
 };
 use HTML::Template::Compiled::Parser qw(
-    $CASE_SENSITIVE_DEFAULT
-    $NEW_CHECK
-    $DEBUG_DEFAULT
-    $SEARCHPATH
+    $CASE_SENSITIVE_DEFAULT $NEW_CHECK
+    $DEBUG_DEFAULT $SEARCHPATH
     %FILESTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
     $UNTAINT $DEFAULT_TAGSTYLE
-  $UNDEF
-
 );
 use vars qw($__ix__);
 
@@ -55,35 +38,22 @@ use constant LCHECKED => 3;
 
 # options / object attributes
 use constant PARAM => 0;
-use constant PATH => 1;
-# TODO
-# sub get_path {
-#     return $_[0]->[PATH];
-# }
-# sub set_path {
-#     if (ref $_[1] eq 'ARRAY') {
-#         $_[0]->[PATH] = $_[1]
-#     }
-#     elsif (defined $_[1]) {
-#         $_[0]->[PATH] = [ $_[1] ]
-#     }
-# }
 
 BEGIN {
     my @map = (
         undef, qw(
           path filename file scalar filehandle
-          cache_dir cache search_path_on_include
+          cache_dir cache search_path
           loop_context case_sensitive dumper global_vars
           default_path
           debug perl out_fh default_escape
-          filter formatter plugin
+          filter formatter
           globalstack use_query parser compiler includes
-          )
+        )
     );
 
     for my $i ( 1 .. $#map ) {
-        my $method = $i < 3 ? "_$map[$i]" : ucfirst $map[$i];
+        my $method = "_$map[$i]";
         my $get    = eval qq#sub { return \$_[0]->[$i] }#;
         my $set;
             $set = eval qq#sub { \$_[0]->[$i] = \$_[1] }#;
@@ -108,14 +78,14 @@ sub new {
     if (exists $args{filename}) {
         return $class->new_file($args{filename}, %args);
     }
+    elsif (exists $args{scalarref}) {
+        return $class->new_scalar_ref($args{scalarref}, %args);
+    }
     elsif (exists $args{filehandle}) {
         return $class->new_filehandle($args{filehandle}, %args);
     }
     elsif (exists $args{arrayref}) {
         return $class->new_array_ref($args{arrayref}, %args);
-    }
-    elsif (exists $args{scalarref}) {
-        return $class->new_scalar_ref($args{scalarref}, %args);
     }
     croak("$class->new called with not enough arguments");
 }
@@ -170,17 +140,17 @@ sub new_from_perl {
     D && $self->log("new(perl) filename: $args{filename}");
 
     $self->init(%args);
-    $self->setPerl( $args{perl} );
-    $self->setCache( exists $args{cache} ? $args{cache} : 1 );
+    $self->set_perl( $args{perl} );
+    $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
     $self->set_filename( $args{filename} );
-    $self->setCache_dir( $args{cache_dir} );
+    $self->set_cache_dir( $args{cache_dir} );
     $self->set_path( $args{path} );
-    $self->setScalar( $args{scalarref} );
+    $self->set_scalar( $args{scalarref} );
 
-    unless ( $self->getScalar ) {
+    unless ( $self->get_scalar ) {
         my $file =
           $self->createFilename( $self->get_path, $self->get_filename );
-        $self->setFile($file);
+        $self->set_file($file);
     }
     return $self;
 }
@@ -198,8 +168,8 @@ sub new_file {
         $self->_error_template_sources;
     }
     $self->set_filename( $filename );
-    $self->setCache( exists $args{cache} ? $args{cache} : 1 );
-    $self->setCache_dir( $args{cache_dir} );
+    $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
+    $self->set_cache_dir( $args{cache_dir} );
     $self->set_path( $args{path} );
     if (my $t = $self->from_cache()) {
         $t->init_includes;
@@ -221,9 +191,10 @@ sub new_filehandle {
     }
     $args{filehandle} = $filehandle;
     $args{path} = $self->build_path($args{path});
-    $self->setFilehandle( $args{filehandle} );
-    $self->setCache(0);
-    $self->setCache_dir( $args{cache_dir} );
+    $self->set_filehandle( $args{filehandle} );
+    $self->set_cache(0);
+    $self->set_cache_dir( $args{cache_dir} );
+    $self->set_path( $args{path} );
     if (my $t = $self->from_cache()) {
         return $t;
     }
@@ -254,10 +225,10 @@ sub new_scalar_ref {
     }
     $args{scalarref} = $scalarref;
     $args{path} = $self->build_path($args{path});
-    $self->setCache( exists $args{cache} ? $args{cache} : 1 );
-    $self->setCache_dir( $args{cache_dir} );
-    $self->setScalar( $args{scalarref} );
-    my $text = $self->getScalar;
+    $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
+    $self->set_cache_dir( $args{cache_dir} );
+    $self->set_scalar( $args{scalarref} );
+    my $text = $self->get_scalar;
     my $md5  = Digest::MD5::md5_base64($$text);
     $self->set_filename($md5);
     D && $self->log("md5: $md5");
@@ -273,8 +244,8 @@ sub new_scalar_ref {
 
 sub init_includes {
     my ($self) = @_;
-    my $includes = $self->getIncludes;
-    my $cache = $self->getCache_dir||'';
+    my $includes = $self->get_includes;
+    my $cache = $self->get_cache_dir||'';
     for my $fullpath (keys %$includes) {
         my ($path, $filename, $htc) = @{ $includes->{$fullpath} };
         D && $self->log("checking $fullpath ($filename) $htc?");
@@ -305,18 +276,18 @@ sub init_runtime_args {
     my ($self, %args) = @_;
     D && $self->log("init_runtime_args()");
     if ( my $fm = $args{formatter} ) {
-        unless ( $self->getFormatter ) {
-            $self->setFormatter($fm);
+        unless ( $self->get_formatter ) {
+            $self->set_formatter($fm);
         }
     }
     if ( my $dumper = $args{dumper} ) {
-        unless ( $self->getDumper ) {
-            $self->setDumper($dumper);
+        unless ( $self->get_dumper ) {
+            $self->set_dumper($dumper);
         }
     }
     if ( my $filter = $args{filter} ) {
-        unless ( $self->getFilter ) {
-            $self->setFilter($filter);
+        unless ( $self->get_filter ) {
+            $self->set_filter($filter);
         }
     }
     return $self;
@@ -326,15 +297,15 @@ sub from_scratch {
     my ($self) = @_;
     D && $self->log("from_scratch filename=".$self->get_filename);
     my $fname = $self->get_filename;
-    if ( defined $fname and !$self->getScalar and !$self->getFilehandle ) {
+    if ( defined $fname and !$self->get_scalar and !$self->get_filehandle ) {
 
         #D && $self->log("tried from_cache() filename=".$fname);
         my $file = $self->createFilename( $self->get_path, $fname );
-        D && $self->log("setFile $file ($fname)");
-        $self->setFile($file);
+        D && $self->log("set_file $file ($fname)");
+        $self->set_file($file);
     }
     elsif ( defined $fname ) {
-        $self->setFile($fname);
+        $self->set_file($fname);
     }
     D && $self->log( "compiling... " . $self->get_filename );
     $self->compile();
@@ -347,8 +318,8 @@ sub from_cache {
     D && $self->log( "from_cache() filename=" . $self->get_filename );
 
     # try to get memory cache
-    if ( $self->getCache ) {
-        my $dir = $self->getCache_dir;
+    if ( $self->get_cache ) {
+        my $dir = $self->get_cache_dir;
         $dir = '' unless defined $dir;
         my $fname  = $self->get_filename;
         $t = $self->from_mem_cache($dir,$fname);
@@ -359,12 +330,12 @@ sub from_cache {
     D && $self->log( "from_cache() 2 filename=" . $self->get_filename );
 
     # not in memory cache, try file cache
-    if ( $self->getCache_dir ) {
+    if ( $self->get_cache_dir ) {
         #$self->init_runtime_args(%args);
-        my $file = $self->getScalar || $self->getFilehandle
+        my $file = $self->get_scalar || $self->get_filehandle
             ? $self->get_filename
             : $self->createFilename( $self->get_path, $self->get_filename );
-        my $dir     = $self->getCache_dir;
+        my $dir     = $self->get_cache_dir;
         $t = $self->from_file_cache($dir, $file);
         if ($t) {
             return $t;
@@ -403,7 +374,7 @@ sub from_cache {
 
     sub _debug_cache {
         my ($self) = @_;
-        my $dir = $self->getCache_dir;
+        my $dir = $self->get_cache_dir;
         my $objects = $cache->{$dir};
         my $times = $times->{$dir};
         warn Data::Dumper->Dump([\$times], ['times']);
@@ -413,7 +384,7 @@ sub from_cache {
     sub add_mem_cache {
         my ( $self, %times ) = @_;
         D && $self->stack(1);
-        my $dir = $self->getCache_dir;
+        my $dir = $self->get_cache_dir;
         $dir = '' unless defined $dir;
         my $fname = $self->get_filename;
         D && $self->log( "add_mem_cache $fname" );
@@ -424,7 +395,7 @@ sub from_cache {
     }
 
     sub clear_cache {
-        my $dir = $_[0]->getCache_dir;
+        my $dir = $_[0]->get_cache_dir;
 
         # clear the whole cache
         $cache = {}, $times = {}, return unless defined $dir;
@@ -437,7 +408,7 @@ sub from_cache {
     sub clear_filecache {
         my ( $self, $dir ) = @_;
         defined $dir
-          or $dir = $self->getCache_dir;
+          or $dir = $self->get_cache_dir;
         return unless -d $dir;
         ref $self and $self->lock;
         opendir my $dh, $dir or die "Could not open '$dir': $!";
@@ -452,9 +423,9 @@ sub from_cache {
 
     sub uptodate {
         my ( $self, $cached_times ) = @_;
-        return 1 if $self->getScalar;
+        return 1 if $self->get_scalar;
 #         unless ($cached_times) {
-#             my $dir = $self->getCache_dir;
+#             my $dir = $self->get_cache_dir;
 #             $dir = '' unless defined $dir;
 #             my $fname  = $self->get_filename;
 #             my $cached = $cache->{$dir}->{$fname};
@@ -467,7 +438,7 @@ sub from_cache {
         }
         else {
             my $file = $self->createFilename( $self->get_path, $self->get_filename );
-            $self->setFile($file);
+            $self->set_file($file);
             #print STDERR "uptodate($file)\n";
             my @times = $self->_checktimes($file);
             if ( $times[MTIME] <= $cached_times->{mtime} ) {
@@ -488,8 +459,8 @@ sub from_cache {
 sub compile {
     my ($self) = @_;
     my ( $source, $compiled );
-    my $compiler = $self->getCompiler;
-    if ( my $file = $self->getFile and !$self->getScalar ) {
+    my $compiler = $self->get_compiler;
+    if ( my $file = $self->get_file and !$self->get_scalar ) {
 
         # thanks to sam tregars testsuite
         # don't recursively include
@@ -502,14 +473,14 @@ sub compile {
           if $recursed > 10;
         my ( $source, $compiled ) = $compiler->compile( $self, $text, $file );
         --$FILESTACK{$file} or delete $FILESTACK{$file};
-        $self->setPerl($compiled);
-        $self->getCache and $self->add_mem_cache(
+        $self->set_perl($compiled);
+        $self->get_cache and $self->add_mem_cache(
             checked => time,
             mtime   => $times[MTIME],
         );
         D && $self->log("compiled $file");
 
-        if ( $self->getCache_dir ) {
+        if ( $self->get_cache_dir ) {
             D && $self->log("add_file_cache($file)");
             $self->add_file_cache(
                 $source,
@@ -518,12 +489,12 @@ sub compile {
             );
         }
     }
-    elsif ( my $text = $self->getScalar ) {
+    elsif ( my $text = $self->get_scalar ) {
         my $md5 = $self->get_filename;    # yeah, weird
         D && $self->log("compiled $md5");
         my ( $source, $compiled ) = $compiler->compile( $self, $$text, $md5 );
-        $self->setPerl($compiled);
-        if ( $self->getCache_dir ) {
+        $self->set_perl($compiled);
+        if ( $self->get_cache_dir ) {
             D && $self->log("add_file_cache($file)");
             $self->add_file_cache(
                 $source,
@@ -532,11 +503,11 @@ sub compile {
             );
         }
     }
-    elsif ( my $fh = $self->getFilehandle ) {
+    elsif ( my $fh = $self->get_filehandle ) {
         local $/;
         my $data = <$fh>;
         my ( $source, $compiled ) = $compiler->compile( $self, $data, '' );
-        $self->setPerl($compiled);
+        $self->set_perl($compiled);
 
     }
 }
@@ -544,8 +515,8 @@ sub compile {
 sub add_file_cache {
     my ( $self, $source, %times ) = @_;
     $self->lock;
-    my $cache    = $self->getCache_dir;
-    my $plfile   = $self->escape_filename( $self->getFile );
+    my $cache    = $self->get_cache_dir;
+    my $plfile   = $self->escape_filename( $self->get_file );
     my $filename = $self->get_filename;
     my $lmtime   = localtime $times{mtime};
     my $lchecked = localtime $times{checked};
@@ -555,22 +526,22 @@ sub add_file_cache {
     my $path_str = '['
       . ( join ', ', map { $self->quote_file($_) } @$path )
       . ']';
-    my $isScalar = $self->getScalar ? 1 : 0;
-    my $query_info = $self->getUse_query;
-    $query_info = Data::Dumper->Dump([\$query_info], ['query_info']);
-    my $parser =$self->getParser;
+    my $isScalar = $self->get_scalar ? 1 : 0;
+    my $query_info = $self->get_use_query;
+    $query_info = Data::Dumper->Dump([$query_info], ['query_info']);
+    my $parser =$self->get_parser;
     $parser = Data::Dumper->Dump([\$parser], ['parser']);
     local $Data::Dumper::Deepcopy = 1;
-    my $includes = $self->getIncludes;
+    my $includes = $self->get_includes;
+    my $includes_empty = {map {
+            $_ => [$includes->{$_}->[0], $includes->{$_}->[1], 0],
+        } keys %$includes};
     my $includes_to_string = Data::Dumper->Dump(
-        [ {map {
-                $_ => [$includes->{$_}->[0], $includes->{$_}->[1], 0],
-            } keys %$includes} ],
-        ['includes']
+        [$includes_empty], ['includes']
     );
     #$includes_to_string =~ s/\$includes = //;
-    my $search_path = $self->getSearch_path_on_include || 0;
-    my $gl = $self->getGlobal_vars;
+    my $search_path = $self->get_search_path || 0;
+    my $gl = $self->get_global_vars;
     my $file_args = $isScalar
       ? <<"EOM"
         scalarref => $isScalar,
@@ -579,7 +550,7 @@ EOM
       : <<"EOM";
         filename => '@{[$self->get_filename]}',
 EOM
-    print $fh <<"EOM";
+    my $package = <<"EOM";
     package HTML::Template::Compiled;
 # file date $lmtime
 # last checked date $lchecked
@@ -595,14 +566,15 @@ my \$args = {
         checked => $times{checked},
     },
     htc => {
-        case_sensitive => @{[$self->getCase_sensitive]},
+        case_sensitive => @{[$self->get_case_sensitive]},
         cache_dir => '$cache',
-        cache => '@{[$self->getCache]}',
+        cache => '@{[$self->get_cache]}',
 $file_args
     path => $path_str,
-    out_fh => @{[$self->getOut_fh]},
-    default_path   => '@{[$self->getDefault_path]}',
-    default_escape => '@{[$self->getDefault_escape]}',
+    out_fh => @{[$self->get_out_fh]},
+    default_path   => '@{[$self->get_default_path]}',
+    default_escape => '@{[$self->get_default_escape]}',
+    loop_context_vars => '@{[$self->get_loop_context||0]}',
     use_query => \$query_info,
     parser => \$parser,
     global_vars => $gl,
@@ -615,6 +587,7 @@ $file_args
     },
 };
 EOM
+    print $fh $package;
     D && $self->log("$cache/$plfile.pl generated");
     $self->unlock;
 }
@@ -663,9 +636,9 @@ sub include_file {
         # is not uptodate
         return;
     }
-    $t->setIncludes( $args->{includes} );
+    $t->set_includes( $args->{includes} );
     $t->init_includes;
-    $t->getCache and $t->add_mem_cache(
+    $t->get_cache and $t->add_mem_cache(
         checked => $r->{times}->{checked},
         mtime   => $r->{times}->{mtime},
     );
@@ -701,7 +674,7 @@ sub createFilename {
 
 sub dump {
     my ( $self, $var ) = @_;
-    if ( my $sub = $self->getDumper() ) {
+    if ( my $sub = $self->get_dumper() ) {
         unless ( ref $sub ) {
             # we have a plugin
             $sub =~ tr/0-9a-zA-Z//cd;    # allow only words
@@ -733,7 +706,7 @@ sub _check_deprecated_args {
 
 sub init {
     my ( $self, %args ) = @_;
-    my $cachedir = $self->getCache_dir;
+    my $cachedir = $self->get_cache_dir;
     if (defined $cachedir and not -d $cachedir) {
         croak "Cachedir '$cachedir' does not exist";
     }
@@ -751,23 +724,23 @@ sub init {
         use_query              => $DEFAULT_QUERY,
         %args,
     );
-    $self->setLoop_context(1) if $args{loop_context_vars};
-    $self->setCase_sensitive( $defaults{case_sensitive} );
-    $self->setDumper( $args{dumper} )       if $args{dumper};
-    $self->setFormatter( $args{formatter} ) if $args{formatter};
-    $self->setDefault_escape( $defaults{default_escape} );
-    $self->setDefault_path( $defaults{default_path} );
-    $self->setUse_query( $defaults{use_query} );
-    $self->setSearch_path_on_include( $defaults{search_path_on_include} );
-    $self->setIncludes({});
+    $self->set_loop_context(1) if $args{loop_context_vars};
+    $self->set_case_sensitive( $defaults{case_sensitive} );
+    $self->set_dumper( $args{dumper} )       if $args{dumper};
+    $self->set_formatter( $args{formatter} ) if $args{formatter};
+    $self->set_default_escape( $defaults{default_escape} );
+    $self->set_default_path( $defaults{default_path} );
+    $self->set_use_query( $defaults{use_query} );
+    $self->set_search_path( $defaults{search_path_on_include} );
+    $self->set_includes({});
     if ( $args{filter} ) {
         require HTML::Template::Compiled::Filter;
-        $self->setFilter(
+        $self->set_filter(
             HTML::Template::Compiled::Filter->new( $args{filter} ) );
     }
-    $self->setDebug( $defaults{debug} );
-    $self->setOut_fh( $defaults{out_fh} );
-    $self->setGlobal_vars( $defaults{global_vars} );
+    $self->set_debug( $defaults{debug} );
+    $self->set_out_fh( $defaults{out_fh} );
+    $self->set_global_vars( $defaults{global_vars} );
     my $tagstyle = $args{tagstyle};
     my $parser;
     if (ref $tagstyle eq 'ARRAY') {
@@ -780,9 +753,9 @@ sub init {
         $parser = $args{parser};
     }
     $parser ||= $self->parser_class->default();
-    $self->setParser($parser);
+    $self->set_parser($parser);
     my $compiler = $self->compiler_class->new;
-    $self->setCompiler($compiler);
+    $self->set_compiler($compiler);
     if ($defaults{plugin}) {
         for my $plug (ref $defaults{plugin} eq 'ARRAY'
             ? @{ $defaults{plugin} }
@@ -829,7 +802,7 @@ sub _readfile {
 
 sub get_code {
     my ($self) = @_;
-    my $perl = $self->getPerl;
+    my $perl = $self->get_perl;
     return $perl;
 }
 
@@ -867,7 +840,7 @@ sub quote_file {
 
 sub try_global {
     my ( $self, $walk, $path ) = @_;
-    my $stack = $self->getGlobalstack || [];
+    my $stack = $self->get_globalstack || [];
     #warn Data::Dumper->Dump([\$stack], ['stack']);
     for my $item ( $walk, reverse @$stack ) {
         if (my $code = UNIVERSAL::can($item, $path)) {
@@ -886,12 +859,12 @@ sub try_global {
     sub _walk_formatter {
         my ($self, $walk, $key, $global) = @_;
         my $ref = ref $walk;
-        my $fm = $self->getFormatter();
+        my $fm = $self->get_formatter();
         my $sub = exists $fm->{$ref} ? $fm->{$ref}->{$key} : undef;
         my $stack = [];
         my $new_walk;
         if ($global) {
-            $stack = $self->getGlobalstack || [];
+            $stack = $self->get_globalstack || [];
         }
         for my $item ($walk, reverse @$stack) {
             #print STDERR "::::::: formatter $walk -> $key (sub=$sub)\n";
@@ -911,86 +884,22 @@ sub try_global {
     }
 
 	# ----------- still ugly code
-	# generating different code depending on global_vars
-	my $code = <<'EOM';
-sub {
-	my ($self, $P, $ref, $final, @paths) = @_;
-	my $walk = $ref;
-
-    my $stackpos = -1;
-	for my $path (@paths) {
-        last unless defined $walk;
-        #print STDERR "ref: $walk, key: $path->[1]\n";
-		if ($path->[0] == PATH_DEREF || $path->[0] == PATH_METHOD) {
-			if (ref $walk eq 'ARRAY') {
-				$walk = $walk->[$path->[1]];
-			}
-			else {
-                unless (length $path->[1]) {
-                    my $stack = $self->getGlobalstack || [];
-                    # we have tmpl_var ..foo, get one level up the stack
-                    $walk = $stack->[$stackpos];
-                    $stackpos--;
-                }
-                else {
-*** walk ***
-                }
-			}
-		}
-		elsif ($path->[0] == PATH_METHOD) {
-			my $key = $path->[1];
-			$walk = $walk->$key;
-		}
-		elsif ($path->[0] == PATH_FORMATTER) {
-			my $key = $path->[1];
-            $walk = $self->_walk_formatter($walk, $key, *** isglobal ***);
-            #my $sub = $self->getFormatter()->{ref $walk}->{$key};
-            #$walk = defined $sub
-            #	? $sub->($walk)
-            #	: $walk->{$key};
-		}
-	}
-    if (my $formatter = $self->getFormatter() and $final and my $ref = ref $walk) {
-        if (my $sub = $formatter->{$ref}->{''}) {
-            my $return = $sub->($walk,$self,$P);
-            return $return unless ref $return;
-        }
-    }
-	return $walk;
-}
-EOM
-	my $global = <<'EOM';
-	$walk = $self->try_global($walk, $path->[1]);
-EOM
-	my $walk = <<'EOM';
-    #$walk = $walk->{$path->[1]};
-    if (UNIVERSAL::can($walk, 'can')) {
-        my $method = $path->[1];
-        $walk = $walk->$method;
-    }
-    else {
-        #$walk = exists $walk->{$path->[1]}
-        #    ? $walk->{$path->[1]}
-        #    : $P->{$path->[1]};
-        $walk = $walk->{$path->[1]};
-    }
-EOM
-	my $sub = $code;
-	$sub =~ s/^\Q*** walk ***\E$/$walk/m;
-    $sub =~ s/\Q*** isglobal ***\E/0/m;
-	my $subref = eval $sub;
-    die "Compiling _get_var: $@" if $@;
-	no strict 'refs';
-	*{'HTML::Template::Compiled::_get_var'} = $subref;
-	$sub = $code;
-	$sub =~ s/^\Q*** walk ***\E$/$global/m;
-    $sub =~ s/\Q*** isglobal ***\E/1/m;
-	$subref = eval $sub;
-    die "Compiling _get_var_global: $@" if $@;
-	*{'_get_var_global'} = $subref;
+    # not needed anymore
+#    if (my $formatter = $self->get_formatter() and $final and my $ref = ref $walk) {
+#        if (my $sub = $formatter->{$ref}->{''}) {
+#            my $return = $sub->($walk,$self,$P);
+#            return $return unless ref $return;
+#        }
+#    }
+#	return $walk;
 }
 
 # end ugly code, phooey
+
+sub validate_var {
+    my ($self, $string) = @_;
+    return !$string =~ tr#a-zA-Z0-9._[]/-##c;
+}
 
 sub escape_filename {
     my ( $t, $f ) = @_;
@@ -1027,13 +936,13 @@ sub new_from_object {
     D && $self->log("new_from_object($path,$filename,$fullpath,$cache)");
     $new->set_filename($filename);
     #if ($fullpath) {
-    #    $self->setFile($fullpath);
+    #    $self->set_file($fullpath);
     #}
-    $new->setIncludes({});
-    $new->setScalar();
-    $new->setFilehandle();
+    $new->set_includes({});
+    $new->set_scalar();
+    $new->set_filehandle();
     $new->set_path($path);
-    $new->setPerl(undef);
+    $new->set_perl(undef);
     if (my $cached = $new->from_cache) {
         return $cached
     }
@@ -1078,6 +987,11 @@ sub precompile {
 sub clear_params {
     $_[0]->[PARAM] = ();
 }
+
+sub get_param {
+    return $_[0]->[PARAM];
+}
+
 sub param {
     my $self = shift;
     if (!@_) {
@@ -1096,6 +1010,10 @@ sub param {
                 # hash, no object
                 %p = %{ $_[0] };
             }
+            else {
+                $self->[PARAM] = $_[0];
+                return;
+            }
         }
         else {
             # query a parameter
@@ -1106,7 +1024,7 @@ sub param {
         %p = @_;
     }
 
-    if ( !$self->getCase_sensitive ) {
+    if ( !$self->get_case_sensitive ) {
         my $uc = $self->uchash( {%p} );
         %p = %$uc;
     }
@@ -1123,7 +1041,7 @@ sub query {
     # use query-like behaviour.
     return unless defined wantarray();
     #print STDERR "query(@_)\n";
-    my $info = $self->getUse_query
+    my $info = $self->get_use_query
         or do {
             $self->_error_no_query();
             return;
@@ -1136,13 +1054,36 @@ sub query {
     my $pointer = {children => $info};
     $tags = [] unless defined $tags;
     $tags = [$tags] unless ref $tags eq 'ARRAY';
+    my $includes = $self->get_includes;
+    my %include_info = map {
+        $includes->{$_}->[1] => $includes->{$_}->[2]->get_use_query;
+    } keys %{ $includes };
     for my $tag (@$tags) {
-        if (defined (my $value = $pointer->{children}->{lc $tag})) {
+        my $value;
+        my %includes = map {
+            my $item = $pointer->{children}->{$_};
+            ($item->{type} eq 'INCLUDE' and $include_info{$_})
+                ? (%{$include_info{$_}})
+                : ()
+        } keys %{ $pointer->{children} };
+        if (defined ($value = $pointer->{children}->{lc $tag})) {
             $pointer = $value;
+        }
+        elsif (defined ($value = $includes{lc $tag})) {
+            $pointer = $value;
+        }
+        else {
+            return;
         }
     }
     unless ($what) {
-        return keys %{ $pointer->{children} };
+        my @return = map {
+            my $item = $pointer->{children}->{$_};
+            ($item->{type} eq 'INCLUDE' and $include_info{$_})
+            ? (keys %{$include_info{$_}})
+            : $_;
+        } keys %{ $pointer->{children} };
+        return @return;
     }
     elsif ($what eq 'name') {
         my $type = $pointer->{type};
@@ -1150,7 +1091,13 @@ sub query {
     }
     elsif ($what eq 'loop') {
         if ($pointer->{type} eq 'LOOP') {
-            return keys %{ $pointer->{children} };
+            my @return = map {
+                my $item = $pointer->{children}->{$_};
+                ($item->{type} eq 'INCLUDE' and $include_info{$_})
+                ? (keys %{$include_info{$_}})
+                : $_;
+            } keys %{ $pointer->{children} };
+            return @return;
         }
         else { croak "error: (@$tags) is not a LOOP" }
     }
@@ -1198,9 +1145,9 @@ sub output {
     $p = ref $p eq 'HASH'
         ? \% { $p }
         : $p;
-    my $f = $self->getFile;
+    my $f = $self->get_file;
     $fh = \*STDOUT unless $fh;
-    $self->getPerl()->( $self, $p, \$p, $fh );
+    $self->get_perl()->( $self, $p, \$p, $fh );
 }
 
 sub import {
@@ -1243,15 +1190,15 @@ sub UseQuery {
 }
 
 sub pushGlobalstack {
-    my $stack = $_[0]->getGlobalstack;
+    my $stack = $_[0]->get_globalstack;
     push @$stack, $_[1];
-    $_[0]->setGlobalstack($stack);
+    $_[0]->set_globalstack($stack);
 }
 
 sub popGlobalstack {
-    my $stack = $_[0]->getGlobalstack;
+    my $stack = $_[0]->get_globalstack;
     pop @$stack;
-    $_[0]->setGlobalstack($stack);
+    $_[0]->set_globalstack($stack);
 }
 
 
@@ -1259,7 +1206,7 @@ sub popGlobalstack {
     my $lock_fh;
 
     sub lock {
-        my $file = File::Spec->catfile( $_[0]->getCache_dir, "lock" );
+        my $file = File::Spec->catfile( $_[0]->get_cache_dir, "lock" );
         unless ( -f $file ) {
             # touch
             open $lock_fh, '>', $file
@@ -1276,13 +1223,24 @@ sub popGlobalstack {
     }
 }
 
+my $version_pod = <<'=cut';
+=pod
+
+=head1 NAME
+
+HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl code
+
+=head1 VERSION
+
+$VERSION = "0.79"
+
+=cut
+
 sub __test_version {
     my $v = __PACKAGE__->VERSION;
     return 1 if $version_pod =~ m/VERSION.*\Q$v/;
     return;
 }
-
-
 
 1;
 
@@ -1629,7 +1587,7 @@ you can say:
   <TMPL_VAR .SELF>
 
 to access the root element, and you could even say C<.INFO.BIOGRAPHY>
-or C<ALBUMS.0.SONGS.0.NAME>
+or C<ALBUMS[0].SONGS[0].NAME> (the latter has changed since version 0.79)
 
 =head2 RENDERING OBJECTS
 
@@ -2344,7 +2302,8 @@ Bjoern Kriews for original idea and contributions
 
 Special Thanks to Sascha Kiefer - he finds all the bugs!
 
-Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Jan Willamowius for ideas and beta-testing
+Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Jan Willamowius, Justin Day
+for ideas, beta-testing and patches
 
 perlmonks.org and perl-community.de for everyday learning
 

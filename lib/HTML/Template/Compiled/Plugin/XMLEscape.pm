@@ -1,11 +1,12 @@
 package HTML::Template::Compiled::Plugin::XMLEscape;
-# $Id: XMLEscape.pm,v 1.5 2006/10/02 16:08:18 tinita Exp $
+# $Id: XMLEscape.pm,v 1.7 2006/10/07 16:42:54 tinita Exp $
 use strict;
 use warnings;
 use Carp qw(croak carp);
 use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled;
 HTML::Template::Compiled->register(__PACKAGE__);
+our $VERSION = '0.02';
 
 sub register {
     my ($class) = @_;
@@ -23,7 +24,7 @@ sub escape_xml {
     defined( my $escaped = $_[0] ) or return;
     $escaped =~ s/&/&amp;/g;
     $escaped =~ s/</&lt;/g;
-    $escaped =~ s/>/&lt;/g;
+    $escaped =~ s/>/&gt;/g;
     $escaped =~ s/"/&quot;/g;
     $escaped =~ s/'/&apos;/g;
     return $escaped;
@@ -33,7 +34,7 @@ sub escape_xml_attr {
     defined( my $escaped = $_[0] ) or return;
     $escaped =~ s/&/&amp;/g;
     $escaped =~ s/</&lt;/g;
-    $escaped =~ s/>/&lt;/g;
+    $escaped =~ s/>/&gt;/g;
     $escaped =~ s/"/&quot;/g;
     $escaped =~ s/'/&apos;/g;
     return $escaped;
@@ -75,6 +76,24 @@ escapes data for XML CDATA.
 escapes data for XML attributes
 
 =back
+
+=head1 EXAMPLE
+
+    use HTML::Template::Compiled::Plugin::XMLEscape;
+    my $htc = HTML::Template::Compiled->new(
+        plugin => [qw(HTML::Template::Compiled::Plugin::XMLEscape)],
+        tagstyle => [qw(-classic -comment -asp +tt)],
+        scalarref => \"<foo attr="[%= attribute %]">[%= cdata escape=XML %]</foo>",
+        default_escape => 'XML_ATTR',
+    );
+    $htc->param(
+        attr => 'foo & bar',
+        cdata => 'text < with > tags',
+    );
+    print $htc->output;
+
+Output:
+    <foo attr="foo &amp; bar">text &lt; with &gt; tags</foo>
 
 =cut
 

@@ -31,7 +31,7 @@ for-loop and while-loop like in Perl.
 
 =item WITH
 
-    <%with cds.0.artist.fanclub%><%= _.address%><%= _.homepage%><%/with %>
+    <%with cds[0].artist.fanclub%><%= _.address%><%= _.homepage%><%/with %>
 
 =item INCLUDE, INCLUDE_VAR
 

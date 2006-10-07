@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm,v 1.10 2006/07/14 16:27:29 markjugg Exp $
+# $Id: Utils.pm,v 1.11 2006/10/04 21:19:37 tinita Exp $
 $VERSION = "0.03";
 use strict;
 use warnings;
@@ -7,7 +7,7 @@ use Data::Dumper;
 
 use base 'Exporter';
 use vars qw/@EXPORT_OK %EXPORT_TAGS/;
-my @paths = qw(PATH_METHOD PATH_DEREF PATH_FORMATTER);
+my @paths = qw(PATH_METHOD PATH_DEREF PATH_FORMATTER PATH_ARRAY);
 @EXPORT_OK = (
     @paths, qw(
         &log &stack
@@ -24,6 +24,7 @@ my @paths = qw(PATH_METHOD PATH_DEREF PATH_FORMATTER);
 use constant PATH_METHOD => 1;
 use constant PATH_DEREF => 2;
 use constant PATH_FORMATTER => 3;
+use constant PATH_ARRAY => 4;
 
 =pod
 

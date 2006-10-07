@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Lazy;
-# $Id: Lazy.pm,v 1.3 2006/08/18 18:53:26 tinita Exp $
+# $Id: Lazy.pm,v 1.4 2006/10/04 20:29:26 tinita Exp $
 use strict;
 use warnings;
 our $VERSION = "0.01";
@@ -16,7 +16,7 @@ sub compile_early { 0 }
 
 sub query {
     my ( $self, @args ) = @_;
-    my $perl = $self->getPerl;
+    my $perl = $self->get_perl;
     unless ($perl) {
         $self = $self->SUPER::from_scratch();
     }
@@ -25,7 +25,7 @@ sub query {
 
 sub output {
     my ( $self, @args ) = @_;
-    my $perl = $self->getPerl;
+    my $perl = $self->get_perl;
     unless ($perl) {
         $self = $self->SUPER::from_scratch();
     }
@@ -34,10 +34,10 @@ sub output {
 
 sub get_code {
     my ($self) = @_;
-    my $perl = $self->getPerl;
+    my $perl = $self->get_perl;
     unless ($perl) {
         $self = $self->SUPER::from_scratch;
-        $perl = $self->getPerl;
+        $perl = $self->get_perl;
     }
     return $perl;
 }

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Classic;
-# $Id: Classic.pm,v 1.11 2006/09/29 00:01:31 tinita Exp $
+# $Id: Classic.pm,v 1.13 2006/10/04 21:19:37 tinita Exp $
 use strict;
 use warnings;
 our $VERSION = "0.04";
@@ -19,7 +19,7 @@ sub compiler_class { 'HTML::Template::Compiled::Compiler::Classic' }
 sub _get_var_global_sub {
     my ($self, $P, $ref, $final, @paths) = @_;
     my $key = $paths[0]->[1];
-    my $stack = $self->getGlobalstack || [];
+    my $stack = $self->get_globalstack || [];
     for my $item ( $ref, reverse @$stack ) {
         next unless exists $item->{$key};
         my $var = $item->{$key};
@@ -27,6 +27,11 @@ sub _get_var_global_sub {
         return $var;
     }
     return;
+}
+
+sub validate_var {
+    my ($self, $string) = @_;
+    return !$string =~ tr#a-zA-Z0-9._/-##c;
 }
 
 
@@ -86,6 +91,11 @@ but as of HTC version 0.70 it won't any more, sorry).
 =item compiler_class
 
 returns HTML::Template::Compiled::Compiler::Classic
+
+=item validate_var
+
+gets the var name (parsed out of C<NAME="foo.bar"> and returns
+if the string is a valid var name
 
 =back
 

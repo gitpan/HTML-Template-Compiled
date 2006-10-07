@@ -1,5 +1,16 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.79 Sat Oct  7 20:36:55 CEST 2006
+- Change: instead of <tmpl_var name="array.42"> you must
+  now use <tmpl_var name="array[42]". sorry
+- Bugfix: path was not set when using template from a filehandle
+- Bugfix: globalvars did not work in included templates
+- New feature: allow negative indizes array[-1].foo
+- Bugfix: loop_context_vars weren't stored in filecache
+- Bugfix: query() wasn't always corect when doing
+  $template->query(name => ['FOO', 'BAR'])
+- Bugfix: query() now also reports included vars like H::T does
+
 0.78 Wed Oct  4 21:22:09 CEST 2006
 - Bugfix: endless loop when using file cache
 - Bugfix: correctly use cache attribute with filecache

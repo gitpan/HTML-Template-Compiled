@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler::Classic;
-# $Id: Classic.pm,v 1.3 2006/10/02 17:44:33 tinita Exp $
+# $Id: Classic.pm,v 1.6 2006/10/05 15:03:26 tinita Exp $
 use strict;
 use warnings;
 our $VERSION = "0.01";
@@ -10,8 +10,8 @@ sub _make_path {
     my ( $self, $t, %args ) = @_;
     my $context = $args{context};
     # only allow '.', '/', '+', '-' and '_'
-    if ($args{var} =~ tr#a-zA-Z0-9._/-##c) {
-        $t->getParser->_error_wrong_tag_syntax(
+    if ($t->validate_var($args{var})) {
+        $t->get_parser->_error_wrong_tag_syntax(
             $context->get_file, $context->get_line, "", $args{var}
         );
     }
@@ -24,11 +24,11 @@ sub _make_path {
         __inner__   => '$__ix__ != $[ && $__ix__ != $size',
     );
 
-    if ( $t->getLoop_context && $args{var} =~ m/^__(\w+)__$/ ) {
+    if ( $t->get_loop_context && $args{var} =~ m/^__(\w+)__$/ ) {
         my $lc = $loop_context{ lc $args{var} };
         return $lc;
     }
-    if ($t->getGlobal_vars & 1) {
+    if ($t->get_global_vars & 1) {
         my $varstr =
             "\$t->_get_var_global_sub(" . '$P,$$C,0,'."[undef,'$args{var}'])";
         return $varstr;
@@ -40,10 +40,7 @@ sub _make_path {
         my $varstr = '$$C->{' . "'$var'" . '}';
         my $string = <<"EOM";
 do { my \$var = $varstr;
-  \$var = (ref \$var eq 'CODE')
-  ?
-  \$var->()
-  : \$var;
+  \$var = (ref \$var eq 'CODE') ?  \$var->() : \$var;
 EOM
         if ($context->get_name !~ m/^(?:LOOP|WITH)$/) {
             $string .= <<"EOM";

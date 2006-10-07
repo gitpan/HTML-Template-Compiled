@@ -1,4 +1,4 @@
-# $Id: 19_query.t,v 1.6 2006/08/18 18:53:59 tinita Exp $
+# $Id: 19_query.t,v 1.8 2006/10/07 18:27:26 tinita Exp $
 use warnings;
 use strict;
 use lib 'blib/lib';
@@ -31,6 +31,7 @@ ok($ok1, "query 1");
     };
     cmp_ok("@params", 'eq', 'foo', 'HTC::Lazy and query()');
 }
+sleep 3;
 {
     open my $fh, '+<', $file_copy or die $!;
     local $/;
@@ -41,7 +42,6 @@ ok($ok1, "query 1");
     print $fh $data;
     close $fh;
 }
-sleep 3;
 my $ok2 = query_template();
 ok(!$ok2, "query 2");
 
@@ -64,7 +64,8 @@ sub query_template {
 
     my $ok = (
     $@ =~ /error/ and
-       $template->query(name => 'var') eq 'VAR' and
+    $template->query(name => 'var') eq 'VAR' and
+    $template->query(name => 'included_var') eq 'VAR' and
        $template->query(name => 'EXAMPLE_LOOP') eq 'LOOP' and
        exists $params{bee} and
        exists $params{bop} and
@@ -87,7 +88,7 @@ sub query_template {
     );
     my %p;
     eval { %p = map {$_ => 1} $template->query(loop => ['LOOP_FOO', 'LOOP_BAR']); };
-    ok(exists $p{foo} and exists $p{bar} and exists $p{bash});
+    ok(exists $p{foo} and exists $p{bar} and exists $p{bash}, "foo bar");
 }
 
 HTML::Template::Compiled->clear_filecache('t/cache');

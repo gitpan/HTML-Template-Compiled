@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.26 2006/10/02 17:43:16 tinita Exp $
+# $Id: Compiler.pm,v 1.34 2006/10/07 18:28:09 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -100,8 +100,8 @@ sub _make_path {
     my $lexicals = $args{lexicals};
     my $context = $args{context};
     # only allow '.', '/', '+', '-' and '_'
-    if ($args{var} =~ tr#a-zA-Z0-9._/-##c) {
-        $t->getParser->_error_wrong_tag_syntax(
+    if ($t->validate_var($args{var})) {
+        $t->get_parser->_error_wrong_tag_syntax(
             $context->get_file, $context->get_line, "", $args{var}
         );
     }
@@ -117,64 +117,109 @@ sub _make_path {
         __odd__     => '!($__ix__ & 1)',
         __inner__   => '$__ix__ != $[ && $__ix__ != $size',
     );
-    if ( $t->getLoop_context && $args{var} =~ m/^__(\w+)__$/ ) {
-        my $lc = $loop_context{ lc $args{var} };
-        return $lc;
+    if ( $t->get_loop_context && $args{var} =~ m/^__(\w+)__$/ ) {
+        if (exists $loop_context{ lc $args{var} }) {
+            my $lc = $loop_context{ lc $args{var} };
+            return $lc;
+        }
     }
-    elsif ( $args{var} =~ m/^_/ && $args{var} !~ m/^__(\w+)__$/ ) {
+    my $re = qr#
+        \Q$args{deref}\E |
+        \Q$args{method_call}\E |
+        \Q$args{formatter_path}\E
+        #x;
+    my $up_stack = 0;
+    my $varstr = 'do {my $var = $$C; ';
+    if ( $args{var} =~ m/^_/ && $args{var} !~ m/^__(\w+)__$/ ) {
         $args{var} =~ s/^_//;
         $root = 0;
     }
-    elsif ( $args{var} =~
-        m/^(\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)(\1?)/
-        ) {
-        $root = 1 unless length $2;
+    elsif ( my @roots = $args{var} =~ m/\G($re)/gc) {
+        #print STDERR "ROOTS: (@roots)\n";
+        $root = 1 if @roots == 1;
+        $args{var} =~ s/^($re)+//;
+        if (@roots > 1) {
+            croak "Cannot navigate up the stack" if !$t->get_global_vars & 2;
+            $up_stack = $#roots;
+            $varstr .= <<"EOM";
+my \$stack = \$t->get_globalstack;
+\$var = \$stack->[-$up_stack]; #print \$var, \$/;
+EOM
+        }
+        elsif (@roots == 1) {
+            $varstr .= q#$var = $P;#;
+        }
     }
-    my @split = split
-        m/(?=\Q$args{deref}\E|\Q$args{method_call}\E|\Q$args{formatter_path}\E)/,
-        $args{var};
+    my @split = split m/(?=$re)/, $args{var};
+    @split = map {
+        m/(.*)\[(-?\d+)\]/ ? ("$1", "[$2]") : $_
+    } @split;
     my @paths;
+    #print STDERR "paths: (@split)\n";
+    my $count = 0;
     for my $p (@split) {
         $p =~ s#\\#\\\\#g;
         $p =~ s#'#\\'#g;
-        if ( $p =~ s/^\Q$args{method_call}// ) {
-            push @paths, '[' . PATH_METHOD . ",'$p']";
+        #print STDERR "path: $p\n";
+        if ( $p =~ s/^\[(-?\d+)\]$/$1/ ) {
+            $varstr .= "\$var = \$var->[$1];\n";
+        }
+        elsif ( $p =~ s/^\Q$args{method_call}// ) {
+            if ($count == 0 && $t->get_global_vars & 1) {
+                $varstr .= "\$var = \$t->try_global(\$var, '$p');\n";
+            }
+            else {
+                my $path = $t->get_case_sensitive ? $p : uc $p;
+            $varstr .= <<"EOM";
+\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p : \$var->\{$path\};
+EOM
+            }
         }
         elsif ( $p =~ s/^\Q$args{deref}// ) {
-            push @paths,
-                '['
-                . PATH_DEREF . ",'"
-                . ( $t->getCase_sensitive ? $p : uc $p ) . "']";
+            #print STDERR "$p deref\n";
+            if ($count == 0 && $t->get_global_vars & 1) {
+                $varstr .= "\$var = \$t->try_global(\$var, '$p');\n";
+            }
+            else {
+                my $path = $t->get_case_sensitive ? $p : uc $p;
+            $varstr .= <<"EOM";
+\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p : \$var->\{$path\};
+EOM
+            }
         } ## end elsif ( $p =~ s/^\Q$args{deref}//)
         elsif ( $p =~ s/^\Q$args{formatter_path}// ) {
-            push @paths,
-                '['
-                . PATH_FORMATTER . ",'"
-                . ( $t->getCase_sensitive ? $p : uc $p ) . "']";
+
+            $varstr .= <<"EOM";
+            \$var = \$t->_walk_formatter(\$var, '$p', @{[$t->get_global_vars]});
+EOM
         } ## end elsif ( $p =~ s/^\Q$args{formatter_path}//)
         else {
-            push @paths,
-                '['
-                . $t->getDefault_path() . ", '"
-                . ( $t->getCase_sensitive ? $p : uc $p ) . "']";
+            if ($count == 0 && $t->get_global_vars & 1) {
+                $varstr .= "\$var = \$t->try_global(\$var, '$p');\n";
+            }
+            else {
+                my $path = $t->get_case_sensitive ? $p : uc $p;
+                $varstr .= <<"EOM";
+\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p : \$var->\{$path\};
+EOM
+            }
         } ## end else [ if ( $p =~ s/^\Q$args{method_call}//)
+        $count++;
     } ## end for my $p (@split)
-    local $" = ",";
-    my $final = $context->get_name eq 'VAR' ? 1 : 0;
-    my $getvar = '_get_var';
-    $getvar .= $t->getGlobal_vars & 1 ? '_global' : '';
-    my $varstr =
-        "\$t->$getvar(\$P," . ( $root ? '$P' : '$$C' ) . ",$final,@paths)";
+    #my $final = $context->get_name eq 'VAR' ? 1 : 0;
+        $varstr .= <<'EOM';
+$var }
+EOM
     return $varstr;
 } ## end sub _make_path
 
 sub compile {
     my ( $class, $self, $text, $fname ) = @_;
     D && $self->log("compile($fname)");
-    if ( my $filter = $self->getFilter ) {
+    if ( my $filter = $self->get_filter ) {
         $filter->filter($text);
     }
-    my $parser = $self->getParser;
+    my $parser = $self->get_parser;
     my @p = $parser->parse($fname, $text);
     my $level = 1;
     my $code  = '';
@@ -183,11 +228,11 @@ sub compile {
 
     # got this trick from perlmonks.org
     my $anon = D
-      || $self->getDebug ? qq{local *__ANON__ = "htc_$fname";\n} : '';
+      || $self->get_debug ? qq{local *__ANON__ = "htc_$fname";\n} : '';
 
     no warnings 'uninitialized';
     my $output = '$OUT .= ';
-    my $out_fh = $self->getOut_fh;
+    my $out_fh = $self->get_out_fh;
     if ($out_fh) {
         $output = 'print $OFH ';
     }
@@ -223,7 +268,7 @@ EOM
         if ($is_open && $tname eq T_VAR && exists $attr->{NAME}) {
             #print STDERR "===== VAR ($text)\n";
             my $var = $attr->{NAME};
-            if ($self->getUse_query) {
+            if ($self->get_use_query) {
                 $info_stack->[-1]->{lc $var}->{type} = T_VAR;
             }
             my $varstr = $class->_make_path($self,
@@ -246,7 +291,7 @@ EOM
                 );
             }
             # ---- escapes
-            my $escape = $self->getDefault_escape;
+            my $escape = $self->get_default_escape;
             if (exists $attr->{ESCAPE}) {
                 $escape = $attr->{ESCAPE};
             }
@@ -264,7 +309,7 @@ EOM
                 context => $token,
             );
             $code .= _expr_open()->to_string($level) .qq# \# WITH $var\n#;
-            if ($self->getGlobal_vars) {
+            if ($self->get_global_vars) {
                 $code .= _expr_method(
                     'pushGlobalstack',
                     _expr_literal('$t'),
@@ -285,7 +330,7 @@ EOM
             );
             $level += 2;
             my $ind    = INDENT;
-            if ($self->getUse_query) {
+            if ($self->get_use_query) {
                 $info_stack->[-1]->{lc $var}->{type} = T_LOOP;
                 $info_stack->[-1]->{lc $var}->{children} ||= {};
                 push @$info_stack, $info_stack->[-1]->{lc $var}->{children};
@@ -299,7 +344,7 @@ EOM
             );
             my $lexi =
               defined $lexical ? "${indent}my \$$lexical = \$\$C;\n" : "";
-            my $global = $self->getGlobal_vars
+            my $global = $self->get_global_vars
                 ? $pop_global->to_string($level).";\n"
                 : '';
             if ($tname eq T_WHILE) {
@@ -343,7 +388,7 @@ EOM
             my $indent = INDENT x $level;
             my $exp = _expr_close();
             $code .= $exp->to_string($level) . qq{# end $var\n};
-            if ($self->getGlobal_vars && $tname eq 'WITH') {
+            if ($self->get_global_vars && $tname eq 'WITH') {
                 $code .= $indent . qq#\$t->popGlobalstack;\n#;
             }
         }
@@ -351,14 +396,14 @@ EOM
         # --------- / TMPL_LOOP TMPL_WHILE
         elsif ($is_close && ($tname eq T_LOOP || $tname eq T_WHILE)) {
             pop @lexicals;
-            if ($self->getUse_query) {
+            if ($self->get_use_query) {
                 pop @$info_stack;
             }
             $level-= 2;
             my $indent = INDENT x $level;
             $code .= _expr_close()->to_string($level+1) ."\n" 
                 . _expr_close()->to_string($level) . " # end loop\n";
-            if ($self->getGlobal_vars) {
+            if ($self->get_global_vars) {
             $code .= <<"EOM";
 ${indent}\$t->popGlobalstack;
 EOM
@@ -477,7 +522,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
             if ($dynamic) {
                 # dynamic filename
                 my $dfilename = $attr->{NAME};
-                if ($self->getUse_query) {
+                if ($self->get_use_query) {
                     $info_stack->[-1]->{lc $dfilename}->{type} = T_INCLUDE_VAR;
                 }
                 $varstr = $class->_make_path($self,
@@ -488,11 +533,13 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
             }
             else {
                 # static filename
-                $info_stack->[-1]->{lc $filename}->{type} = T_INCLUDE;
                 $filename = $attr->{NAME};
+                if ($self->get_use_query) {
+                    $info_stack->[-1]->{lc $filename}->{type} = T_INCLUDE;
+                }
                 $varstr   = $self->quote_file($filename);
                 $dir      = dirname $fname;
-                if ($self->getSearch_path_on_include) {
+                if ($self->get_search_path) {
                     if ( defined $dir and !grep { $dir eq $_ } @$path ) {
                         # add the current directory to top of paths
                         # create new $path, don't alter original ref
@@ -507,16 +554,16 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                     D && $self->log("compile include $filename!!");
                     $self->compile_early() and my $cached_or_new
                         = $self->new_from_object(
-                          $path, $filename, '', $self->getCache_dir
+                          $path, $filename, '', $self->get_cache_dir
                       );
-                    $fullpath = $cached_or_new->getFile;
-                    $self->getIncludes()->{$fullpath}
+                    $fullpath = $cached_or_new->get_file;
+                    $self->get_includes()->{$fullpath}
                         = [$path, $filename, $cached_or_new];
                         $fullpath = $self->quote_file($fullpath);
                 }
             }
             #print STDERR "include $varstr\n";
-            my $cache = $self->getCache_dir;
+            my $cache = $self->get_cache_dir;
             $path = defined $path
               ? '['
               . join( ',', map { $self->quote_file($_) } @$path ) . ']'
@@ -526,13 +573,14 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 $code .= <<"EOM";
 ${indent}\{
 ${indent}  if (defined (my \$file = $varstr)) \{
-${indent}    my \$include = \$t->getIncludes()->{$fullpath};
+${indent}    my \$include = \$t->get_includes()->{$fullpath};
 ${indent}    my \$new = \$include ? \$include->[2] : undef;
 #print STDERR "+++++++got new? \$new\\n";
 ${indent}    if (!\$new || HTML::Template::Compiled::needs_new_check($cache||'',\$file)) {
 ${indent}      \$new = \$t->new_from_object($path,\$file,$fullpath,$cache);
 ${indent}    }
 #print STDERR "got new? \$new\\n";
+${indent}    \$new->set_globalstack(\$t->get_globalstack);
 ${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
 ${indent}  \}
 ${indent}\}
@@ -541,13 +589,14 @@ EOM
             else {
                 $code .= <<"EOM";
 ${indent}\{
-${indent}    my \$include = \$t->getIncludes()->{$fullpath};
+${indent}    my \$include = \$t->get_includes()->{$fullpath};
 ${indent}    my \$new = \$include ? \$include->[2] : undef;
 #print STDERR "got new? \$new\\n";
 ${indent}    if (!\$new) {
 ${indent}      \$new = \$t->new_from_object($path,$varstr,$fullpath,$cache);
 ${indent}    }
 #print STDERR "got new? \$new\\n";
+${indent}    \$new->set_globalstack(\$t->get_globalstack);
 ${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
 ${indent}\}
 EOM
@@ -561,15 +610,15 @@ EOM
             }
         }
     }
-    if ($self->getUse_query) {
-        $self->setUse_query($info);
+    if ($self->get_use_query) {
+        $self->set_use_query($info);
     }
     #warn Data::Dumper->Dump([\$info], ['info']);
     $code .= qq#return \$OUT;\n#;
     $code = $header . $code . "\n} # end of sub\n";
 
     #$code .= "\n} # end of sub\n";
-    print STDERR "# ----- code \n$code\n# end code\n" if $self->getDebug;
+    print STDERR "# ----- code \n$code\n# end code\n" if $self->get_debug;
 
     # untaint code
     if ( $code =~ m/(\A.*\z)/ms ) {
