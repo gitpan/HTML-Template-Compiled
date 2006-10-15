@@ -1,16 +1,16 @@
 package HTML::Template::Compiled::Compiler::Classic;
-# $Id: Classic.pm,v 1.6 2006/10/05 15:03:26 tinita Exp $
+# $Id: Classic.pm,v 1.8 2006/10/11 20:52:50 tinita Exp $
 use strict;
 use warnings;
 our $VERSION = "0.01";
 
 use base 'HTML::Template::Compiled::Compiler';
 
-sub _make_path {
+sub parse_var {
     my ( $self, $t, %args ) = @_;
     my $context = $args{context};
     # only allow '.', '/', '+', '-' and '_'
-    if ($t->validate_var($args{var})) {
+    if (!$t->validate_var($args{var})) {
         $t->get_parser->_error_wrong_tag_syntax(
             $context->get_file, $context->get_line, "", $args{var}
         );
@@ -69,7 +69,7 @@ This is the compiler class for L<HTML::Template::Compiled::Classic>
 
 =over 4
 
-=item _make_path
+=item parse_var
 
 Make a path out of tmpl_var name="foobar"
 

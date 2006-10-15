@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.279 2006/10/07 18:25:18 tinita Exp $
+# $Id: Compiled.pm,v 1.287 2006/10/15 14:38:31 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.79";
+our $VERSION = "0.80";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -14,12 +14,11 @@ use Carp;
 use Fcntl qw(:seek :flock);
 use File::Spec;
 use File::Basename qw(dirname);
-use HTML::Template::Compiled::Utils qw(:walkpath :log :escape);
+use HTML::Template::Compiled::Utils qw(:walkpath :log :escape &md5);
 use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Compiler;
 # TODO
 eval {
-    require Digest::MD5;
     require HTML::Entities;
     require URI::Escape;
 };
@@ -44,7 +43,7 @@ BEGIN {
         undef, qw(
           path filename file scalar filehandle
           cache_dir cache search_path
-          loop_context case_sensitive dumper global_vars
+          loop_context case_sensitive global_vars
           default_path
           debug perl out_fh default_escape
           filter formatter
@@ -229,7 +228,7 @@ sub new_scalar_ref {
     $self->set_cache_dir( $args{cache_dir} );
     $self->set_scalar( $args{scalarref} );
     my $text = $self->get_scalar;
-    my $md5  = Digest::MD5::md5_base64($$text);
+    my $md5  = md5($$text);
     $self->set_filename($md5);
     D && $self->log("md5: $md5");
     $self->set_path( $args{path} );
@@ -275,16 +274,6 @@ sub build_path {
 sub init_runtime_args {
     my ($self, %args) = @_;
     D && $self->log("init_runtime_args()");
-    if ( my $fm = $args{formatter} ) {
-        unless ( $self->get_formatter ) {
-            $self->set_formatter($fm);
-        }
-    }
-    if ( my $dumper = $args{dumper} ) {
-        unless ( $self->get_dumper ) {
-            $self->set_dumper($dumper);
-        }
-    }
     if ( my $filter = $args{filter} ) {
         unless ( $self->get_filter ) {
             $self->set_filter($filter);
@@ -674,33 +663,24 @@ sub createFilename {
 
 sub dump {
     my ( $self, $var ) = @_;
-    if ( my $sub = $self->get_dumper() ) {
-        unless ( ref $sub ) {
-            # we have a plugin
-            $sub =~ tr/0-9a-zA-Z//cd;    # allow only words
-            my $class = "HTML::Template::Compiled::Plugin::$sub";
-            $sub = \&{ $class . '::dumper' };
-        }
-        return $sub->($var);
-    }
-    else {
-        require Data::Dumper;
-        local $Data::Dumper::Indent   = 1;
-        local $Data::Dumper::Sortkeys = 1;
-        return Data::Dumper->Dump( [$var], ['DUMP'] );
-    }
+    require Data::Dumper;
+    local $Data::Dumper::Indent   = 1;
+    local $Data::Dumper::Sortkeys = 1;
+    return Data::Dumper->Dump( [$var], ['DUMP'] );
 }
 
 sub _check_deprecated_args {
     my ($self, %args) = @_;
     for (qw(method_call deref formatter_path)) {
         if (exists $args{$_}) {
-            carp "Option $_ is deprecated, please inherit and"
-                . " overwrite the method '$_'";
+            croak "Option $_ is deprecated";
         }
     }
     if (exists $args{dumper}) {
-        carp "Option dumper is deprecated, use a plugin instead";
+        croak "Option dumper is deprecated, use a plugin instead";
+    }
+    if (exists $args{formatter}) {
+        croak "Option formatter is deprecated, see documentation";
     }
 }
 
@@ -726,8 +706,6 @@ sub init {
     );
     $self->set_loop_context(1) if $args{loop_context_vars};
     $self->set_case_sensitive( $defaults{case_sensitive} );
-    $self->set_dumper( $args{dumper} )       if $args{dumper};
-    $self->set_formatter( $args{formatter} ) if $args{formatter};
     $self->set_default_escape( $defaults{default_escape} );
     $self->set_default_path( $defaults{default_path} );
     $self->set_use_query( $defaults{use_query} );
@@ -767,6 +745,9 @@ sub init {
             }
             if (my $escape = $actions->{escape}) {
                 $compiler->add_escapes($escape);
+            }
+            if (my $tags = $actions->{compile}) {
+                $compiler->set_tags($tags);
             }
         }
     }
@@ -859,7 +840,7 @@ sub try_global {
     sub _walk_formatter {
         my ($self, $walk, $key, $global) = @_;
         my $ref = ref $walk;
-        my $fm = $self->get_formatter();
+        my $fm = $HTML::Template::Compiled::Formatter::formatter;
         my $sub = exists $fm->{$ref} ? $fm->{$ref}->{$key} : undef;
         my $stack = [];
         my $new_walk;
@@ -896,9 +877,9 @@ sub try_global {
 
 # end ugly code, phooey
 
+# returns if the var is valid
 sub validate_var {
-    my ($self, $string) = @_;
-    return !$string =~ tr#a-zA-Z0-9._[]/-##c;
+    return $_[1] !~ tr#a-zA-Z0-9._[]/-##c;
 }
 
 sub escape_filename {
@@ -1232,7 +1213,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.79"
+$VERSION = "0.80"
 
 =cut
 
@@ -1284,14 +1265,17 @@ template syntax as HTML::Template and the same perl API (see L<"COMPATIBILITY">
 for what you need to know if you want (almost) the same behaviour). Internally
 it works different, because it turns the template into perl code,
 and once that is done, generating the output is much faster than with
-HTML::Template (3-6 times at the moment, depending on the options you use (see
+HTML::Template (3-7 times at the moment, depending on the options you use (see
 L<"Benchmarks"> for some examples), when both are run with loop_context_vars 0.
 It also can generate perl files so that
 the next time the template is loaded it doesn't have to be parsed again. The best
 performance gain is probably reached in applications running under mod_perl, for example.
 
-If you don't use caching at all (e.g. CGI environment without file caching), HTC
-will be even slower than H::T.
+If you don't use memory caching (e.g. CGI environment), HTC will be even
+slower than H::T.
+If you don't use caching at all (e.g. CGI environment without file caching),
+HTC will be much slower than H::T and TT.
+
 You might want to use L<HTML::Template::Compiled::Lazy> for CGI environments
 as it doesn't parse the template before calling output. But note that HTC::Lazy
 is still in development; there might be bugs with certain combinations
@@ -1638,7 +1622,7 @@ Default is C<sub deref { '.' }>
 
 =item formatter_path
 
-Default is C<sub formatter_path { '/' }>
+Deprecated, see L<HTML::Template::Compiled::Formatter> please.
 
 =item compile_early
 
@@ -1898,6 +1882,8 @@ instead.
  
 =item default_path (fixed)
 
+Deprecated, see L<HTML::Template::Compiled::Formatter> please.
+
   my $htc = HTML::Template::Compiled->new(
     ...
     default_path
@@ -2033,6 +2019,8 @@ tt-style and your own C<{{}} > style, then say:
 
 =item formatter
 
+Deprecated, see L<HTML::Template::Compiled::Formatter> please.
+
 With formatter you can specify how an object should be rendered. This is useful
 if you don't want object methods to be called, but only a given subset of
 methods.
@@ -2056,9 +2044,7 @@ methods.
 
 =item formatter_path (fixed)
 
-Deprecated. Please inherit and overwrite method 'formatter_path'. See L<"INHERITANCE">
-
-see formatter. Defaults to '/'
+Deprecated, see L<HTML::Template::Compiled::Formatter> please.
 
 =item debug
 

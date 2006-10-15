@@ -1,7 +1,7 @@
 ===test.html 1==========================================
 name: <%= $name%> look ma: ~
 name with "": <%= $name%>
-INCLUDE: (((<%= $tmpl->include("examples/included.htc") %>)))
+INCLUDE: (((<%= $tmpl->include("examples/included.tst") %>)))
 ---------------
 loop a:
 <% for my $ix (0..$#$loopa) {

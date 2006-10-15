@@ -6,6 +6,7 @@ README
 lib/HTML/Template/Compiled.pm
 lib/HTML/Template/Compiled/Utils.pm
 lib/HTML/Template/Compiled/Filter.pm
+lib/HTML/Template/Compiled/Formatter.pm
 lib/HTML/Template/Compiled/Parser.pm
 lib/HTML/Template/Compiled/Compiler.pm
 lib/HTML/Template/Compiled/Token.pm
@@ -24,6 +25,7 @@ examples/test.htcc
 examples/test.htc.20
 examples/included.htc
 examples/included.htcc
+examples/included.tst
 examples/included.tt
 examples/bench.pl
 examples/bench_mem.pl

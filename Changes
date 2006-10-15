@@ -1,5 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.80 Sun Oct 15 16:39:02 CEST 2006
+- Bugfix: characters like '-' in <tmpl_* foo-bar> lead to
+  compilation errors
+- Bugfix: accessing array elements like <tmpl_var [23]> didn't work
+
 0.79 Sat Oct  7 20:36:55 CEST 2006
 - Change: instead of <tmpl_var name="array.42"> you must
   now use <tmpl_var name="array[42]". sorry

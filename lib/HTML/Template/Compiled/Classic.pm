@@ -1,20 +1,13 @@
 package HTML::Template::Compiled::Classic;
-# $Id: Classic.pm,v 1.13 2006/10/04 21:19:37 tinita Exp $
+# $Id: Classic.pm,v 1.15 2006/10/11 20:54:09 tinita Exp $
 use strict;
 use warnings;
-our $VERSION = "0.04";
+our $VERSION = "0.05";
 
 use base 'HTML::Template::Compiled';
 use HTML::Template::Compiled::Compiler::Classic;
 
 sub compiler_class { 'HTML::Template::Compiled::Compiler::Classic' }
-
-#sub _get_var_sub {
-#    my ($self, $P, $ref, $final, @paths) = @_;
-#    my $var = $ref->{$paths[0]->[1]};
-#    ref $var eq 'CODE' and $var = $var->();
-#    return $var;
-#}
 
 sub _get_var_global_sub {
     my ($self, $P, $ref, $final, @paths) = @_;
@@ -29,9 +22,9 @@ sub _get_var_global_sub {
     return;
 }
 
+# returns if the var is valid
 sub validate_var {
-    my ($self, $string) = @_;
-    return !$string =~ tr#a-zA-Z0-9._/-##c;
+    return $_[1] !~ tr#a-zA-Z0-9._/-##c;
 }
 
 

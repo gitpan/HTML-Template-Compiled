@@ -1,11 +1,11 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.40 2006/10/02 17:39:38 tinita Exp $
+# $Id: Parser.pm,v 1.43 2006/10/12 20:05:54 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
 use base qw(Exporter);
 use HTML::Template::Compiled::Token;
-our $VERSION = 0.03;
+our $VERSION = 0.04;
 my @vars;
 BEGIN {
 @vars = qw(
@@ -84,24 +84,27 @@ sub default_tags {
         tt      => ['\[%'         ,'%\]',   '\[%/',         '%\]'   ],
     };
 }
+
+my $default_validation = sub { exists $_[1]->{NAME} };
 my %allowed_tagnames = (
-    VAR => [qw(!NAME ESCAPE DEFAULT)],
-    '=' => [qw(!NAME ESCAPE DEFAULT)], # just an alias for VAR
-    IF_DEFINED => [qw(!NAME)],
-    IF => [qw(!NAME)],
-    UNLESS => [qw(!NAME)],
-    ELSIF => [qw(!NAME)],
-    ELSE => [qw(NAME)],
-    WITH => [qw(!NAME)],
-    COMMENT => [qw(NAME)],
-    VERBATIM => [qw(NAME)],
-    NOPARSE => [qw(NAME)],
-    LOOP => [qw(!NAME ALIAS)],
-    WHILE => [qw(!NAME ALIAS)],
-    SWITCH => [qw(!NAME)],
-    CASE => [qw(NAME)],
-    INCLUDE_VAR => [qw(!NAME)],
-    INCLUDE => [qw(!NAME)],
+    VAR         => [$default_validation, qw(NAME ESCAPE DEFAULT)],
+    # just an alias for VAR
+    '='         => [$default_validation, qw(NAME ESCAPE DEFAULT)],
+    IF_DEFINED  => [$default_validation, qw(NAME)],
+    IF          => [$default_validation, qw(NAME)],
+    UNLESS      => [$default_validation, qw(NAME)],
+    ELSIF       => [$default_validation, qw(NAME)],
+    ELSE        => [undef, qw(NAME)],
+    WITH        => [$default_validation, qw(NAME)],
+    COMMENT     => [undef, qw(NAME)],
+    VERBATIM    => [undef, qw(NAME)],
+    NOPARSE     => [undef, qw(NAME)],
+    LOOP        => [$default_validation, qw(NAME ALIAS)],
+    WHILE       => [$default_validation, qw(NAME ALIAS)],
+    SWITCH      => [$default_validation, qw(NAME)],
+    CASE        => [undef, qw(NAME)],
+    INCLUDE_VAR => [$default_validation, qw(NAME)],
+    INCLUDE     => [$default_validation, qw(NAME)],
 );
 
 
@@ -147,12 +150,12 @@ sub find_start_of_tag {
     my ($self, %args) = @_;
     my $text = $args{text};
     my $re = $args{re};
-    my $open = $args{open};
-    my $token = $args{token};
-    my $open_or_close = $args{open_or_close};
-    my %open_close_map = %{$args{open_close_map}};
-    my $close_match = $args{close_match};
     if ($$text =~ s/^($re)//) {
+        my $open = $args{open};
+        my $token = $args{token};
+        my %open_close_map = %{$args{open_close_map}};
+        my $open_or_close = $args{open_or_close};
+        my $close_match = $args{close_match};
         # $open contains <TMPL_ or <% or </TMPL_...
         $$open = $1;
         $$token .= $1;
@@ -188,15 +191,15 @@ sub find_attributes {
     my $open_or_close = $args{open_or_close};
 
     my $required_tags;
+    my ($validate_sub, @allowed) = @$allowed;
     my $allowed_names = [ map {
         my $name = $_;
         $name =~ s/^!// and $required_tags->{$name}++;
         $name;
     } sort {
         length($b) <=> length($a)
-    } @{ $allowed } ];
+    } @allowed ];
     my $found_attr = 0;
-    my %not_found = map { $_ => 1 } keys %$required_tags;
     ATTR: while (1) {
         last if $$text =~ m/^($close_match)/;
         my ($name, $val, $orig) = $self->find_attribute(
@@ -211,14 +214,12 @@ sub find_attributes {
             }
             $attr->{$key} = $val;
             $$token .= $orig;
-            #print STDERR "$name=$val\n";
-            $found_attr++;
-            delete $not_found{$key};
         }
         last unless defined $name;
     }
+    my $ok = $validate_sub ? $validate_sub->(undef, $attr) : 1;
     return 1 if $open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG;
-    return !keys %not_found;
+    return $ok;
 }
 
 {
@@ -280,7 +281,7 @@ sub find_attributes {
                 ${$args{fname}},
             ]);
             $self->checkstack(
-                $args{fname}, ${$args{line}}, $args{stack},
+                ${$args{fname}}, ${$args{line}}, $args{stack},
                 ${$args{name}}, ${$args{open_or_close}}
             );
             ${$args{token}} = "";

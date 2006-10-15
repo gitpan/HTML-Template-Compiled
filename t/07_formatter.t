@@ -1,10 +1,10 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 07_formatter.t,v 1.2 2005/11/21 21:19:21 tinita Exp $
+# $Id: 07_formatter.t,v 1.3 2006/10/11 21:52:50 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 2;
-BEGIN { use_ok('HTML::Template::Compiled') };
+BEGIN { use_ok('HTML::Template::Compiled::Formatter') };
 
 my $formatter = {
 	'HTC::Class1' => {
@@ -15,11 +15,10 @@ my $formatter = {
 		last => HTC::Class1->can('last'),
 	},
 };
-my $htc = HTML::Template::Compiled->new(
+my $htc = HTML::Template::Compiled::Formatter->new(
 	path => 't/templates',
 	filename => 'formatter.htc',
 	debug => 0,
-	formatter => $formatter,
 );
 my $obj = bless ({ first => 'Abi', last => 'Gail'}, 'HTC::Class1');
 
@@ -27,6 +26,7 @@ $htc->param(
 	test => 23,
 	obj => $obj,
 );
+local $HTML::Template::Compiled::Formatter::formatter = $formatter;
 my $out = $htc->output;
 my $exp = <<EOM;
 23

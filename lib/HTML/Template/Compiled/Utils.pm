@@ -1,6 +1,6 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm,v 1.11 2006/10/04 21:19:37 tinita Exp $
-$VERSION = "0.03";
+# $Id: Utils.pm,v 1.13 2006/10/12 19:35:26 tinita Exp $
+$VERSION = "0.04";
 use strict;
 use warnings;
 use Data::Dumper;
@@ -12,6 +12,7 @@ my @paths = qw(PATH_METHOD PATH_DEREF PATH_FORMATTER PATH_ARRAY);
     @paths, qw(
         &log &stack
         &escape_html &escape_uri &escape_js
+        &md5
     )
 );
 %EXPORT_TAGS = (
@@ -21,10 +22,19 @@ my @paths = qw(PATH_METHOD PATH_DEREF PATH_FORMATTER PATH_ARRAY);
 );
 
 # These should be better documented
+# these might be obsolete soon =)
 use constant PATH_METHOD => 1;
 use constant PATH_DEREF => 2;
 use constant PATH_FORMATTER => 3;
 use constant PATH_ARRAY => 4;
+
+my $digest_md5 = 0;
+eval {
+    require Digest::MD5;
+};
+unless ($@) {
+    $digest_md5 = 1;
+}
 
 =pod
 
@@ -52,6 +62,23 @@ HTML::Template::Compiled::Utils - Utility functions for HTML::Template::Compiled
 For HTML::Template:Compiled developers, prints a stack trace to STDERR.
 
 =cut
+
+=head2 md5
+
+ md5($text)
+
+If L<Digest::MD5> is installed, returns the md5_base64 for C<$text>,
+otherwise returns the empty string.
+
+=cut
+
+sub md5 {
+    my ($text) = @_;
+    if ($digest_md5) {
+        return Digest::MD5::md5_base64($text);
+    }
+    return '';
+}
 
 sub stack {
     my ( $self, $force ) = @_;
@@ -112,14 +139,9 @@ HTML-escapes the input string and returns it;
 =cut
 
 sub escape_html {
-    my $var = shift;
-    my $new = $var;
-
-    # we have to do this cause HTML::Entities changes its arg
-    # doesn't do that in the latest version and i'm not sure
-    # how it behaved before
-    HTML::Entities::encode_entities($new);
-    return $new;
+    # hopefully encode_entities() works correct
+    # and doesn't change its arg when called in scalar context
+    return HTML::Entities::encode_entities($_[0]);
 }
 
 =head2 escape_uri

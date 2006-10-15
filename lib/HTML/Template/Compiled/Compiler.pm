@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.34 2006/10/07 18:28:09 tinita Exp $
+# $Id: Compiler.pm,v 1.44 2006/10/15 14:29:39 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -34,10 +34,13 @@ use constant NO_TAG        => 0;
 use constant OPENING_TAG   => 1;
 use constant CLOSING_TAG   => 2;
 
-use constant ESCAPES => 0;
+use constant ATTR_ESCAPES    => 0;
+use constant ATTR_TAGS       => 1;
 
-sub set_escapes { $_[0]->[ESCAPES] = $_[1] }
-sub get_escapes { $_[0]->[ESCAPES] }
+sub set_escapes    { $_[0]->[ATTR_ESCAPES] = $_[1] }
+sub get_escapes    { $_[0]->[ATTR_ESCAPES] }
+sub set_tags       { $_[0]->[ATTR_TAGS] = $_[1] }
+sub get_tags       { $_[0]->[ATTR_TAGS] }
 
 sub add_escapes {
     my ($self, $new_escapes) = @_;
@@ -95,12 +98,12 @@ sub _escape_expression {
     return $exp;
 } ## end sub _escape_expression
 
-sub _make_path {
+sub parse_var {
     my ( $self, $t, %args ) = @_;
     my $lexicals = $args{lexicals};
     my $context = $args{context};
     # only allow '.', '/', '+', '-' and '_'
-    if ($t->validate_var($args{var})) {
+    if (!$t->validate_var($args{var})) {
         $t->get_parser->_error_wrong_tag_syntax(
             $context->get_file, $context->get_line, "", $args{var}
         );
@@ -160,6 +163,7 @@ EOM
     for my $p (@split) {
         $p =~ s#\\#\\\\#g;
         $p =~ s#'#\\'#g;
+        next unless length $p;
         #print STDERR "path: $p\n";
         if ( $p =~ s/^\[(-?\d+)\]$/$1/ ) {
             $varstr .= "\$var = \$var->[$1];\n";
@@ -171,7 +175,7 @@ EOM
             else {
                 my $path = $t->get_case_sensitive ? $p : uc $p;
             $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p : \$var->\{$path\};
+\$var = UNIVERSAL::can(\$var,'$p') ? UNIVERSAL::can(\$var,'$p')->(\$var) : \$var->\{'$path'\};
 EOM
             }
         }
@@ -183,7 +187,7 @@ EOM
             else {
                 my $path = $t->get_case_sensitive ? $p : uc $p;
             $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p : \$var->\{$path\};
+\$var = UNIVERSAL::can(\$var,'$p') ? UNIVERSAL::can(\$var,'$p')->(\$var) : \$var->\{'$path'\};
 EOM
             }
         } ## end elsif ( $p =~ s/^\Q$args{deref}//)
@@ -200,7 +204,7 @@ EOM
             else {
                 my $path = $t->get_case_sensitive ? $p : uc $p;
                 $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p : \$var->\{$path\};
+\$var = UNIVERSAL::can(\$var,'$p') ? UNIVERSAL::can(\$var,'$p')->(\$var) : \$var->\{'$path'\};
 EOM
             }
         } ## end else [ if ( $p =~ s/^\Q$args{method_call}//)
@@ -211,7 +215,7 @@ EOM
 $var }
 EOM
     return $varstr;
-} ## end sub _make_path
+} ## end sub parse_var
 
 sub compile {
     my ( $class, $self, $text, $fname ) = @_;
@@ -248,13 +252,12 @@ EOM
 
     my @lexicals;
     my @switches;
+    my $tags = $class->get_tags;
     for my $token (@p) {
         my ($text, $line, $open, $tname, $attr, $close) = @$token;
         #print STDERR "tags: ($text, $line, $open, $tname, $attr, $close)\n";
         #print STDERR "p: '$text'\n";
         my $indent = INDENT x $level;
-        my $is_open = $token->is_open;
-        my $is_close = $token->is_close;
         my $meth     = $self->method_call;
         my $deref    = $self->deref;
         my $format   = $self->formatter_path;
@@ -264,46 +267,40 @@ EOM
             formatter_path => $format,
             lexicals       => \@lexicals,
         );
+        if (!$token->is_tag) {
+            if ( length $text ) {
+                my $exp = _expr_string($text);
+                $code .= qq#$indent$output # . $exp->to_string($level) . $/;
+            }
+        }
+        elsif ($token->is_open) {
         # --------- TMPL_VAR
-        if ($is_open && $tname eq T_VAR && exists $attr->{NAME}) {
-            #print STDERR "===== VAR ($text)\n";
-            my $var = $attr->{NAME};
+        if ($tname eq T_VAR) {
+            my $var    = $attr->{NAME};
             if ($self->get_use_query) {
                 $info_stack->[-1]->{lc $var}->{type} = T_VAR;
             }
-            my $varstr = $class->_make_path($self,
-                %var_args,
-                var   => $var,
-                context => $token,
-            );
-            #print "line: $text var: $var ($varstr)\n";
-            my $exp = _expr_literal($varstr);
-            # ---- default
-            my $default;
-            if (exists $attr->{DEFAULT}) {
-                $default = _expr_string($attr->{DEFAULT});
+            my $expr;
+            if (exists $tags->{$tname} && exists $tags->{$tname}->{open}) {
+                $expr = $tags->{$tname}->{open}->($class, $self, {
+                        %var_args,
+                        context => $token,
+                    },);
             }
-            if ( defined $default ) {
-                $exp = _expr_ternary(
-                    _expr_defined($exp),
-                    $exp,
-                    $default,
-                );
+            else {
+               $expr = $class->_compile_OPEN_VAR($self, {
+                        %var_args,
+                        context => $token,
+                    },);
             }
-            # ---- escapes
-            my $escape = $self->get_default_escape;
-            if (exists $attr->{ESCAPE}) {
-                $escape = $attr->{ESCAPE};
-            }
-            $exp = $class->_escape_expression($exp, $escape);
             $code .= qq#${indent}$output #
-                . $exp->to_string($level) . qq#;\n#;
+            . $expr->to_string($level) . qq#;\n#;
         }
         # --------- TMPL_WITH
-        elsif ($is_open && $tname eq T_WITH && exists $attr->{NAME}) {
+        elsif ($tname eq T_WITH) {
             $level++;
             my $var    = $attr->{NAME};
-            my $varstr = $class->_make_path($self,
+            my $varstr = $class->parse_var($self,
                 %var_args,
                 var => $var,
                 context => $token,
@@ -320,10 +317,9 @@ EOM
         }
 
         # --------- TMPL_LOOP TMPL_WHILE
-        elsif ($is_open && ($tname eq T_LOOP || $tname eq T_WHILE)
-            && exists $attr->{NAME}) {
+        elsif ( ($tname eq T_LOOP || $tname eq T_WHILE) ) {
             my $var     = $attr->{NAME};
-            my $varstr = $class->_make_path($self,
+            my $varstr = $class->parse_var($self,
                 %var_args,
                 var   => $var,
                 context => $token,
@@ -374,71 +370,41 @@ EOM
         }
 
         # --------- TMPL_ELSE
-        elsif ($is_open && $tname eq T_ELSE) {
+        elsif ($tname eq T_ELSE) {
             my $exp = _expr_else();
             $code .= $exp->to_string($level);
         }
 
-        # --------- / TMPL_IF TMPL UNLESS TMPL_WITH
-        elsif ($is_close && $tname =~ m/^(?:IF|UNLESS|WITH)$/) {
-            my $var = $attr->{NAME};
-            $var = '' unless defined $var;
-            #print STDERR "============ IF ($text)\n";
-            $level--;
-            my $indent = INDENT x $level;
-            my $exp = _expr_close();
-            $code .= $exp->to_string($level) . qq{# end $var\n};
-            if ($self->get_global_vars && $tname eq 'WITH') {
-                $code .= $indent . qq#\$t->popGlobalstack;\n#;
-            }
-        }
-
-        # --------- / TMPL_LOOP TMPL_WHILE
-        elsif ($is_close && ($tname eq T_LOOP || $tname eq T_WHILE)) {
-            pop @lexicals;
-            if ($self->get_use_query) {
-                pop @$info_stack;
-            }
-            $level-= 2;
-            my $indent = INDENT x $level;
-            $code .= _expr_close()->to_string($level+1) ."\n" 
-                . _expr_close()->to_string($level) . " # end loop\n";
-            if ($self->get_global_vars) {
-            $code .= <<"EOM";
-${indent}\$t->popGlobalstack;
-EOM
-            }
-        }
         # --------- TMPL_IF TMPL_UNLESS TMPL_ELSIF TMPL_IF_DEFINED
-        elsif ($is_open && $tname =~ m/^(?:IF_DEFINED|IF|UNLESS)$/ && exists $attr->{NAME}) {
-            #print STDERR "============ IF ($text)\n";
-            my $def    = $tname =~ m/DEFINED$/;
-            my $var    = $attr->{NAME};
-            my $varstr = $class->_make_path($self,
-                %var_args,
-                var   => $var,
-                context => $token,
-            );
-            my $if = {
-                IF => 'If',
-                UNLESS => 'Unless',
-                IF_DEFINED => 'If',
-            }->{ $tname };
-            my $operand = _expr_literal($varstr);
-            my $eclass = "HTML::Template::Compiled::Expression::$if";
-            if ($def) {
-                $operand = _expr_defined($operand);
-            }
+        elsif ($tname eq T_IF) {
+            my $expr = $class->_compile_OPEN_IF($self, {
+                    %var_args,
+                    context => $token,
+                },);
+            $code .= $expr->to_string($level);
             $level++;
-            my $exp = $eclass->new($operand);
-            my $str = $exp->to_string($level);
-            $code .= $str . $/;
+        }
+        elsif ($tname eq T_IF_DEFINED) {
+            my $expr = $class->_compile_OPEN_IF_DEFINED($self, {
+                    %var_args,
+                    context => $token,
+                },);
+            $code .= $expr->to_string($level);
+            $level++;
+        }
+        elsif ($tname eq T_UNLESS) {
+            my $expr = $class->_compile_OPEN_UNLESS($self, {
+                    %var_args,
+                    context => $token,
+                },);
+            $code .= $expr->to_string($level);
+            $level++;
         }
 
         # --------- TMPL_ELSIF
-        elsif ($is_open && $tname eq T_ELSIF && exists $attr->{NAME}) {
+        elsif ($tname eq T_ELSIF) {
             my $var    = $attr->{NAME};
-            my $varstr = $class->_make_path($self,
+            my $varstr = $class->parse_var($self,
                 %var_args,
                 var   => $var,
                 context => $token,
@@ -450,11 +416,11 @@ EOM
         }
 
         # --------- TMPL_SWITCH
-        elsif ( $is_open && $tname eq T_SWITCH && exists $attr->{NAME}) {
+        elsif ($tname eq T_SWITCH) {
             my $var = $attr->{NAME};
             push @switches, 0;
             $level++;
-            my $varstr = $class->_make_path($self,
+            my $varstr = $class->parse_var($self,
                 %var_args,
                 var   => $var,
                 context => $token,
@@ -464,21 +430,8 @@ ${indent}SWITCH: for my \$_switch ($varstr) \{
 EOM
         }
         
-        # --------- / TMPL_SWITCH
-        elsif ($is_close && $tname eq T_SWITCH) {
-            $level--;
-            my $close = _expr_close();
-            if ( $switches[$#switches] ) {
-
-                # we had at least one CASE, so we close the last if
-                $code .= $close->to_string($level+1) . " # last case\n";
-            }
-            $code .= $close->to_string($level) . "\n";
-            pop @switches;
-        }
-        
         # --------- TMPL_CASE
-        elsif ($is_open && $tname eq T_CASE) {
+        elsif ($tname eq T_CASE) {
             my $val = $attr->{NAME};
             #$val =~ s/^\s+//;
             if ( $switches[$#switches] ) {
@@ -511,7 +464,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
         }
 
         # --------- TMPL_INCLUDE_VAR
-        elsif ($is_open && $tname =~ m/^INCLUDE/ && exists $attr->{NAME}) {
+        elsif ($tname =~ m/^INCLUDE/) {
             my $filename;
             my $varstr;
             my $path = $self->get_path();
@@ -525,7 +478,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 if ($self->get_use_query) {
                     $info_stack->[-1]->{lc $dfilename}->{type} = T_INCLUDE_VAR;
                 }
-                $varstr = $class->_make_path($self,
+                $varstr = $class->parse_var($self,
                     %var_args,
                     var   => $dfilename,
                     context => $token,
@@ -602,13 +555,65 @@ ${indent}\}
 EOM
             }
         }
-
         else {
-            if ( length $text ) {
-                my $exp = _expr_string($text);
-                $code .= qq#$indent$output # . $exp->to_string($level) . $/;
+            # user defined
+            #warn Data::Dumper->Dump([\$token], ['token']);
+            #warn Data::Dumper->Dump([\$tags], ['tags']);
+            my $subs = $tags->{$tname};
+            if ($subs && $subs->{open}) {
+                $code .= $subs->{open}->($self, $token, {
+                        out => $output,
+                });
             }
         }
+        }
+        elsif ($token->is_close) {
+        # --------- / TMPL_IF TMPL UNLESS TMPL_WITH
+        if ($tname =~ m/^(?:IF|UNLESS|WITH)$/) {
+            my $var = $attr->{NAME};
+            $var = '' unless defined $var;
+            #print STDERR "============ IF ($text)\n";
+            $level--;
+            my $indent = INDENT x $level;
+            my $exp = _expr_close();
+            $code .= $exp->to_string($level) . qq{# end $var\n};
+            if ($self->get_global_vars && $tname eq 'WITH') {
+                $code .= $indent . qq#\$t->popGlobalstack;\n#;
+            }
+        }
+
+        # --------- / TMPL_SWITCH
+        elsif ($tname eq T_SWITCH) {
+            $level--;
+            my $close = _expr_close();
+            if ( $switches[$#switches] ) {
+
+                # we had at least one CASE, so we close the last if
+                $code .= $close->to_string($level+1) . " # last case\n";
+            }
+            $code .= $close->to_string($level) . "\n";
+            pop @switches;
+        }
+        
+        # --------- / TMPL_LOOP TMPL_WHILE
+        elsif ($tname eq T_LOOP || $tname eq T_WHILE) {
+            pop @lexicals;
+            if ($self->get_use_query) {
+                pop @$info_stack;
+            }
+            my $close = _expr_close();
+            $level-= 2;
+            my $indent = INDENT x $level;
+            $code .= $close->to_string($level+1) ."\n" 
+                . $close->to_string($level) . " # end loop\n";
+            if ($self->get_global_vars) {
+            $code .= <<"EOM";
+${indent}\$t->popGlobalstack;
+EOM
+            }
+        }
+        }
+
     }
     if ($self->get_use_query) {
         $self->set_use_query($info);
@@ -635,7 +640,77 @@ EOM
     die "code: $@" if $@;
     return $code, $sub;
 }
+sub _compile_OPEN_VAR {
+        my ($self, $htc, $args) = @_;
+    #print STDERR "===== VAR ($text)\n";
+    my $token = $args->{context};
+    my $attr = $token->get_attributes;
+    my $var = $attr->{NAME};
+    my $varstr = $self->parse_var($htc,
+        %$args,
+        var   => $var,
+        context => $token,
+    );
+    #print "line: $text var: $var ($varstr)\n";
+    my $exp = _expr_literal($varstr);
+    # ---- default
+    my $default;
+    if (exists $attr->{DEFAULT}) {
+        $default = _expr_string($attr->{DEFAULT});
+    }
+    if ( defined $default ) {
+        $exp = _expr_ternary(
+            _expr_defined($exp),
+            $exp,
+            $default,
+        );
+    }
+    # ---- escapes
+    my $escape = $htc->get_default_escape;
+    if (exists $attr->{ESCAPE}) {
+        $escape = $attr->{ESCAPE};
+    }
+    $exp = $self->_escape_expression($exp, $escape);
+    return $exp;
+}
 
+sub _compile_OPEN_IF {
+    my ($self, $htc, $args) = @_;
+    #print STDERR "============ IF ($text)\n";
+    my $var = $args->{context}->get_attributes->{NAME};
+    my $varstr = $self->parse_var($htc,
+        %$args,
+        var   => $var,
+    );
+    my $operand = _expr_literal($varstr);
+    my $expr = HTML::Template::Compiled::Expression::If->new($operand);
+    return $expr;
+}
+sub _compile_OPEN_UNLESS {
+    my ($self, $htc, $args) = @_;
+    #print STDERR "============ IF ($text)\n";
+    my $var = $args->{context}->get_attributes->{NAME};
+    my $varstr = $self->parse_var($htc,
+        %$args,
+        var   => $var,
+    );
+    my $operand = _expr_literal($varstr);
+    my $expr = HTML::Template::Compiled::Expression::Unless->new($operand);
+    return $expr;
+}
+sub _compile_OPEN_IF_DEFINED {
+    my ($self, $htc, $args) = @_;
+    #print STDERR "============ IF ($text)\n";
+    my $var = $args->{context}->get_attributes->{NAME};
+    my $varstr = $self->parse_var($htc,
+        %$args,
+        var   => $var,
+    );
+    my $operand = _expr_literal($varstr);
+    $operand = _expr_defined($operand);
+    my $expr = HTML::Template::Compiled::Expression::If->new($operand);
+    return $expr;
+}
 
 1;
 

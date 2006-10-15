@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.19 2006/10/07 18:30:53 tinita Exp $
+# $Id: bench.pl,v 1.21 2006/10/12 19:36:44 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -16,11 +16,16 @@ my $tt_file = "test.tt";
 my $tst_file = "examples/test.tst";
 mkdir "cache";
 mkdir "cache/htc";
+mkdir "cache/htcc";
+mkdir "cache/hte";
+mkdir "cache/htpl";
 mkdir "cache/jit";
 my %use = (
 	'HTML::Template'           => 0,
 	'HTML::Template::Pro'      => 0,
 	'HTML::Template::Compiled' => 0,
+	'HTML::Template::Pluggable' => 0,
+	'HTML::Template::Expr' => 0,
 	'HTML::Template::Compiled::Classic' => 0,
 #	'HTML::Template::JIT'      => 0,
 	'Template'                 => 0,
@@ -72,6 +77,7 @@ sub new_htc {
         cache => $MEM_CACHE,
 		out_fh => 1,
         global_vars => $GLOBAL_VARS,
+        tagstyle => [qw(-asp -comment)],
 	);
 	return $t1;
 }
@@ -84,11 +90,12 @@ sub new_htcc {
 		debug => $debug,
 		# note that you have to create the cachedir
 		# first, otherwise it will run without cache
-        cache_dir => ($FILE_CACHE ? "cache/htc" : undef),
+        cache_dir => ($FILE_CACHE ? "cache/htcc" : undef),
         cache => $MEM_CACHE,
 		out_fh => 1,
         global_vars => $GLOBAL_VARS,
         debug => 0,
+        tagstyle => [qw(-asp -comment)],
         #debug => 1,
 	);
 	return $t1;
@@ -128,6 +135,36 @@ sub new_ht {
         $FILE_CACHE ?
         (file_cache => $FILE_CACHE,
         file_cache_dir => 'cache/ht') : (),
+        global_vars => $GLOBAL_VARS,
+        die_on_bad_params => 0,
+	);
+	return $t2;
+}
+sub new_hte {
+	my $t2 = HTML::Template::Expr->new(
+		case_sensitive => $CASE_SENSITIVE,
+		loop_context_vars => $LOOP_CONTEXT,
+		#path => 'examples',
+		filename => $ht_file,
+		cache => $MEM_CACHE,
+        $FILE_CACHE ?
+        (file_cache => $FILE_CACHE,
+        file_cache_dir => 'cache/hte') : (),
+        global_vars => $GLOBAL_VARS,
+        die_on_bad_params => 0,
+	);
+	return $t2;
+}
+sub new_htpl {
+	my $t2 = HTML::Template::Pluggable->new(
+		case_sensitive => $CASE_SENSITIVE,
+		loop_context_vars => $LOOP_CONTEXT,
+		#path => 'examples',
+		filename => $ht_file,
+		cache => $MEM_CACHE,
+        $FILE_CACHE ?
+        (file_cache => $FILE_CACHE,
+        file_cache_dir => 'cache/htpl') : (),
         global_vars => $GLOBAL_VARS,
         die_on_bad_params => 0,
 	);
@@ -230,6 +267,8 @@ sub output_tt {
 my $global_htc = $use{'HTML::Template::Compiled'} ? new_htc : undef;
 my $global_htcc = $use{'HTML::Template::Compiled::Classic'} ? new_htcc : undef;
 my $global_ht = $use{'HTML::Template'} ? new_ht : undef;
+my $global_htp = $use{'HTML::Template::Pro'} ? new_htp : undef;
+my $global_htpl = $use{'HTML::Template::Pluggable'} ? new_htpl : undef;
 my $global_htj = $use{'HTML::Template::JIT'} ? new_htj : undef;
 my $global_tt = $use{'Template'} ? new_tt : undef;
 my $global_tst = $use{'Text::ScriptTemplate'} ? new_tst : undef;
@@ -257,9 +296,19 @@ timethese ($iterations||-1, {
 						all_ht => sub {my $t = new_ht();output($t)},
         ) : (),
 		$use{'HTML::Template::Pro'} ? (
-            # new_ht => sub {my $t = new_ht()},
-			#output_ht => sub {output($global_ht)},
+            # new_htp => sub {my $t = new_htpl()},
+			#output_htp => sub {output($global_htp)},
 						all_htp => sub {my $t = new_htp();output($t)},
+        ) : (),
+		$use{'HTML::Template::Pluggable'} ? (
+            # new_htpl => sub {my $t = new_htpl()},
+			#output_htpl => sub {output($global_htpl)},
+						all_htpl => sub {my $t = new_htpl();output($t)},
+        ) : (),
+        $use{'HTML::Template::Expr'} && !$FILE_CACHE ? (
+            # new_hte => sub {my $t = new_hte()},
+            #output_hte => sub {output($global_hte)},
+            all_hte => sub {my $t = new_hte();output($t)},
         ) : (),
         $use{'HTML::Template::JIT'} ? (
 					#new_htj => sub {my $t = new_htj();},

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Plugin::XMLEscape;
-# $Id: XMLEscape.pm,v 1.7 2006/10/07 16:42:54 tinita Exp $
+# $Id: XMLEscape.pm,v 1.8 2006/10/07 20:01:46 tinita Exp $
 use strict;
 use warnings;
 use Carp qw(croak carp);
@@ -83,7 +83,7 @@ escapes data for XML attributes
     my $htc = HTML::Template::Compiled->new(
         plugin => [qw(HTML::Template::Compiled::Plugin::XMLEscape)],
         tagstyle => [qw(-classic -comment -asp +tt)],
-        scalarref => \"<foo attr="[%= attribute %]">[%= cdata escape=XML %]</foo>",
+        scalarref => \'<foo attr="[%= attribute %]">[%= cdata escape=XML %]</foo>',
         default_escape => 'XML_ATTR',
     );
     $htc->param(
@@ -93,6 +93,7 @@ escapes data for XML attributes
     print $htc->output;
 
 Output:
+
     <foo attr="foo &amp; bar">text &lt; with &gt; tags</foo>
 
 =cut
