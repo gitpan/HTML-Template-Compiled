@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.44 2006/10/15 14:29:39 tinita Exp $
+# $Id: Compiler.pm,v 1.48 2006/11/03 21:47:49 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -105,7 +105,13 @@ sub parse_var {
     # only allow '.', '/', '+', '-' and '_'
     if (!$t->validate_var($args{var})) {
         $t->get_parser->_error_wrong_tag_syntax(
-            $context->get_file, $context->get_line, "", $args{var}
+            {
+                fname => $context->get_file,
+                line  => $context->get_line,
+                token => "",
+            },
+            $args{var},
+
         );
     }
     if ( grep { defined $_ && $args{var} eq $_ } @$lexicals ) {
@@ -225,7 +231,6 @@ sub compile {
     }
     my $parser = $self->get_parser;
     my @p = $parser->parse($fname, $text);
-    my $level = 1;
     my $code  = '';
     my $info = {}; # for query()
     my $info_stack = [$info];
@@ -254,10 +259,10 @@ EOM
     my @switches;
     my $tags = $class->get_tags;
     for my $token (@p) {
-        my ($text, $line, $open, $tname, $attr, $close) = @$token;
-        #print STDERR "tags: ($text, $line, $open, $tname, $attr, $close)\n";
+        my ($text, $line, $open_close, $tname, $attr, $f, $nlevel) = @$token;
+        #print STDERR "tags: ($text, $line, $open_close, $tname, $attr)\n";
         #print STDERR "p: '$text'\n";
-        my $indent = INDENT x $level;
+        my $indent = INDENT x $nlevel;
         my $meth     = $self->method_call;
         my $deref    = $self->deref;
         my $format   = $self->formatter_path;
@@ -270,7 +275,7 @@ EOM
         if (!$token->is_tag) {
             if ( length $text ) {
                 my $exp = _expr_string($text);
-                $code .= qq#$indent$output # . $exp->to_string($level) . $/;
+                $code .= qq#$indent$output # . $exp->to_string($nlevel) . $/;
             }
         }
         elsif ($token->is_open) {
@@ -294,24 +299,23 @@ EOM
                     },);
             }
             $code .= qq#${indent}$output #
-            . $expr->to_string($level) . qq#;\n#;
+            . $expr->to_string($nlevel) . qq#;\n#;
         }
         # --------- TMPL_WITH
         elsif ($tname eq T_WITH) {
-            $level++;
             my $var    = $attr->{NAME};
             my $varstr = $class->parse_var($self,
                 %var_args,
                 var => $var,
                 context => $token,
             );
-            $code .= _expr_open()->to_string($level) .qq# \# WITH $var\n#;
+            $code .= _expr_open()->to_string($nlevel) .qq# \# WITH $var\n#;
             if ($self->get_global_vars) {
                 $code .= _expr_method(
                     'pushGlobalstack',
                     _expr_literal('$t'),
                     _expr_literal('$$C')
-                )->to_string($level) . ";\n";
+                )->to_string($nlevel) . ";\n";
             }
             $code .= qq#${indent}  my \$C = \\$varstr;\n#;
         }
@@ -324,7 +328,6 @@ EOM
                 var   => $var,
                 context => $token,
             );
-            $level += 2;
             my $ind    = INDENT;
             if ($self->get_use_query) {
                 $info_stack->[-1]->{lc $var}->{type} = T_LOOP;
@@ -341,10 +344,10 @@ EOM
             my $lexi =
               defined $lexical ? "${indent}my \$$lexical = \$\$C;\n" : "";
             my $global = $self->get_global_vars
-                ? $pop_global->to_string($level).";\n"
+                ? $pop_global->to_string($nlevel).";\n"
                 : '';
             if ($tname eq T_WHILE) {
-                $code .= _expr_open()->to_string($level) . "# while $var\n";
+                $code .= _expr_open()->to_string($nlevel) . "# while $var\n";
                 $code .= <<"EOM";
 $global
 ${indent}${indent}local \$__ix__ = -1;
@@ -372,7 +375,7 @@ EOM
         # --------- TMPL_ELSE
         elsif ($tname eq T_ELSE) {
             my $exp = _expr_else();
-            $code .= $exp->to_string($level);
+            $code .= $exp->to_string($nlevel);
         }
 
         # --------- TMPL_IF TMPL_UNLESS TMPL_ELSIF TMPL_IF_DEFINED
@@ -381,24 +384,21 @@ EOM
                     %var_args,
                     context => $token,
                 },);
-            $code .= $expr->to_string($level);
-            $level++;
+            $code .= $expr->to_string($nlevel);
         }
         elsif ($tname eq T_IF_DEFINED) {
             my $expr = $class->_compile_OPEN_IF_DEFINED($self, {
                     %var_args,
                     context => $token,
                 },);
-            $code .= $expr->to_string($level);
-            $level++;
+            $code .= $expr->to_string($nlevel);
         }
         elsif ($tname eq T_UNLESS) {
             my $expr = $class->_compile_OPEN_UNLESS($self, {
                     %var_args,
                     context => $token,
                 },);
-            $code .= $expr->to_string($level);
-            $level++;
+            $code .= $expr->to_string($nlevel);
         }
 
         # --------- TMPL_ELSIF
@@ -411,7 +411,7 @@ EOM
             );
             my $operand = _expr_literal($varstr);
             my $exp = _expr_elsif($operand);
-            my $str = $exp->to_string($level);
+            my $str = $exp->to_string($nlevel);
             $code .= $str . $/;
         }
 
@@ -419,7 +419,6 @@ EOM
         elsif ($tname eq T_SWITCH) {
             my $var = $attr->{NAME};
             push @switches, 0;
-            $level++;
             my $varstr = $class->parse_var($self,
                 %var_args,
                 var   => $var,
@@ -441,7 +440,6 @@ EOM
             }
             else {
                 $switches[$#switches] = 1;
-                $level++;
             }
             if ( !length $val or uc $val eq 'DEFAULT' ) {
                 $code .= qq#${indent}if (1) \{\n#;
@@ -476,7 +474,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 # dynamic filename
                 my $dfilename = $attr->{NAME};
                 if ($self->get_use_query) {
-                    $info_stack->[-1]->{lc $dfilename}->{type} = T_INCLUDE_VAR;
+                    $info_stack->[-1]->{lc $dfilename}->{type} = $tname;
                 }
                 $varstr = $class->parse_var($self,
                     %var_args,
@@ -488,7 +486,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 # static filename
                 $filename = $attr->{NAME};
                 if ($self->get_use_query) {
-                    $info_stack->[-1]->{lc $filename}->{type} = T_INCLUDE;
+                    $info_stack->[-1]->{lc $filename}->{type} = $tname;
                 }
                 $varstr   = $self->quote_file($filename);
                 $dir      = dirname $fname;
@@ -573,10 +571,8 @@ EOM
             my $var = $attr->{NAME};
             $var = '' unless defined $var;
             #print STDERR "============ IF ($text)\n";
-            $level--;
-            my $indent = INDENT x $level;
             my $exp = _expr_close();
-            $code .= $exp->to_string($level) . qq{# end $var\n};
+            $code .= $exp->to_string($nlevel) . qq{# end $var\n};
             if ($self->get_global_vars && $tname eq 'WITH') {
                 $code .= $indent . qq#\$t->popGlobalstack;\n#;
             }
@@ -584,14 +580,13 @@ EOM
 
         # --------- / TMPL_SWITCH
         elsif ($tname eq T_SWITCH) {
-            $level--;
             my $close = _expr_close();
             if ( $switches[$#switches] ) {
 
                 # we had at least one CASE, so we close the last if
-                $code .= $close->to_string($level+1) . " # last case\n";
+                $code .= $close->to_string($nlevel+1) . " # last case\n";
             }
-            $code .= $close->to_string($level) . "\n";
+            $code .= $close->to_string($nlevel) . "\n";
             pop @switches;
         }
         
@@ -602,10 +597,8 @@ EOM
                 pop @$info_stack;
             }
             my $close = _expr_close();
-            $level-= 2;
-            my $indent = INDENT x $level;
-            $code .= $close->to_string($level+1) ."\n" 
-                . $close->to_string($level) . " # end loop\n";
+            $code .= $close->to_string($nlevel+1) ."\n" 
+                . $close->to_string($nlevel) . " # end loop\n";
             if ($self->get_global_vars) {
             $code .= <<"EOM";
 ${indent}\$t->popGlobalstack;

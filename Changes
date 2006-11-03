@@ -1,5 +1,8 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.81 Fri Nov  3 22:48:05 CET 2006
+- Minor change in plugin code
+
 0.80 Sun Oct 15 16:39:02 CEST 2006
 - Bugfix: characters like '-' in <tmpl_* foo-bar> lead to
   compilation errors

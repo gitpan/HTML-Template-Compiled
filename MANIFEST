@@ -57,6 +57,7 @@ t/21_while.t
 t/22_pod.t
 t/23_tagstyles.t
 t/24_pod_cover.t
+t/27_chomp.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html

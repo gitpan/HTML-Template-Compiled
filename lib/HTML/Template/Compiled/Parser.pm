@@ -1,11 +1,11 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.43 2006/10/12 20:05:54 tinita Exp $
+# $Id: Parser.pm,v 1.59 2006/11/03 18:55:10 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
 use base qw(Exporter);
-use HTML::Template::Compiled::Token;
-our $VERSION = 0.04;
+use HTML::Template::Compiled::Token qw(:tagtypes);
+our $VERSION = 0.05;
 my @vars;
 BEGIN {
 @vars = qw(
@@ -16,7 +16,6 @@ BEGIN {
     $SEARCHPATH
     %FILESTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
     $UNTAINT $DEFAULT_TAGSTYLE
-    $UNDEF
 );
 }
 our @EXPORT_OK = @vars;
@@ -28,15 +27,13 @@ $CASE_SENSITIVE_DEFAULT = 1; # set to 0 for H::T compatibility
 $ENABLE_SUB             = 0;
 $SEARCHPATH             = 0;
 $DEFAULT_ESCAPE         = 0;
-$UNDEF                  = ''; # set for debugging
 $UNTAINT                = 0;
 $DEFAULT_QUERY          = 0;
 $DEFAULT_TAGSTYLE       = [qw(classic comment asp)];
 
-use constant NO_TAG      => 0;
-
 use constant ATTR_TAGSTYLE => 0;
 use constant ATTR_TAGNAMES => 1;
+use constant ATTR_STRICT   => 2;
 
 use constant T_VAR         => 'VAR';
 use constant T_IF          => 'IF';
@@ -69,52 +66,83 @@ sub get_tagstyle { $_[0]->[ATTR_TAGSTYLE] }
 
 sub set_tagnames { $_[0]->[ATTR_TAGNAMES] = $_[1] }
 sub get_tagnames { $_[0]->[ATTR_TAGNAMES] }
+
+sub set_strict   { $_[0]->[ATTR_STRICT] = $_[1] }
+sub get_strict   { $_[0]->[ATTR_STRICT] }
+
 sub add_tagnames {
     my ($self, $hash) = @_;
-    @{ $_[0]->[ATTR_TAGNAMES] }{keys %$hash} = values %$hash;
+    my $open = $hash->{OPENING_TAG()};
+    my $close = $hash->{CLOSING_TAG()};
+    @{ $_[0]->[ATTR_TAGNAMES]->{OPENING_TAG()} }{keys %$open} = values %$open;
+    @{ $_[0]->[ATTR_TAGNAMES]->{CLOSING_TAG()} }{keys %$close} = values %$close;
 }
 
 
 sub default_tags {
     return {
-        classic => ['<TMPL_'      ,'>',     '</TMPL_',      '>',    ],
-        comment => ['<!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->'],
-        asp     => ['<%'          ,'%>',    '<%/',          '%>',   ],
-        php     => ['<\?'         ,'\?>',    '<\?/',          '\?>',   ],
-        tt      => ['\[%'         ,'%\]',   '\[%/',         '%\]'   ],
+        classic => ['<~?TMPL_'      ,'~?>',     '<~?/TMPL_',      '~?>',    '~'],
+        comment => ['<~?!--\s*TMPL_','\s*--~?>','<~?!--\s*/TMPL_','\s*--~?>','~'],
+        asp     => ['<~?%'          ,'%~?>',    '<~?%/',          '%~?>',   '~'],
+        php     => ['<~?\?'         ,'\?~?>',    '<~?\?/',          '\?~?>','~'   ],
+        tt      => ['\[~?%'         ,'%~?\]',   '\[%~?/',         '%~?\]'  ,'~' ],
     };
 }
 
 my $default_validation = sub { exists $_[1]->{NAME} };
 my %allowed_tagnames = (
-    VAR         => [$default_validation, qw(NAME ESCAPE DEFAULT)],
-    # just an alias for VAR
-    '='         => [$default_validation, qw(NAME ESCAPE DEFAULT)],
-    IF_DEFINED  => [$default_validation, qw(NAME)],
-    IF          => [$default_validation, qw(NAME)],
-    UNLESS      => [$default_validation, qw(NAME)],
-    ELSIF       => [$default_validation, qw(NAME)],
-    ELSE        => [undef, qw(NAME)],
-    WITH        => [$default_validation, qw(NAME)],
-    COMMENT     => [undef, qw(NAME)],
-    VERBATIM    => [undef, qw(NAME)],
-    NOPARSE     => [undef, qw(NAME)],
-    LOOP        => [$default_validation, qw(NAME ALIAS)],
-    WHILE       => [$default_validation, qw(NAME ALIAS)],
-    SWITCH      => [$default_validation, qw(NAME)],
-    CASE        => [undef, qw(NAME)],
-    INCLUDE_VAR => [$default_validation, qw(NAME)],
-    INCLUDE     => [$default_validation, qw(NAME)],
+    OPENING_TAG() => {
+        VAR         => [$default_validation, qw(NAME ESCAPE DEFAULT)],
+        # just an alias for VAR
+        '='         => [$default_validation, qw(NAME ESCAPE DEFAULT)],
+        IF_DEFINED  => [$default_validation, qw(NAME)],
+        IF          => [$default_validation, qw(NAME)],
+        UNLESS      => [$default_validation, qw(NAME)],
+        ELSIF       => [$default_validation, qw(NAME)],
+        ELSE        => [undef, qw(NAME)],
+        WITH        => [$default_validation, qw(NAME)],
+        COMMENT     => [undef, qw(NAME)],
+        VERBATIM    => [undef, qw(NAME)],
+        NOPARSE     => [undef, qw(NAME)],
+        LOOP        => [$default_validation, qw(NAME ALIAS)],
+        WHILE       => [$default_validation, qw(NAME ALIAS)],
+        SWITCH      => [$default_validation, qw(NAME)],
+        CASE        => [undef, qw(NAME)],
+        INCLUDE_VAR => [$default_validation, qw(NAME)],
+        INCLUDE     => [$default_validation, qw(NAME)],
+    },
+    CLOSING_TAG() => {
+        IF_DEFINED  => [undef, qw(NAME)],
+        IF          => [undef, qw(NAME)],
+        UNLESS      => [undef, qw(NAME)],
+        ELSIF       => [undef, qw(NAME)],
+        WITH        => [undef, qw(NAME)],
+        COMMENT     => [undef, qw(NAME)],
+        VERBATIM    => [undef, qw(NAME)],
+        NOPARSE     => [undef, qw(NAME)],
+        LOOP        => [undef, qw(NAME)],
+        WHILE       => [undef, qw(NAME)],
+        SWITCH      => [undef, qw(NAME)],
+    }
 );
 
 
 sub init {
-    my ($self, %args) = @_;
+    my ( $self, %args ) = @_;
     my $tagnames = $args{tagnames} || {};
-    my $tagstyle = $self->_create_tagstyle($args{tagstyle});
+    my $tagstyle = $self->_create_tagstyle( $args{tagstyle} );
     $self->[ATTR_TAGSTYLE] = $tagstyle;
-    $self->[ATTR_TAGNAMES] = {%allowed_tagnames, %$tagnames};
-}
+    $self->[ATTR_TAGNAMES] = {
+        OPENING_TAG() => {
+            %{ $allowed_tagnames{ OPENING_TAG() } },
+            %{ $tagnames->{ OPENING_TAG() }||{} },
+        },
+        CLOSING_TAG() => {
+            %{ $allowed_tagnames{ CLOSING_TAG() } },
+            %{ $tagnames->{ CLOSING_TAG() }||{} },
+        },
+    };
+} ## end sub init
 
 sub _create_tagstyle {
     my ($self, $tagstyle_def) = @_;
@@ -147,26 +175,25 @@ sub _create_tagstyle {
 }
 
 sub find_start_of_tag {
-    my ($self, %args) = @_;
-    my $text = $args{text};
-    my $re = $args{re};
-    if ($$text =~ s/^($re)//) {
-        my $open = $args{open};
-        my $token = $args{token};
-        my %open_close_map = %{$args{open_close_map}};
-        my $open_or_close = $args{open_or_close};
-        my $close_match = $args{close_match};
+    my ($self, $arg) = @_;
+    my $re = $arg->{start_close_re};
+    if ($arg->{template} =~ s/^($re)//) {
+        my %open_close_map = %{$arg->{open_close_map}};
         # $open contains <TMPL_ or <% or </TMPL_...
-        $$open = $1;
-        $$token .= $1;
+        $arg->{open} = $1;
+        $arg->{token} .= $1;
         # check which type of tag we got
         TYPES: for my $key (keys %open_close_map) {
-            #print STDERR "try $key '$$open'\n";
-            if ($$open =~ m/^$key$/i) {
+            #print STDERR "try $key '$arg->{open}'\n";
+            if ($arg->{open} =~ m/^$key$/i) {
                 my $val = $open_close_map{$key};
-                $$close_match = $val->[1];
-                $$open_or_close = $val->[0];
-                #print STDERR "=== tag type $key, searching for $close_match\n";
+                $arg->{close_match} = $val->[1];
+                $arg->{open_or_close} = $val->[0];
+                $arg->{chomp_find} = $arg->{chomp_map}->{$key};
+                if ($arg->{open} =~ m/$arg->{chomp_find}/) {
+                    $arg->{chomp} |= 1;
+                }
+                #print STDERR "=== tag type $key, searching for $arg->{close_match}\n";
                 last TYPES;
             }
         }
@@ -179,57 +206,102 @@ sub find_start_of_tag {
 }
 
 sub find_attributes {
-    my ($self, %args) = @_;
+    my ($self, $arg) = @_;
     #warn Data::Dumper->Dump([\%args], ['args']);
-    my $text = $args{text};
-    my $allowed = $args{allowed_names};
-    my $close_match = $args{close_match};
-    my $attr = $args{attr};
-    my $fname = $args{fname};
-    my $line = $args{line};
-    my $token = $args{token};
-    my $open_or_close = $args{open_or_close};
+    my $allowed = $arg->{allowed_names};
+    my $attr    = $arg->{attr};
+    my $fname   = $arg->{fname};
+    my $line    = $arg->{line};
 
-    my $required_tags;
     my ($validate_sub, @allowed) = @$allowed;
-    my $allowed_names = [ map {
-        my $name = $_;
-        $name =~ s/^!// and $required_tags->{$name}++;
-        $name;
-    } sort {
+    my $allowed_names = [ sort {
         length($b) <=> length($a)
     } @allowed ];
-    my $found_attr = 0;
+    my $re = join '|', @$allowed_names;
     ATTR: while (1) {
-        last if $$text =~ m/^($close_match)/;
-        my ($name, $val, $orig) = $self->find_attribute(
-            $text, $close_match, $allowed_names
-        );
-        if (defined $name) {
-            my $key = uc $name;
-            if (exists $attr->{$key}) {
-                $self->_error_wrong_tag_syntax(
-                    $fname, $line, $$token, $orig.$$text
-                );
-            }
-            $attr->{$key} = $val;
-            $$token .= $orig;
-        }
+        last if $arg->{template} =~ m/^($arg->{close_match})/;
+        my ($name, $val, $orig) = $self->find_attribute( $arg, $re );
         last unless defined $name;
+        my $key = uc $name;
+        if (exists $attr->{$key}) {
+            $self->_error_wrong_tag_syntax(
+                $arg,
+                $orig.$arg->{template}
+            );
+        }
+        $attr->{$key} = $val;
+        $arg->{token} .= $orig;
     }
     my $ok = $validate_sub ? $validate_sub->(undef, $attr) : 1;
-    return 1 if $open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG;
+    $self->_error_wrong_tag_syntax(
+        $arg, $arg->{template}
+    ) unless $ok;
     return $ok;
 }
 
 {
+    my $callbacks_found_text;
+    my $encode_tag = sub {
+        my ( $p, $arg ) = @_;
+        HTML::Entities::encode_entities($arg->{token});
+        $callbacks_found_text->[0]->($p, $arg);
+        $arg->{token} = "";
+    };
+
+    my $ignore_tag = sub {
+        my ( $p, $arg ) = @_;
+        $arg->{token} = "";
+    };
+    my $default_callback_text = sub {
+        my ($self, $arg) = @_;
+        $arg->{line} += $arg->{token} =~ tr/\n//;
+        #print STDERR "we found text: '$arg->{token}}'\n";
+        push @{$arg->{tags}},
+        HTML::Template::Compiled::Token::Text->new([
+            $arg->{token}, $arg->{line},
+            undef, undef, undef, $arg->{fname}, $arg->{level}
+        ]);
+        $arg->{token} = "";
+    };
+    my $default_callback_tag = sub {
+        my ($self, $arg) = @_;
+        #print STDERR "####found tag ${$args{name}}\n";
+        $arg->{line} += $arg->{token} =~ tr/\n//;
+        my $class = 'HTML::Template::Compiled::Token::' .
+            ($arg->{open_or_close} == OPENING_TAG
+                ? 'open'
+                : 'close');
+
+        my $token = $class->new([
+            $arg->{token}, $arg->{line},
+            [$arg->{open}, $arg->{close}], $arg->{name},
+            { %{ $arg->{attr} } },
+            $arg->{fname}, $arg->{level},
+        ]);
+        push @{$arg->{tags}}, $token;
+        if ($token->is_open &&
+            not exists
+                $self->get_tagnames->{CLOSING_TAG()}->{ $arg->{name} }) {
+            $arg->{level}++
+        }
+        elsif ($token->is_close) {
+            $arg->{level}--
+        }
+        $self->checkstack( $arg );
+        $arg->{token} = "";
+    };
+    $callbacks_found_text = [ $default_callback_text ];
 
     sub parse {
-        my ($self, $fname, $text) = @_;
+        my ($self, $fname, $template) = @_;
         my $tagnames = $self->get_tagnames;
-        my $allowed_ident = "(?i:" . join("|", sort {
+        my %allowed_ident;
+        $allowed_ident{OPENING_TAG()} = "(?i:" . join("|", sort {
             length $b <=> length $a
-        } keys %$tagnames) . ")";
+        } keys %{ $tagnames->{OPENING_TAG()} }) . ")";
+        $allowed_ident{CLOSING_TAG()} = "(?i:" . join("|", sort {
+            length $b <=> length $a
+        } keys %{ $tagnames->{CLOSING_TAG()} }) . ")";
         my $tagstyle = $self->get_tagstyle;
         # make (?i:IF_DEFINED|LOOP|IF|=|...) out of the list of identifiers
         my $start_close_re = '(?i:' . join("|", sort {
@@ -237,102 +309,59 @@ sub find_attributes {
             } map {
                 $_->[0], $_->[2]
             } @$tagstyle) . ")";
-        my @tags;
-        my $token = "";
+        my $close_re = '(?i:' . join("|", sort {
+                length($b) <=> length($a)
+            } map {
+                $_->[1], $_->[3]
+            } @$tagstyle) . ")";
         my %open_close = map {
             (
                 $_->[0] => [
-                    HTML::Template::Compiled::Token::OPENING_TAG, $_->[1]
+                    OPENING_TAG, $_->[1]
                 ],
                 $_->[2] => [
-                    HTML::Template::Compiled::Token::CLOSING_TAG, $_->[3]
+                    CLOSING_TAG, $_->[3]
                 ],
             ),
         } @$tagstyle;
-        my $line = 1;
-        my $stack = [T_END];
-        my $comment_info;
-        my $callbacks_found_text = [
-            sub {
-                my ($self, %args) = @_;
-                ${$args{line}} += ${$args{token}} =~ tr/\n//;
-                #print STDERR "we found text: '${$args{token}}'\n";
-                push @{$args{tags}},
-                HTML::Template::Compiled::Token::Text->new([
-                    ${$args{token}}, ${$args{line}},
-                    undef, undef, undef, undef, ${$args{fname}}
-                ]);
-                ${$args{token}} = "";
-            }
-        ];
-        my $callback_found_tag = [
-        sub {
-            my ($self, %args) = @_;
-            #print STDERR "####found tag ${$args{name}}\n";
-            ${$args{line}} += ${$args{token}} =~ tr/\n//;
-            my $class = 'HTML::Template::Compiled::Token::' .
-                (${$args{open_or_close}} == HTML::Template::Compiled::Token::OPENING_TAG
-                    ? 'open'
-                    : 'close');
+        my %chomp = map {
+            $_->[0] => $_->[4],
+            $_->[2] => $_->[4],
+        } @$tagstyle;
 
-            push @{$args{tags}}, $class->new([
-                ${$args{token}}, ${$args{line}},
-                ${$args{open}}, ${$args{name}}, $args{attr}, ${$args{close}},
-                ${$args{fname}},
-            ]);
-            $self->checkstack(
-                ${$args{fname}}, ${$args{line}}, $args{stack},
-                ${$args{name}}, ${$args{open_or_close}}
-            );
-            ${$args{token}} = "";
-        }
-        ];
-        my $ignore_tag = sub {
-            my ( $p, %args ) = @_;
-            ${ $args{token} } = "";
-        };
-        my $encode_tag = sub {
-            my ( $p, %args ) = @_;
-            my $token = ${ $args{token} };
-            ${ $args{token} } = "";
-            HTML::Entities::encode_entities($token);
-            $callbacks_found_text->[0]->($self, %args, token => \$token);
-        };
+        my $comment_info;
+        my $callback_found_tag = [ $default_callback_tag ];
 
         my $callback = sub {
-            my ( $p, %args ) = @_;
-            my $name = ${ $args{name} };
+            my ( $p, $arg ) = @_;
+            my $name = $arg->{name};
             #print STDERR "callback found tag $name\n";
-            my $open_or_close = ${ $args{open_or_close} };
             if ( $name eq 'COMMENT' ) {
-                #print STDERR "======== $args{name} $args{open_or_close}\n";
-                if ( $open_or_close == HTML::Template::Compiled::Token::OPENING_TAG ) {
+                if ( $arg->{open_or_close} == OPENING_TAG ) {
                     ++$comment_info->{$name} == 1
                         and push @$callbacks_found_text, $ignore_tag;
-                } ## end if ( $open_or_close ==...
-                elsif ( $open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG ) {
+                }
+                elsif ( $arg->{open_or_close} == CLOSING_TAG ) {
                     --$comment_info->{$name} == 0
                         and pop @$callbacks_found_text;
                 }
-                ${ $args{token} } = "";
-                #print STDERR "$open_or_close $comment_info->{ $name }\n";
-            } ## end if ( $name eq 'COMMENT')
+                $arg->{token} = "";
+            }
             elsif ( $comment_info->{COMMENT} ) {
-                ${ $args{token} } = "";
+                $arg->{token} = "";
             }
             elsif ($name eq 'NOPARSE') {
-                if ( $open_or_close == HTML::Template::Compiled::Token::OPENING_TAG ) {
+                if ( $arg->{open_or_close} == OPENING_TAG ) {
                     if (++$comment_info->{$name} == 1) {
-                        ${ $args{token} } = "";
+                        $arg->{token} = "";
                     }
                     else {
                         $callbacks_found_text->[0]->(@_);
-                        #${ $args{token} } = "";
                     }
                 }
-                elsif ( $open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG ) {
+                elsif ( $arg->{open_or_close} == CLOSING_TAG ) {
                     if (--$comment_info->{$name} == 0) {
-                        ${ $args{token} } = "";
+                        $arg->{token} = "";
                     }
                     else {
                         $callbacks_found_text->[0]->(@_);
@@ -343,17 +372,17 @@ sub find_attributes {
                 $callbacks_found_text->[0]->(@_);
             }
             elsif ($name eq 'VERBATIM') {
-                if ( $open_or_close == HTML::Template::Compiled::Token::OPENING_TAG ) {
+                if ( $arg->{open_or_close} == OPENING_TAG ) {
                     if (++$comment_info->{$name} == 1) {
-                        ${ $args{token} } = "";
+                        $arg->{token} = "";
                     }
                     else {
                         $encode_tag->(@_);
                     }
                 }
-                elsif ( $open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG ) {
+                elsif ( $arg->{open_or_close} == CLOSING_TAG ) {
                     if (--$comment_info->{$name} == 0) {
-                        ${ $args{token} } = "";
+                        $arg->{token} = "";
                     }
                     else {
                         $encode_tag->(@_);
@@ -369,135 +398,133 @@ sub find_attributes {
         };
         push @$callback_found_tag, $callback;
 
-        while (length $text) {
+        my $arg = {
+            fname          => $fname,
+            level          => 0,
+            line           => 1,
+            name           => '',
+            template       => $template,
+            token          => '',
+            open_or_close  => undef,
+            open           => undef,
+            open_close_map => \%open_close,
+            start_close_re => qr{$start_close_re},
+            close_match    => qr{close_re},
+            attr           => {},
+            allowed_names => [],
+            tags      => [],
+            close     => undef,
+            stack     => [T_END],
+            chomp     => 0,
+            chomp_map => \%chomp,
+            chomp_find => undef,
+        };
+        my $next_chomp = 0;
+        while (length $arg->{template}) {
+            my $chomp_now = $next_chomp;
+            $next_chomp = 0;
             #warn Data::Dumper->Dump([\@tags], ['tags']);
-            #print STDERR "TEXT: $text ($start_close_re)\n";
-            #print STDERR "TOKEN: '$token'\n";
-            my ($open, $close, $ident, $var, $expr, $close_match,
-                $open_or_close, $found_tag, $attr);
-            $attr = {};
+            #print STDERR "TEXT: $template ($start_close_re)\n";
+            #print STDERR "TOKEN: '$arg->{token}'\n";
+            my $found_tag = 0;
+            $arg->{attr} = {};
+            $arg->{chomp} = 0;
             MATCH_TAGS: {
-                if ($self->find_start_of_tag(
-                        text => \$text,
-                        re => qr{$start_close_re},
-                        open => \$open,
-                        token => \$token,
-                        open_or_close => \$open_or_close,
-                        open_close_map => \%open_close,
-                        close_match => \$close_match,
-                    )) {
-                }
-                else { last MATCH_TAGS }
+                last MATCH_TAGS unless $self->find_start_of_tag($arg);
                 # at this point we have a start of a tag. everything
                 # that does not look like correct tag content generates
                 # a die!
-                if ($text =~ s/^(($allowed_ident)\s*)//) {
-                    $ident = uc $2;
-                    $token .= $1;
-                    if ($ident eq '=') { $ident = 'VAR' }
+                my $re = $allowed_ident{$arg->{open_or_close}};
+                if ($arg->{template} =~ s/^(($re)\s*)//) {
+                    $arg->{name} = uc $2;
+                    $arg->{token} .= $1;
+                    if ($arg->{name} eq '=') { $arg->{name} = 'VAR' }
                 }
                 else {
                     $self->_error_wrong_tag_syntax(
-                        $fname, $line, $token, $text
+                        $arg, $arg->{template}
                     );
                     last MATCH_TAGS;
                 }
-                #print STDERR "got ident $ident ('$text')\n";
-                if ($self->find_attributes(
-                        attr => $attr,
-                        text => \$text,
-                        allowed_names => $tagnames->{$ident},
-                        close_match => $close_match,
-                        fname => $fname,
-                        line => $line,
-                        token => \$token,
-                        open_or_close => $open_or_close,
-                    )) {
-                    #warn Data::Dumper->Dump([\$attr], ['attr']);
+                #print STDERR "got ident $arg->{name} ('$arg->{template}')\n";
+                $arg->{allowed_names}
+                    = $tagnames->{ $arg->{open_or_close} }->{ $arg->{name} };
+                last MATCH_TAGS unless $self->find_attributes($arg);
+
+                if ($arg->{template} =~ s/^($arg->{close_match})//) {
+                    $arg->{close} = $1;
+                    $arg->{token} .= $1;
+                    if ($arg->{close} =~ m/$arg->{chomp_find}/) {
+                        $arg->{chomp} |= 2;
+                    }
                 }
                 else {
-                    $self->_error_wrong_tag_syntax(
-                        $fname, $line, $token, $text
-                    );
-                    last MATCH_TAGS;
-                }
-                if ($text =~ s/^($close_match)//) {
-                    $close = $1;
-                    $token .= $1;
-                }
-                else {
-                    $self->_error_wrong_tag_syntax(
-                        $fname, $line, $token
-                    );
+                    $self->_error_wrong_tag_syntax( $arg, "" );
                     last MATCH_TAGS;
                 }
                 $found_tag = 1;
             }
             if ($found_tag) {
-                #print STDERR "found tag $ident\n";
+                if ($arg->{chomp}&1 and @{$arg->{tags}} > 0) {
+                    my $text = $arg->{tags}->[-1]->get_text;
+                    $text =~ s/\s+\z//;
+                    $arg->{tags}->[-1]->set_text($text);
+                }
+                if ($arg->{chomp}&2) {
+                    $next_chomp = 1;
+                }
+                #print STDERR "found tag $arg->{name}\n";
                 #my $test = $callback_found_tag->[-1];
                 #print STDERR "(found_tags: @$callback_found_tag) $test\n";
                 ( $callback_found_tag->[-1] || sub { } )->(
                     $self,
-                    tags => \@tags,
-                    stack => $stack,
-                    token         => \$token,
-                    open_or_close => \$open_or_close,
-                    line          => \$line,
-                    open          => \$open,
-                    name          => \$ident,
-                    attr          => $attr,
-                    close         => \$close,
-                    fname         => \$fname,
+                    $arg,
                 );
                 #print STDERR "===== ($open, $line, $ident, $close)\n";
-                #warn Data::Dumper->Dump([\$attr], ['attr']);
                 #warn Data::Dumper->Dump([\@tags], ['tags']);
             }
-            elsif ($text =~ s/^(.+?)(?=($start_close_re|\Z))//s) {
+            elsif ($arg->{template} =~ s/^(.+?)(?=($start_close_re|\Z))//s) {
+                $arg->{token} .= $1;
+                $arg->{token} =~ s/\s+\z// if $chomp_now;
                 ($callbacks_found_text->[-1] || sub {} )->(
                     $self,
-                    token => \"$token$1",
-                    line => \$line,
-                    tags => \@tags,
-                    fname => \$fname,
+                    $arg,
                 );
-                #print "got no tag: '$token'\n";
+                #print "got no tag: '$arg->{token}'\n";
             }
 
         }
-        $self->checkstack($fname, $line, $stack, T_END, HTML::Template::Compiled::Token::CLOSING_TAG);
-        return @tags;
+        $self->checkstack({
+                %$arg, name => T_END, open_or_close => CLOSING_TAG
+            } );
+        return @{$arg->{tags} };
     }
 }
 
 sub _error_wrong_tag_syntax {
-    my ($self, $file, $line, $token, $text) = @_;
+    my ($self, $arg, $text) = @_;
     my ($substr) = $text =~ m/^(.{0,10})/s;
     my $class = ref $self || $self;
-    croak "$class : Syntax error in <TMPL_*> tag at $file : $line near '$token$substr...'";
+    croak "$class : Syntax error in <TMPL_*> tag at $arg->{fname} :"
+        . "$arg->{line} near '$arg->{token}$substr...'";
 }
 
 sub find_attribute {
-    my ($self, $text, $until, $allowed_names) = @_;
+    my ($self, $arg, $re) = @_;
     my ($name, $var, $orig);
-    my $re = join '|', @$allowed_names;
-    if ($$text =~ s/^(\s*($re)=)//i) {
+    #print STDERR "=====(($arg->{template}))\n";
+    if ($arg->{template} =~ s/^(\s*($re)=)//i) {
         $name = $2;
         $orig .= $1;
     }
     #print STDERR "match '$$text' (?=$until|\\s)\n";
-    if ($$text =~ s{^ (\s* " ([^"]+) " \s*) }{}x) {
-        #print STDERR qq{matched "$2"\n};
-        $var = $2;
+    if ($arg->{template} =~ s{^ (\s* (['"]) ([^"]+) \2 \s*) }{}x) {
+        #print STDERR qq{matched $2$3$2\n};
+        $var = $3;
         $orig .= $1;
     }
-    elsif ($$text =~ s{^ (\s* ' ([^']+) ' \s*) }{}x) {
-        #print STDERR qq{matched '$2'\n};
-        $var = $2;
-        $orig .= $1;
-    }
-    elsif ($$text =~ s{^ (\s* (\S+?) \s*) (?=$until | \s) }{}x) {
+    elsif ($arg->{template} =~ s{^ (\s* (\S+?) \s*)
+            (?=$arg->{close_match} | \s) }{}x) {
         #print STDERR qq{matched <$2>\n};
         $var = $2;
         $orig .= $1;
@@ -511,11 +538,11 @@ sub find_attribute {
 
 {
     my @map;
-    $map[HTML::Template::Compiled::Token::OPENING_TAG] = {
+    $map[OPENING_TAG] = {
         ELSE       => [ T_IF, T_UNLESS, T_ELSIF, T_IF_DEFINED ],
         T_CASE()   => [T_SWITCH],
     };
-    $map[HTML::Template::Compiled::Token::CLOSING_TAG] = {
+    $map[CLOSING_TAG] = {
         IF         => [ T_IF, T_UNLESS, T_ELSE ],
         UNLESS     => [T_UNLESS, T_ELSE, T_IF_DEFINED],
         ELSIF      => [ T_IF, T_UNLESS, T_IF_DEFINED ],
@@ -527,47 +554,47 @@ sub find_attribute {
     };
 
     sub validate_stack {
-        my ( $self, $fname, $line, $stack, $check, $open_or_close ) = @_;
-        if (exists $map[$open_or_close]->{$check}) {
-            my @allowed = @{ $map[$open_or_close]->{$check} };
-            return 1 if @$stack == 0 and @allowed == 0;
-            die
-            "Closing tag 'TMPL_$check' does not have opening tag at $fname line $line\n"
-            unless @$stack;
-            if ( $allowed[0] eq T_END and $stack->[-1] ne T_END ) {
+        my ( $self, $arg ) = @_;
+        if (defined( my $allowed
+                = $map[$arg->{open_or_close}]->{$arg->{name}})) {
+            return 1 if @{ $arg->{stack} } == 0 and @$allowed == 0;
+            die "Closing tag 'TMPL_$arg->{name}' does not have opening tag"
+                . "at $arg->{fname} line $arg->{line}\n"
+                unless @{ $arg->{stack} };
+            if ( $allowed->[0] eq T_END and $arg->{stack}->[-1] ne T_END ) {
                 # we hit the end of the template but still have an opening tag to close
-                die
-                "Missing closing tag for '$stack->[-1]' at end of $fname line $line\n";
+                die "Missing closing tag for '$arg->{stack}->[-1]' at"
+                    . "end of $arg->{fname} line $arg->{line}\n";
             }
-            for (@allowed) {
-                return 1 if $_ eq $stack->[-1];
+            for (@$allowed) {
+                return 1 if $_ eq $arg->{stack}->[-1];
             }
-            croak
-            "'TMPL_$check' does not match opening tag ($stack->[-1]) at $fname line $line\n";
+            croak "'TMPL_$arg->{name}' does not match opening tag ($arg->{stack}->[-1])"
+            . "at $arg->{fname} line $arg->{line}\n";
         }
     }
 
     sub checkstack {
-        my ( $self, $fname, $line, $stack, $check, $open_or_close ) = @_;
-        my $ok = $self->validate_stack($fname, $line, $stack, $check, $open_or_close);
-        if ($open_or_close == HTML::Template::Compiled::Token::OPENING_TAG) {
+        my ( $self, $arg ) = @_;
+        my $ok = $self->validate_stack($arg );
+        if ($arg->{open_or_close} == OPENING_TAG) {
             if (
-                grep { $check eq $_ } (
+                grep { $arg->{name} eq $_ } (
                     T_WITH, T_LOOP, T_WHILE, T_IF, T_UNLESS, T_SWITCH, T_IF_DEFINED
                 )
                 ) {
-                push @$stack, $check;
+                push @{ $arg->{stack} }, $arg->{name};
             }
-            elsif ($check eq T_ELSE) {
-                pop @$stack;
-                push @$stack, T_ELSE;
+            elsif ($arg->{name} eq T_ELSE) {
+                pop @{ $arg->{stack} };
+                push @{ $arg->{stack} }, T_ELSE;
             }
         }
-        elsif ($open_or_close == HTML::Template::Compiled::Token::CLOSING_TAG) {
-            if (grep { $check eq $_ } (
+        elsif ($arg->{open_or_close} == CLOSING_TAG) {
+            if (grep { $arg->{name} eq $_ } (
                     T_IF, T_UNLESS, T_WITH, T_LOOP, T_WHILE, T_SWITCH
                 )) {
-                pop @$stack;
+                pop @{ $arg->{stack} };
             }
         }
         return $ok;
