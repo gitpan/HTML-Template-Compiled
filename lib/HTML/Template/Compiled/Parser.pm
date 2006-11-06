@@ -1,11 +1,11 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.59 2006/11/03 18:55:10 tinita Exp $
+# $Id: Parser.pm,v 1.62 2006/11/06 21:39:23 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
 use base qw(Exporter);
 use HTML::Template::Compiled::Token qw(:tagtypes);
-our $VERSION = 0.05;
+our $VERSION = 0.06;
 my @vars;
 BEGIN {
 @vars = qw(
@@ -33,7 +33,7 @@ $DEFAULT_TAGSTYLE       = [qw(classic comment asp)];
 
 use constant ATTR_TAGSTYLE => 0;
 use constant ATTR_TAGNAMES => 1;
-use constant ATTR_STRICT   => 2;
+use constant ATTR_PERL     => 2;
 
 use constant T_VAR         => 'VAR';
 use constant T_IF          => 'IF';
@@ -67,8 +67,8 @@ sub get_tagstyle { $_[0]->[ATTR_TAGSTYLE] }
 sub set_tagnames { $_[0]->[ATTR_TAGNAMES] = $_[1] }
 sub get_tagnames { $_[0]->[ATTR_TAGNAMES] }
 
-sub set_strict   { $_[0]->[ATTR_STRICT] = $_[1] }
-sub get_strict   { $_[0]->[ATTR_STRICT] }
+sub set_perl   { $_[0]->[ATTR_PERL] = $_[1] }
+sub get_perl   { $_[0]->[ATTR_PERL] }
 
 sub add_tagnames {
     my ($self, $hash) = @_;
@@ -109,6 +109,7 @@ my %allowed_tagnames = (
         SWITCH      => [$default_validation, qw(NAME)],
         CASE        => [undef, qw(NAME)],
         INCLUDE_VAR => [$default_validation, qw(NAME)],
+        INCLUDE_STRING => [$default_validation, qw(NAME)],
         INCLUDE     => [$default_validation, qw(NAME)],
     },
     CLOSING_TAG() => {
@@ -449,7 +450,12 @@ sub find_attributes {
                 #print STDERR "got ident $arg->{name} ('$arg->{template}')\n";
                 $arg->{allowed_names}
                     = $tagnames->{ $arg->{open_or_close} }->{ $arg->{name} };
-                last MATCH_TAGS unless $self->find_attributes($arg);
+                if ($arg->{name} eq 'PERL' && $self->get_perl) {
+                    last MATCH_TAGS unless $self->find_perlcode($arg);
+                }
+                else {
+                    last MATCH_TAGS unless $self->find_attributes($arg);
+                }
 
                 if ($arg->{template} =~ s/^($arg->{close_match})//) {
                     $arg->{close} = $1;
@@ -509,24 +515,37 @@ sub _error_wrong_tag_syntax {
         . "$arg->{line} near '$arg->{token}$substr...'";
 }
 
+sub find_perlcode {
+    my ($self, $arg) = @_;
+    my $attr    = $arg->{attr};
+    if ($arg->{template} =~ s{^ (.*?)
+            (?=$arg->{close_match})
+        }{}xs) {
+        $attr->{PERL} = "$1";
+        $arg->{token} .= $1;
+        return 1;
+    }
+    return;
+}
+
 sub find_attribute {
     my ($self, $arg, $re) = @_;
     my ($name, $var, $orig);
     #print STDERR "=====(($arg->{template}))\n";
     if ($arg->{template} =~ s/^(\s*($re)=)//i) {
-        $name = $2;
+        $name = "$2";
         $orig .= $1;
     }
     #print STDERR "match '$$text' (?=$until|\\s)\n";
     if ($arg->{template} =~ s{^ (\s* (['"]) ([^"]+) \2 \s*) }{}x) {
         #print STDERR qq{matched $2$3$2\n};
-        $var = $3;
+        $var = "$3";
         $orig .= $1;
     }
     elsif ($arg->{template} =~ s{^ (\s* (\S+?) \s*)
             (?=$arg->{close_match} | \s) }{}x) {
         #print STDERR qq{matched <$2>\n};
-        $var = $2;
+        $var = "$2";
         $orig .= $1;
     }
     else { return }

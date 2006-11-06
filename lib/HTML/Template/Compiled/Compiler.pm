@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.48 2006/11/03 21:47:49 tinita Exp $
+# $Id: Compiler.pm,v 1.53 2006/11/06 22:14:09 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -27,6 +27,7 @@ use constant T_INCLUDE     => 'INCLUDE';
 use constant T_LOOP        => 'LOOP';
 use constant T_WHILE       => 'WHILE';
 use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
+use constant T_INCLUDE_STRING => 'INCLUDE_STRING';
 
 use constant INDENT        => '    ';
 
@@ -301,6 +302,22 @@ EOM
             $code .= qq#${indent}$output #
             . $expr->to_string($nlevel) . qq#;\n#;
         }
+
+        # ---------- TMPL_PERL
+        elsif ($tname eq 'PERL') {
+            my $perl    = $attr->{PERL};
+            my %map = (
+                __HTC__     => '$t',
+                __ROOT__    => '$P',
+                __CURRENT__ => '$$C',
+                __OUT__     => $output,
+                __INDEX__   => '$__ix__',
+            );
+            my $re = join '|', keys %map;
+            $perl =~ s/($re)/exists $map{$1} ? $map{$1} : $1/eg;
+            $code .= $perl;
+        }
+
         # --------- TMPL_WITH
         elsif ($tname eq T_WITH) {
             my $var    = $attr->{NAME};
@@ -461,8 +478,28 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
             }
         }
 
+        # --------- TMPL_INCLUDE_STRING
+        elsif ($tname eq T_INCLUDE_STRING) {
+            my $var = $attr->{NAME};
+            my $varstr = $class->parse_var($self,
+                %var_args,
+                var   => $var,
+                context => $token,
+            );
+            my $ref = ref $self;
+            $code .= <<"EOM";
+\{
+my \$scalar = $varstr;
+my \$new = \$t->new_scalar_from_object(\$scalar);
+\$new->set_globalstack(\$t->get_globalstack);
+$output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
+\}
+EOM
+
+        }
+
         # --------- TMPL_INCLUDE_VAR
-        elsif ($tname =~ m/^INCLUDE/) {
+        elsif ($tname eq T_INCLUDE_VAR or $tname eq T_INCLUDE) {
             my $filename;
             my $varstr;
             my $path = $self->get_path();

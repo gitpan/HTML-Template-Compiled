@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.18 2006/10/04 19:14:24 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.19 2006/11/06 22:32:42 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 6;
@@ -9,6 +9,7 @@ local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 BEGIN { use_ok('HTML::Template::Compiled') };
 $HTML::Template::Compiled::NEW_CHECK = 2;
 use Fcntl qw(:seek);
+use File::Copy qw(copy);
 
 # Insert your test code below, the Test::More module is use()ed here so read
 # its man page ( perldoc Test::More ) for help writing this test script.
@@ -42,7 +43,9 @@ sub HTC::Test::key { return $_[0]->{"_key"} }
 use lib 't';
 use HTC_Utils qw($cache $tdir &cdir);
 mkdir $cache unless -d $cache;
-my $include = cdir($tdir,'include.html');
+my $include_orig = cdir($tdir,'include.html');
+my $include = cdir($tdir,'include_copy.html');
+copy($include_orig, $include) or die $!;
 my %args = (
 	path => $tdir,
 	#case_insensitive => 1,

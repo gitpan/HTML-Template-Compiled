@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.288 2006/10/20 22:40:53 tinita Exp $
+# $Id: Compiled.pm,v 1.295 2006/11/06 22:24:25 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.81";
+our $VERSION = "0.82";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -702,6 +702,7 @@ sub init {
         default_escape         => $DEFAULT_ESCAPE,
         default_path           => PATH_DEREF,
         use_query              => $DEFAULT_QUERY,
+        use_perl               => 0,
         %args,
     );
     $self->set_loop_context(1) if $args{loop_context_vars};
@@ -731,6 +732,14 @@ sub init {
         $parser = $args{parser};
     }
     $parser ||= $self->parser_class->default();
+    $parser->set_perl($defaults{use_perl});
+    if ($defaults{use_perl}) {
+        $parser->add_tagnames({
+            HTML::Template::Compiled::Token::OPENING_TAG() => {
+                PERL => [sub { 1 }],
+            }
+        });
+    }
     $self->set_parser($parser);
     my $compiler = $self->compiler_class->new;
     $self->set_compiler($compiler);
@@ -739,6 +748,9 @@ sub init {
             ? @{ $defaults{plugin} }
             : $defaults{plugin}
         ) {
+            if ($plug =~ m/^::/) {
+                $plug = "HTML::Template::Compiled::Plugin$plug";
+            }
             my $actions = $self->get_plugin_actions($plug);
             if (my $tagnames = $actions->{tagnames}) {
                 $parser->add_tagnames($tagnames);
@@ -906,6 +918,20 @@ sub clone {
     return bless [@$self], ref $self;
 }
 
+sub new_scalar_from_object {
+    my ($self, $scalar) = @_;
+    my $new = $self->clone;
+    $new->set_includes({});
+    $new->set_perl(undef);
+    $new->set_filehandle();
+    $new->set_cache(0);
+    $new->set_cache_dir(0);
+    $new->set_scalar(\$scalar);
+    my $md5 = md5($scalar);
+    $new->set_filename($md5);
+    $new = $new->from_scratch;
+    return $new;
+}
 # create from existing object (TMPL_INCLUDE)
 sub new_from_object {
     my ( $self, $path, $filename, $fullpath, $cache ) = @_;
@@ -927,7 +953,7 @@ sub new_from_object {
     if (my $cached = $new->from_cache) {
         return $cached
     }
-    $new = return $new->from_scratch;
+    $new = $new->from_scratch;
     $new->init_includes;
     return $new;
 }
@@ -1213,7 +1239,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.81"
+$VERSION = "0.82"
 
 =cut
 
@@ -1373,6 +1399,10 @@ Additional loop variable (C<__counter__ -1>)
 
 see L<"TMPL_SWITCH">
 
+=item C<TMPL_PERL>
+
+Include perl code in your template. See L<"PERL">
+
 =item Generating perl code
 
 See L<"IMPLEMENTATION">
@@ -1391,7 +1421,7 @@ See L<"OPTIONS">
 
 =item Dynamic includes
 
-see L<"INCLUDE">
+C<INCLUDE_VAR>, C<INCLUDE_STRING>. See L<"INCLUDE">
 
 =item TMPL_IF_DEFINED
 
@@ -1537,6 +1567,24 @@ you can do an include of a template variable:
   $htc->param(file_include_var => "file.htc");
 
 Using C<INCLUDE VAR="..."> is deprecated.
+
+You can also include strings:
+
+    template:
+    inc: <%include_string foo %>
+
+    code:
+    $htc->param(
+        foo => 'included=<%= bar%>',
+        bar => 'real',
+    );
+
+    output:
+    inc: included=real
+
+Note that included strings are not cached and cannot include files
+or strings themselves.
+
   
 =head2 EXTENDED VARIABLE ACCESS
 
@@ -1600,6 +1648,68 @@ It's recommended to just use the default . value for methods and dereferencing.
 
 I might stop supporting that you can set the values for method calls by setting
 an option. Ideally I would like to have that behaviour changed only by inheriting.
+
+=head2 PERL
+
+Yes, templating systems are for separating code and templates. But
+as it turned out to be implemented much easier than expressions i
+decided to implement it. Yes, I still want to implement expressions.
+If you have templates that can be edited by untrustworthy persons then
+you don't want them to include perl code.
+
+So, how do you use the perl-tag? First, you have to set the option
+C<use_perl> to C<1> when creating a template object.
+
+Important note: don't use C<print> in the included code. Usually the
+template code is concatenated and returned to your perl script.
+To 'print' something out use
+
+    __OUT__ 2**3;
+
+This will be turned into something like
+
+    $OUT .= 2**3;
+    # or
+    print $fh 2**3;
+
+Example:
+
+    <%loop list%>
+    <%perl unless (__INDEX__ % 3) { %>
+      </tr><tr>
+    <%perl } %>  
+    <%/loop list%>
+
+    # takes the current position of the parameter
+    # hash, key 'foo' and multiplies it with 3
+    <%perl __OUT__ __CURRENT__->{foo} * 3; %>
+
+List of special keywords inside a perl-tag:
+
+=over 4
+
+=item __OUT__
+
+Is turned into C<$OUT .=> or C<print $fh>
+
+=item __HTC__
+
+Is turned into the variable containing the current template object.
+
+=item __CURRENT__
+
+Turned into the variable containing the current position
+in the parameter hash.
+
+=item __ROOT__
+
+Turned into the variable containig the parameter hash.
+
+=item __INDEX__
+
+Turned into the current index of a loop (starting with 0).
+
+=back
 
 =head2 INHERITANCE
 
@@ -2061,6 +2171,10 @@ setting use_query to 0 (default) or letting HTC do the extra
 work by setting it to 1. If you would like 1 to be the default,
 write me. If enough people write me, I'll think abou it =)
 
+=item use_perl
+
+Set to 1 if you want to use the perl-tag. See L<"PERL">. Default is 0.
+
 =back
 
 =head2 METHODS
@@ -2156,6 +2270,15 @@ At the moment you can use and write plugins for the C<ESCAPE> attribute. See
 L<HTML::Template::Compiled::Plugin::XMLEscape> for an example how to
 use it; and have a look at the source code if you want to know how to
 write a plugin yourself.
+
+Using Plugins:
+
+    my $htc = HTML::Template::Compiled->new(
+        ...
+        plugin => ['HTML::Template::Compiled::Foo::Bar'],
+        # oor shorter:
+        plugin => ['::Foo::Bar'],
+    );
 
 =head1 LAZY LOADING
 

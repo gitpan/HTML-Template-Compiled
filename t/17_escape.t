@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 17_escape.t,v 1.4 2006/08/26 13:50:41 tinita Exp $
+# $Id: 17_escape.t,v 1.5 2006/11/06 19:05:41 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 4;
@@ -47,7 +47,7 @@ EOM
         scalarref => \<<"EOM",
         <xml foo="<%= foo escape=xml_attr %>"><%= foo escape=xml %></xml>
 EOM
-        plugin => [qw(HTML::Template::Compiled::Plugin::XMLEscape)],
+        plugin => [qw(::XMLEscape)],
         debug => 0,
     );
     #warn Data::Dumper->Dump([\$htc], ['htc']);
