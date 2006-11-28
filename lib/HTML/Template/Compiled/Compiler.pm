@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.53 2006/11/06 22:14:09 tinita Exp $
+# $Id: Compiler.pm,v 1.56 2006/11/28 20:46:57 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -26,6 +26,7 @@ use constant T_CASE        => 'CASE';
 use constant T_INCLUDE     => 'INCLUDE';
 use constant T_LOOP        => 'LOOP';
 use constant T_WHILE       => 'WHILE';
+use constant T_EACH        => 'EACH';
 use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
 use constant T_INCLUDE_STRING => 'INCLUDE_STRING';
 
@@ -126,6 +127,8 @@ sub parse_var {
         __last__    => '$__ix__ == $size',
         __odd__     => '!($__ix__ & 1)',
         __inner__   => '$__ix__ != $[ && $__ix__ != $size',
+        __key__     => '$__key__',
+        __value__   => '$__value__',
     );
     if ( $t->get_loop_context && $args{var} =~ m/^__(\w+)__$/ ) {
         if (exists $loop_context{ lc $args{var} }) {
@@ -248,7 +251,8 @@ sub compile {
     }
     my $header = <<"EOM";
 sub {
-    use vars '\$__ix__';
+    use vars qw(\$__ix__ \$__key__ \$__value__);
+    use strict;
     no warnings;
 $anon
     my (\$t, \$P, \$C, \$OFH) = \@_;
@@ -337,8 +341,8 @@ EOM
             $code .= qq#${indent}  my \$C = \\$varstr;\n#;
         }
 
-        # --------- TMPL_LOOP TMPL_WHILE
-        elsif ( ($tname eq T_LOOP || $tname eq T_WHILE) ) {
+        # --------- TMPL_LOOP TMPL_WHILE TMPL_EACH
+        elsif ( ($tname eq T_LOOP || $tname eq T_WHILE || $tname eq T_EACH) ) {
             my $var     = $attr->{NAME};
             my $varstr = $class->parse_var($self,
                 %var_args,
@@ -347,7 +351,7 @@ EOM
             );
             my $ind    = INDENT;
             if ($self->get_use_query) {
-                $info_stack->[-1]->{lc $var}->{type} = T_LOOP;
+                $info_stack->[-1]->{lc $var}->{type} = $tname;
                 $info_stack->[-1]->{lc $var}->{children} ||= {};
                 push @$info_stack, $info_stack->[-1]->{lc $var}->{children};
             }
@@ -372,6 +376,13 @@ ${indent}${ind}while (my \$next = $varstr) {
 ${indent}${indent}\$__ix__++;
 ${indent}${indent}my \$C = \\\$next;
 $lexi
+EOM
+            }
+            elsif ($tname eq T_EACH) {
+                $code .= <<"EOM";
+${indent}if (UNIVERSAL::isa(my \$hash = $varstr, 'HASH') ) \{
+${indent}${ind}local (\$__key__,\$__value__);
+${indent}${ind}while ((\$__key__,\$__value__) = each %\$hash) \{
 EOM
             }
             else {
@@ -628,7 +639,7 @@ EOM
         }
         
         # --------- / TMPL_LOOP TMPL_WHILE
-        elsif ($tname eq T_LOOP || $tname eq T_WHILE) {
+        elsif ($tname eq T_LOOP || $tname eq T_WHILE || $tname eq T_EACH) {
             pop @lexicals;
             if ($self->get_use_query) {
                 pop @$info_stack;
@@ -640,6 +651,17 @@ EOM
             $code .= <<"EOM";
 ${indent}\$t->popGlobalstack;
 EOM
+            }
+        }
+        else {
+            # user defined
+            #warn Data::Dumper->Dump([\$token], ['token']);
+            #warn Data::Dumper->Dump([\$tags], ['tags']);
+            my $subs = $tags->{$tname};
+            if ($subs && $subs->{close}) {
+                $code .= $subs->{close}->($self, $token, {
+                        out => $output,
+                });
             }
         }
         }

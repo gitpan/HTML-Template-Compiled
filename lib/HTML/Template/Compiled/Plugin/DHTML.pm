@@ -1,9 +1,10 @@
 package HTML::Template::Compiled::Plugin::DHTML;
-# $Id: DHTML.pm,v 1.2 2006/10/02 16:05:13 tinita Exp $
+# $Id: DHTML.pm,v 1.3 2006/11/20 19:02:33 tinita Exp $
 use strict;
 use warnings;
 our $VERSION = "0.02";
 use Data::TreeDumper;
+use Data::TreeDumper::Renderer::DHTML;
 
 HTML::Template::Compiled->register(__PACKAGE__);
 

@@ -1,5 +1,9 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.83 Tue Nov 28 22:59:06 CET 2006
+- Added Feature: TMPL_EACH
+- Added missing plugin feature
+
 0.82 Mon Nov  6 21:25:23 CET 2006
 - Added: shorter plugins (omit the HTML::Template::Compiled::Plugin)
 - Added Feature: TMPL_INCLUDE_STRING

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.62 2006/11/06 21:39:23 tinita Exp $
+# $Id: Parser.pm,v 1.63 2006/11/20 18:54:47 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -106,6 +106,7 @@ my %allowed_tagnames = (
         NOPARSE     => [undef, qw(NAME)],
         LOOP        => [$default_validation, qw(NAME ALIAS)],
         WHILE       => [$default_validation, qw(NAME ALIAS)],
+        EACH        => [$default_validation, qw(NAME)],
         SWITCH      => [$default_validation, qw(NAME)],
         CASE        => [undef, qw(NAME)],
         INCLUDE_VAR => [$default_validation, qw(NAME)],
@@ -123,6 +124,7 @@ my %allowed_tagnames = (
         NOPARSE     => [undef, qw(NAME)],
         LOOP        => [undef, qw(NAME)],
         WHILE       => [undef, qw(NAME)],
+        EACH        => [undef, qw(NAME)],
         SWITCH      => [undef, qw(NAME)],
     }
 );

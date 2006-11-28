@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.295 2006/11/06 22:24:25 tinita Exp $
+# $Id: Compiled.pm,v 1.298 2006/11/20 19:07:20 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.82";
+our $VERSION = "0.83";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -751,6 +751,10 @@ sub init {
             if ($plug =~ m/^::/) {
                 $plug = "HTML::Template::Compiled::Plugin$plug";
             }
+            eval "require $plug";
+            if ($@) {
+                carp "Could not load plugin $plug\n";
+            }
             my $actions = $self->get_plugin_actions($plug);
             if (my $tagnames = $actions->{tagnames}) {
                 $parser->add_tagnames($tagnames);
@@ -772,7 +776,6 @@ sub init {
         my ($class, $plugins) = @_;
         $plugins = [$plugins] unless ref $plugins eq 'ARRAY';
         for my $plug (@$plugins) {
-            eval "require $plug";
             my $actions = $plug->register;
             $classes->{$plug} = $actions;
         }
@@ -925,7 +928,7 @@ sub new_scalar_from_object {
     $new->set_perl(undef);
     $new->set_filehandle();
     $new->set_cache(0);
-    $new->set_cache_dir(0);
+    $new->set_cache_dir(undef);
     $new->set_scalar(\$scalar);
     my $md5 = md5($scalar);
     $new->set_filename($md5);
@@ -1239,7 +1242,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.82"
+$VERSION = "0.83"
 
 =cut
 
@@ -1401,7 +1404,7 @@ see L<"TMPL_SWITCH">
 
 =item C<TMPL_PERL>
 
-Include perl code in your template. See L<"PERL">
+Include perl code in your template. See L<"TMPL_PERL">
 
 =item Generating perl code
 
@@ -1649,7 +1652,7 @@ It's recommended to just use the default . value for methods and dereferencing.
 I might stop supporting that you can set the values for method calls by setting
 an option. Ideally I would like to have that behaviour changed only by inheriting.
 
-=head2 PERL
+=head2 TMPL_PERL
 
 Yes, templating systems are for separating code and templates. But
 as it turned out to be implemented much easier than expressions i
@@ -1672,13 +1675,23 @@ This will be turned into something like
     # or
     print $fh 2**3;
 
+Important note 2: HTC does not parse Perl. if you use the
+classic tag-delimiters like this:
+
+    <tmpl_perl if (__CURRENT__->count > 42) { >
+
+this will not work as it might seem. Use other delimiters
+instead:
+
+    <%perl if (__CURRENT__->count > 42) { %>
+
 Example:
 
-    <%loop list%>
-    <%perl unless (__INDEX__ % 3) { %>
+    <tmpl_loop list>
+    <tmpl_perl unless (__INDEX__ % 3) { >
       </tr><tr>
-    <%perl } %>  
-    <%/loop list%>
+    <tmpl_perl } >
+    </tmpl_loop list>
 
     # takes the current position of the parameter
     # hash, key 'foo' and multiplies it with 3
@@ -2173,7 +2186,7 @@ write me. If enough people write me, I'll think abou it =)
 
 =item use_perl
 
-Set to 1 if you want to use the perl-tag. See L<"PERL">. Default is 0.
+Set to 1 if you want to use the perl-tag. See L<"TMPL_PERL">. Default is 0.
 
 =back
 
