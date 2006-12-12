@@ -1,6 +1,6 @@
 ---
 name: HTML-Template-Compiled
-version: 0.83
+version: 0.83_01
 author:
   - Tina Mueller
 abstract: Template System Compiles HTML::Template files to Perl code
@@ -15,7 +15,7 @@ requires:
 provides:
   HTML::Template::Compiled:
     file: lib/HTML/Template/Compiled.pm
-    version: 0.83
+    version: 0.83_01
   HTML::Template::Compiled::Classic:
     file: lib/HTML/Template/Compiled/Classic.pm
     version: 0.05
@@ -25,6 +25,10 @@ provides:
   HTML::Template::Compiled::Compiler::Classic:
     file: lib/HTML/Template/Compiled/Compiler/Classic.pm
     version: 0.01
+  HTML::Template::Compiled::Exception:
+    file: lib/HTML/Template/Compiled/Exception.pm
+  HTML::Template::Compiled::Exception::parse:
+    file: lib/HTML/Template/Compiled/Exception.pm
   HTML::Template::Compiled::Expression:
     file: lib/HTML/Template/Compiled/Expression.pm
     version: 0.02

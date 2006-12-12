@@ -1,4 +1,4 @@
-# $Id: 28_perl.t,v 1.1 2006/11/06 22:13:33 tinita Exp $
+# $Id: 28_perl.t,v 1.2 2006/12/12 21:55:43 tinita Exp $
 use warnings;
 use strict;
 use blib;
@@ -8,8 +8,7 @@ use_ok('HTML::Template::Compiled');
 use HTC_Utils qw($cache $tdir &cdir);
 
 {
-    my $htc = HTML::Template::Compiled->new(
-        scalarref => \<<'EOM',
+    my $text = <<'EOM';
 [%perl __OUT__ "template: __HTC__";
 my $test = __ROOT__->{foo};
 __OUT__ $test;
@@ -17,11 +16,18 @@ __OUT__ $test;
 [%loop loop%]
 [%perl __OUT__ __INDEX__ . ": " . __CURRENT__->{a}; %]
 [%/loop loop%]
-
+[%include include_perl.htc %]
 EOM
+    HTML::Template::Compiled->ExpireTime(0);
+    my $htc = HTML::Template::Compiled->new(
+        scalarref => \$text,
         use_perl => 1,
+        path => $tdir,
         debug    => 0,
-        tagstyle => [qw(-classic -comment -asp +tt)],
+        tagstyle => [qw(-classic -comment +asp +tt)],
+        cache => 0,
+        cache_dir => $cache,
+        search_path_on_include => 1,
     );
     $htc->param(
         foo => 23,

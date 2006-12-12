@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.63 2006/11/20 18:54:47 tinita Exp $
+# $Id: Parser.pm,v 1.64 2006/12/12 20:03:20 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -509,12 +509,20 @@ sub find_attributes {
     }
 }
 
+use HTML::Template::Compiled::Exception;
 sub _error_wrong_tag_syntax {
     my ($self, $arg, $text) = @_;
     my ($substr) = $text =~ m/^(.{0,10})/s;
     my $class = ref $self || $self;
-    croak "$class : Syntax error in <TMPL_*> tag at $arg->{fname} :"
+    my $info = "$class : Syntax error in <TMPL_*> tag at $arg->{fname} :"
         . "$arg->{line} near '$arg->{token}$substr...'";
+    my $ex = HTML::Template::Compiled::Exception->new(
+        text => $info,
+        parser => $self,
+        tokens => $arg->{tags},
+        near => $text,
+    );
+    croak $ex;
 }
 
 sub find_perlcode {

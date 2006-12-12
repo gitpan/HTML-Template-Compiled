@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.298 2006/11/20 19:07:20 tinita Exp $
+# $Id: Compiled.pm,v 1.301 2006/12/12 21:52:18 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.83";
+our $VERSION = "0.83_01";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -22,6 +22,8 @@ eval {
     require HTML::Entities;
     require URI::Escape;
 };
+use base 'Exporter';
+our @EXPORT_OK = qw(&HTC);
 use HTML::Template::Compiled::Parser qw(
     $CASE_SENSITIVE_DEFAULT $NEW_CHECK
     $DEBUG_DEFAULT $SEARCHPATH
@@ -61,6 +63,9 @@ BEGIN {
         *{"set$method"} = $set;
     }
 }
+
+# tired of typing?
+sub HTC { __PACKAGE__->new(@_) }
 
 sub new {
     my ( $class, %args ) = @_;
@@ -727,12 +732,16 @@ sub init {
         $parser = $self->parser_class->new(
             tagstyle => $tagstyle,
         );
+        $parser->set_perl($defaults{use_perl});
     }
+    $args{parser} = ${$args{parser}} if ref $args{parser} eq 'REF';
     if (UNIVERSAL::isa($args{parser}, 'HTML::Template::Compiled::Parser')) {
         $parser = $args{parser};
     }
-    $parser ||= $self->parser_class->default();
-    $parser->set_perl($defaults{use_perl});
+    unless ($parser) {
+        $parser ||= $self->parser_class->default();
+        $parser->set_perl($defaults{use_perl});
+    }
     if ($defaults{use_perl}) {
         $parser->add_tagnames({
             HTML::Template::Compiled::Token::OPENING_TAG() => {
@@ -954,6 +963,7 @@ sub new_from_object {
     $new->set_path($path);
     $new->set_perl(undef);
     if (my $cached = $new->from_cache) {
+        $cached->init_includes;
         return $cached
     }
     $new = $new->from_scratch;
@@ -1173,6 +1183,9 @@ sub import {
         $class->SearchPathOnInclude(1);
         $class->UseQuery(0);
     }
+    if (exists $args{short}) {
+        __PACKAGE__->export_to_level(1, scalar caller(), 'HTC');
+    }
 }
 
 sub ExpireTime {
@@ -1242,7 +1255,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.83"
+$VERSION = "0.83_01"
 
 =cut
 

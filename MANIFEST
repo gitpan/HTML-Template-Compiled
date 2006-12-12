@@ -10,6 +10,7 @@ lib/HTML/Template/Compiled/Formatter.pm
 lib/HTML/Template/Compiled/Parser.pm
 lib/HTML/Template/Compiled/Compiler.pm
 lib/HTML/Template/Compiled/Token.pm
+lib/HTML/Template/Compiled/Exception.pm
 lib/HTML/Template/Compiled/Compiler/Classic.pm
 lib/HTML/Template/Compiled/Plugin/DHTML.pm
 lib/HTML/Template/Compiled/Plugin/XMLEscape.pm
@@ -78,4 +79,5 @@ t/templates/subdir/a/file2.html
 t/templates/query-test.tmpl
 t/templates/query-include.tmpl
 t/templates/query-test2.tmpl
+t/templates/include_perl.htc
 META.yml                                 Module meta-data (added by MakeMaker)

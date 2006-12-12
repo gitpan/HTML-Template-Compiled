@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.21 2006/10/12 19:36:44 tinita Exp $
+# $Id: bench.pl,v 1.22 2006/12/12 20:00:54 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -273,7 +273,8 @@ my $global_htj = $use{'HTML::Template::JIT'} ? new_htj : undef;
 my $global_tt = $use{'Template'} ? new_tt : undef;
 my $global_tst = $use{'Text::ScriptTemplate'} ? new_tst : undef;
 if(1) {
-timethese ($iterations||-1, {
+    #Benchmark::cmpthese ($iterations||-1, {
+    timethese ($iterations||-1, {
         $use{'HTML::Template::Compiled'} ? (
             # deactivate memory cache
             #new_htc_w_clear_cache => sub {my $t = new_htc();$t->clear_cache},
