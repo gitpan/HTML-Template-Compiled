@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.56 2006/11/28 20:46:57 tinita Exp $
+# $Id: Compiler.pm,v 1.58 2007/02/11 14:38:40 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -43,6 +43,20 @@ sub set_escapes    { $_[0]->[ATTR_ESCAPES] = $_[1] }
 sub get_escapes    { $_[0]->[ATTR_ESCAPES] }
 sub set_tags       { $_[0]->[ATTR_TAGS] = $_[1] }
 sub get_tags       { $_[0]->[ATTR_TAGS] }
+
+sub delete_subs {
+    # delete all userdefined subs
+    my ($class) = @_;
+    no strict 'refs';
+    #warn __PACKAGE__." finding all subs\n";
+    for my $key (keys %{'HTML::Template::Compiled::Compiler::subs::'} ) {
+        my $sym = ${'HTML::Template::Compiled::Compiler::subs::'}{$key};
+        if (defined *{$sym}{CODE}) {
+            #warn __PACKAGE__." $key is code\n";
+            delete ${'HTML::Template::Compiled::Compiler::subs::'}{$key}
+        }
+    }
+}
 
 sub add_escapes {
     my ($self, $new_escapes) = @_;

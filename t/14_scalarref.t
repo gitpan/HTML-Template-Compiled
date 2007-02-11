@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 14_scalarref.t,v 1.1 2005/12/05 21:43:17 tinita Exp $
+# $Id: 14_scalarref.t,v 1.2 2007/02/11 12:30:03 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 5;
@@ -15,11 +15,14 @@ my $cache = File::Spec->catfile('t', 'cache');
 
 eval { require Digest::MD5 };
 my $md5 = $@ ? 0 : 1;
+eval { require URI::Escape };
+my $uri = $@ ? 0 : 1;
 my $hash = {
 	URITEST => 'a b c & d',
 };
 SKIP: {
-	skip "no Digest::MD5", 1 unless $md5;
+	skip "no Digest::MD5", 2 unless $md5;
+	skip "no URI::Escape", 2 unless $uri;
 	my $text = qq{<TMPL_VAR .URITEST ESCAPE=URL>\n};
 	my $htc = HTML::Template::Compiled->new(
 		scalarref => \$text,
@@ -30,7 +33,8 @@ SKIP: {
 	my $out = $htc->output;
 	ok($out eq 'a%20b%20c%20%26%20d'.$/, "scalarref output");
 }
-{
+SKIP: {
+	skip "no URI::Escape", 2 unless $uri;
 	my $text = [qq(<TMPL_VAR .URITEST),qq( ESCAPE=URL >\n)];
 	my $htc = HTML::Template::Compiled->new(
 		arrayref => $text,

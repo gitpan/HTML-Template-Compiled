@@ -1,9 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
-0.84
+0.84 Sun Feb 11 15:43:38 CET 2007
 - Bugfix: includes in var includes didn't expire cache
 - Bugfix: tagstyle and use_perl weren't correctly passed to includes
   when using filecache
+- Bugfix: plugins weren't safed in file cache
 
 0.83 Tue Nov 28 22:59:06 CET 2006
 - Added Feature: TMPL_EACH

@@ -1,16 +1,17 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 11_dhtml.t,v 1.5 2006/11/20 19:05:19 tinita Exp $
+# $Id: 11_dhtml.t,v 1.7 2007/02/11 14:44:42 tinita Exp $
 
 use lib 'blib/lib';
-use Test::More tests => 2;
+use Test::More tests => 3;
 BEGIN { use_ok('HTML::Template::Compiled') };
+use lib 't';
+use HTC_Utils qw($cache $tdir &cdir);
 
 eval {
     require HTML::Template::Compiled::Plugin::DHTML;
 };
 my $dhtml = $@ ? 0 : 1;
-SKIP: {
 	my %hash = (
 		dhtml => [
 			qw(array items),
@@ -20,15 +21,35 @@ SKIP: {
 			hash => 'keys',
 		},
 	);
-	skip "no Data::TreeDumper::Renderer::DHTML installed", 1 unless $dhtml;
-	my $htc = HTML::Template::Compiled->new(
-		filename => "t/templates/dhtml.htc",
-        debug => 0,
-        plugin => [qw(HTML::Template::Compiled::Plugin::DHTML)],
-	);
-	$htc->param(%hash);
-	my $out = $htc->output;
-    #print $out;
-	ok($out =~ m/data_treedumper_dhtml/, 'DHTML plugin');
+SKIP: {
+    {
+        skip "no Data::TreeDumper::Renderer::DHTML installed", 2 unless $dhtml;
+        my $htc = HTML::Template::Compiled->new(
+            filename => "t/templates/dhtml.htc",
+            debug => 0,
+            plugin => [qw(HTML::Template::Compiled::Plugin::DHTML)],
+            cache_dir => $cache,
+            cache => 0,
+        );
+        $htc->param(%hash);
+        my $out = $htc->output;
+        #print $out;
+        ok($out =~ m/data_treedumper_dhtml/, 'DHTML plugin');
+    }
+    {
+        HTML::Template::Compiled::Compiler->delete_subs;
+        # from cache
+        my $htc = HTML::Template::Compiled->new(
+            filename => "t/templates/dhtml.htc",
+            debug => 0,
+            plugin => [qw(HTML::Template::Compiled::Plugin::DHTML)],
+            cache_dir => $cache,
+            cache => 0,
+        );
+        $htc->param(%hash);
+        my $out = $htc->output;
+        #print $out;
+        ok($out =~ m/data_treedumper_dhtml/, 'DHTML plugin with file cache');
+    }
 }
 

@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.301 2006/12/12 21:52:18 tinita Exp $
+# $Id: Compiled.pm,v 1.302 2007/02/11 14:35:33 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.83_01";
+our $VERSION = "0.84";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -50,6 +50,7 @@ BEGIN {
           debug perl out_fh default_escape
           filter formatter
           globalstack use_query parser compiler includes
+          plugins
         )
     );
 
@@ -536,6 +537,8 @@ sub add_file_cache {
     #$includes_to_string =~ s/\$includes = //;
     my $search_path = $self->get_search_path || 0;
     my $gl = $self->get_global_vars;
+    my $plugins = $self->get_plugins;
+    my $plugin_dump = Data::Dumper->Dump([\@$plugins], ['plugin_dump']);
     my $file_args = $isScalar
       ? <<"EOM"
         scalarref => $isScalar,
@@ -548,6 +551,8 @@ EOM
     package HTML::Template::Compiled;
 # file date $lmtime
 # last checked date $lchecked
+# @$plugins
+my $plugin_dump;
 my $query_info;
 my $parser;
 my $includes_to_string;
@@ -574,6 +579,7 @@ $file_args
     global_vars => $gl,
     includes => \$includes,
     search_path_on_include => $search_path,
+    plugin => \$plugin_dump,
     # TODO
     # dumper => ...
     # template subroutine
@@ -753,10 +759,8 @@ sub init {
     my $compiler = $self->compiler_class->new;
     $self->set_compiler($compiler);
     if ($defaults{plugin}) {
-        for my $plug (ref $defaults{plugin} eq 'ARRAY'
-            ? @{ $defaults{plugin} }
-            : $defaults{plugin}
-        ) {
+        my @plugins = ref $defaults{plugin} eq 'ARRAY' ? @{ $defaults{plugin} } : $defaults{plugin};;
+        for my $plug (@plugins) {
             if ($plug =~ m/^::/) {
                 $plug = "HTML::Template::Compiled::Plugin$plug";
             }
@@ -775,6 +779,7 @@ sub init {
                 $compiler->set_tags($tags);
             }
         }
+        $self->set_plugins(\@plugins);
     }
 }
 
@@ -1255,7 +1260,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.83_01"
+$VERSION = "0.84"
 
 =cut
 
