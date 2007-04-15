@@ -10,6 +10,10 @@ HTML::Template::Compiled::Reference
     <!-- TMPL_IF var --><!-- TMPL_VAR foo --><!-- /tmpl_if var -->
     <%if var %><%= foo %><%/if var %>
 
+Optional tagstyle 'tt':
+
+    [%if var %][%= foo %][%/if var %]
+
 =head1 TAGS
 
 =over 4
@@ -22,12 +26,14 @@ HTML::Template::Compiled::Reference
 
 conditions like in Perl
 
-=item LOOP, WHILE
+=item LOOP, WHILE, EACH
 
 for-loop and while-loop like in Perl.
 
-    <%loop cds%>Title: <%= _.title%><%/loop cds%>
-    <%while resultset.next%><%= _.foo %><%/while %>
+    <%loop cds%><%= __count__%>. Title: <%= _.title%><%/loop cds%>
+    <%loop cds join=", " %><%= _.title%><%/loop cds%>
+    <%while resultset.next%><%= __count__%>. <%= _.foo %><%/while %>
+    <%each hashref%><%= __key__ %>=<%= __value__ %><%/each %>
 
 =item WITH
 
@@ -53,6 +59,10 @@ for-loop and while-loop like in Perl.
     <%case en,default%>Hello
     <%/switch .config.language%>
 
+=item PERL
+
+See section Perl in L<HTML::Template::Compiled>
+
 =back
 
 =head1 ATTRIBUTES
@@ -77,6 +87,7 @@ Can be used in all tags.
 
     <%= message escape=html %>
     <%= params escape=url %>
+    <%= params escape=js %>
     <%= some_var escape=dump|html%>
 
 Can be used in C<VAR>-tags.
@@ -92,6 +103,12 @@ Can be used in C<VAR>-tags.
     <%loop cds alias="cd" %><%= cd.title %><%/loop cds %>
 
 Can be used in C<LOOP> and C<WHILE>
+
+=item JOIN
+
+    <%loop cds join=", " %><%= _.title%><%/loop cds%>
+
+can be used in C<LOOP>
 
 =back
 

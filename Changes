@@ -1,5 +1,12 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.85 Sun Apr 15 16:15:22 CEST 2007
+- New Feature: JOIN attribute for loop-tag
+- Fix: uri_escape_utf8 for parameters in utf8
+- Fix for DBIx::Class objects ('can' method doesn't work here like expected)
+- Fix: Allow <%= array_of_arrays[0][0] %>
+- New Feature: get count of array elements <%= array# %>
+
 0.84 Sun Feb 11 15:43:38 CET 2007
 - Bugfix: includes in var includes didn't expire cache
 - Bugfix: tagstyle and use_perl weren't correctly passed to includes

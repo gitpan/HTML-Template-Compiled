@@ -1,0 +1,3 @@
+test utf8: ö
+<%= utf8 escape=url %>
+<%= utf8 escape=html %>

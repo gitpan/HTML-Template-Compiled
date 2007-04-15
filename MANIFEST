@@ -60,6 +60,8 @@ t/23_tagstyles.t
 t/24_pod_cover.t
 t/27_chomp.t
 t/28_perl.t
+t/29_encoding.t
+t/30_arrays.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html
@@ -80,4 +82,5 @@ t/templates/query-test.tmpl
 t/templates/query-include.tmpl
 t/templates/query-test2.tmpl
 t/templates/include_perl.htc
+t/templates/utf8.htc
 META.yml                                 Module meta-data (added by MakeMaker)

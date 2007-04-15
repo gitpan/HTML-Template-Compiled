@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 17_escape.t,v 1.5 2006/11/06 19:05:41 tinita Exp $
+# $Id: 17_escape.t,v 1.6 2007/02/13 19:42:29 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 4;
@@ -18,7 +18,7 @@ eval { require HTML::Entities };
 my $entities = $@ ? 0 : 1;
 
 SKIP: {
-	skip "no HTML::Entities installed", 3, unless $entities;
+	skip "no HTML::Entities installed", 1, unless $entities;
 	
 	my $htc = HTML::Template::Compiled->new(
 		scalarref => \<<'EOM',

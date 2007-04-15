@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.58 2007/02/11 14:38:40 tinita Exp $
+# $Id: Compiler.pm,v 1.62 2007/04/15 14:19:45 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -179,7 +179,24 @@ EOM
     }
     my @split = split m/(?=$re)/, $args{var};
     @split = map {
-        m/(.*)\[(-?\d+)\]/ ? ("$1", "[$2]") : $_
+        my @ret;
+        my $count = 0;
+        if (s/#\z//) {
+            $count = 1;
+        }
+        if ( m/(.*)\[(-?\d+)\]/ ) {
+            my @slice = "[$2]";
+            my $var = "$1";
+            while ($var =~ s/\[(-?\d+)\]\z//) {
+                unshift @slice, "[$1]";
+            }
+            @ret = ($var, @slice)
+        }
+        else {
+            @ret = $_
+        }
+        push @ret, '#' if $count;
+        @ret;
     } @split;
     my @paths;
     #print STDERR "paths: (@split)\n";
@@ -192,15 +209,25 @@ EOM
         if ( $p =~ s/^\[(-?\d+)\]$/$1/ ) {
             $varstr .= "\$var = \$var->[$1];\n";
         }
+        elsif ( $p =~ s/^#$// ) {
+            $varstr .= "\$var = scalar \@{\$var};\n";
+        }
         elsif ( $p =~ s/^\Q$args{method_call}// ) {
             if ($count == 0 && $t->get_global_vars & 1) {
                 $varstr .= "\$var = \$t->try_global(\$var, '$p');\n";
             }
             else {
                 my $path = $t->get_case_sensitive ? $p : uc $p;
-            $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'$p') ? UNIVERSAL::can(\$var,'$p')->(\$var) : \$var->\{'$path'\};
+                if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
+                    $varstr .= <<"EOM";
+\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p() : \$var->\{'$path'\};
 EOM
+                }
+                else {
+                    $varstr .= <<"EOM";
+\$var = \$var->\{'$path'\};
+EOM
+                }
             }
         }
         elsif ( $p =~ s/^\Q$args{deref}// ) {
@@ -210,9 +237,16 @@ EOM
             }
             else {
                 my $path = $t->get_case_sensitive ? $p : uc $p;
-            $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'$p') ? UNIVERSAL::can(\$var,'$p')->(\$var) : \$var->\{'$path'\};
+                if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
+                    $varstr .= <<"EOM";
+\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p() : \$var->\{'$path'\};
 EOM
+                }
+                else {
+                    $varstr .= <<"EOM";
+\$var = \$var->\{'$path'\};
+EOM
+                }
             }
         } ## end elsif ( $p =~ s/^\Q$args{deref}//)
         elsif ( $p =~ s/^\Q$args{formatter_path}// ) {
@@ -227,9 +261,16 @@ EOM
             }
             else {
                 my $path = $t->get_case_sensitive ? $p : uc $p;
-                $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'$p') ? UNIVERSAL::can(\$var,'$p')->(\$var) : \$var->\{'$path'\};
+                if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
+                    $varstr .= <<"EOM";
+\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p() : \$var->\{'$path'\};
 EOM
+                }
+                else {
+                    $varstr .= <<"EOM";
+\$var = \$var->\{'$path'\};
+EOM
+                }
             }
         } ## end else [ if ( $p =~ s/^\Q$args{method_call}//)
         $count++;
@@ -401,6 +442,19 @@ EOM
             }
             else {
 
+                my $join_code = '';
+                if (defined (my $join = $attr->{JOIN})) {
+                    my $dump = Data::Dumper->Dump([$join], ['join']);
+                    $dump =~ s{\$join = }{};
+                    $join_code = <<"EOM";
+\{
+  unless (\$__ix__ == \$[) \{
+$output $dump;
+\}
+\}
+EOM
+                    
+                }
                 $code .= <<"EOM";
 ${indent}if (UNIVERSAL::isa(my \$array = $varstr, 'ARRAY') )\{
 ${indent}${ind}my \$size = \$#{ \$array };
@@ -410,6 +464,7 @@ ${indent}${ind}# loop over $var
 ${indent}${ind}for \$__ix__ (\$[..\$size + \$[) \{
 ${indent}${ind}${ind}my \$C = \\ (\$array->[\$__ix__]);
 $lexi
+$join_code
 EOM
             }
         }

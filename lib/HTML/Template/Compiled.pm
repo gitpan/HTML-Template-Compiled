@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.302 2007/02/11 14:35:33 tinita Exp $
+# $Id: Compiled.pm,v 1.306 2007/04/15 14:17:55 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.84";
+our $VERSION = "0.85";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -908,7 +908,7 @@ sub try_global {
 
 # returns if the var is valid
 sub validate_var {
-    return $_[1] !~ tr#a-zA-Z0-9._[]/-##c;
+    return $_[1] !~ tr{a-zA-Z0-9._[]/#-}{}c;
 }
 
 sub escape_filename {
@@ -1260,14 +1260,14 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.84"
+$VERSION = "0.85"
 
 =cut
 
 sub __test_version {
     my $v = __PACKAGE__->VERSION;
-    return 1 if $version_pod =~ m/VERSION.*\Q$v/;
-    return;
+    my ($v_test) = $version_pod =~ m/VERSION\s*=\s*"(.+)"/m;
+    return $v == $v_test ? 1 : 0;
 }
 
 1;
@@ -1301,6 +1301,9 @@ __END__
 =head1 DESCRIPTION
 
 For a quick reference, see L<HTML::Template::Compiled::Reference>.
+
+As the basic features work like in L<HTML::Template>, please get familiar
+with this documentation before.
 
 HTML::Template::Compiled (HTC) does not implement all features of
 L<HTML::Template>, and
@@ -1566,6 +1569,10 @@ array is true if it has content, in HTC it's true if it (the reference) is
 defined. I'll try to find a way to change that behaviour, though that might
 be for the cost of speed.
 
+As of L<HTML::Template::Compiled> 0.85 you can use this syntax:
+
+    <tmpl_if arrayref# >true<tmpl_else>false</tmpl_if >
+
 In L<HTML::Template::Compiled::Classic> 0.04 it works as in HTML::Template.
 
 =head2 ESCAPING
@@ -1822,6 +1829,20 @@ The special name C<_> gives you the current paramater. In loops you can use it l
 Also you can give the current item an alias. See L<"ALIAS">. I also would like
 to add a loop_context variable C<__current__>, if that makes sense.
 Seems more readable to non perlers than C<_>.
+
+The LOOP tag allows you to define a JOIN attribute:
+
+ <tmpl_loop favourite_colors join=", ">
+  <tmpl_var _ >
+ </tmpl_loop>
+
+This will output something like C<blue, pink, yellow>.
+This is easier than doing:
+
+ <tmpl_loop favourite_colors>
+ <tmpl_unless __first__>, </tmpl_unless>
+  <tmpl_var _ >
+ </tmpl_loop>
 
 =head2 TMPL_WHILE
 

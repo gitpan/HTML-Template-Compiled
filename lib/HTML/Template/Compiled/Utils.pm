@@ -1,9 +1,9 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm,v 1.13 2006/10/12 19:35:26 tinita Exp $
+# $Id: Utils.pm,v 1.16 2007/04/15 12:53:51 tinita Exp $
 $VERSION = "0.04";
 use strict;
 use warnings;
-use Data::Dumper;
+use Data::Dumper qw(Dumper);
 
 use base 'Exporter';
 use vars qw/@EXPORT_OK %EXPORT_TAGS/;
@@ -152,8 +152,14 @@ URI-escapes the input string and returns it;
 
 =cut
 
+eval { require Encode };
+my $encode = $@ ? 0 : 1;
 sub escape_uri {
-    return URI::Escape::uri_escape( $_[0] );
+    # if we want to use utf8 we require Encode.pm to be installed
+    my $x = ($encode and Encode::is_utf8($_[0]))
+        ? URI::Escape::uri_escape_utf8( $_[0] )
+        : URI::Escape::uri_escape( $_[0] );
+    return $x;
 }
 
 =head2 escape_js
@@ -166,6 +172,7 @@ JavaScript-escapes the input string and returns it;
 
 sub escape_js {
     my ($var) = @_;
+    return $var unless defined $var;
     $var =~ s/(["'])/\\$1/g;
     $var =~ s/\r/\\r/g;
     $var =~ s/\n/\\n/g;
