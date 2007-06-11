@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.62 2007/04/15 14:19:45 tinita Exp $
+# $Id: Compiler.pm,v 1.65 2007/06/04 08:55:13 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -239,7 +239,7 @@ EOM
                 my $path = $t->get_case_sensitive ? $p : uc $p;
                 if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
                     $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p() : \$var->\{'$path'\};
+\$var = \$var->\{'$path'\};
 EOM
                 }
                 else {
@@ -334,6 +334,11 @@ EOM
         );
         if (!$token->is_tag) {
             if ( length $text ) {
+                # don't ask me about this line. i tried to get HTC
+                # running with utf8 (directly in the template),
+                # and without this line i only got invalid characters.
+                local $Data::Dumper::Deparse = 1;
+
                 my $exp = _expr_string($text);
                 $code .= qq#$indent$output # . $exp->to_string($nlevel) . $/;
             }
@@ -606,28 +611,38 @@ EOM
                     $info_stack->[-1]->{lc $filename}->{type} = $tname;
                 }
                 $varstr   = $self->quote_file($filename);
-                $dir      = dirname $fname;
-                if ($self->get_search_path) {
-                    if ( defined $dir and !grep { $dir eq $_ } @$path ) {
-                        # add the current directory to top of paths
-                        # create new $path, don't alter original ref
-                        $path = [ $dir, @$path ] ;
-                    }
-                }
-                else {
-                        $path = [ $dir ] ;
-                }
+				unless ($self->get_scalar) {
+					$dir      = dirname($fname);
+					if ($self->get_search_path) {
+						if ( defined $dir and !grep { $dir eq $_ } @$path ) {
+							# add the current directory to top of paths
+							# create new $path, don't alter original ref
+							$path = [ $dir, @$path ] ;
+						}
+					}
+					else {
+							$path = [ $dir ] ;
+					}
+				}
                 # generate included template
                 {
                     D && $self->log("compile include $filename!!");
-                    $self->compile_early() and my $cached_or_new
-                        = $self->new_from_object(
-                          $path, $filename, '', $self->get_cache_dir
-                      );
-                    $fullpath = $cached_or_new->get_file;
-                    $self->get_includes()->{$fullpath}
-                        = [$path, $filename, $cached_or_new];
-                        $fullpath = $self->quote_file($fullpath);
+                    $fullpath = $self->createFilename( $path, $filename );
+                    my $recursed = ++$HTML::Template::Compiled::COMPILE_STACK{$fullpath};
+                    #warn __PACKAGE__." fullpath $fullpath ($recursed)\n";
+                    if ($recursed <= 1) {
+                        my $cached_or_new;
+                        $self->compile_early() and $cached_or_new
+                            = $self->new_from_object(
+                              $path, $filename, '', $self->get_cache_dir
+                          );
+                          #$fullpath = $cached_or_new->get_file;
+                        #$HTML::Template::Compiled::COMPILE_STACK{"@$path/$filename"} = $fullpath;
+                        $self->get_includes()->{$fullpath}
+                            = [$path, $filename, $cached_or_new];
+                    }
+                    --$HTML::Template::Compiled::COMPILE_STACK{$fullpath};
+                    $fullpath = $self->quote_file($fullpath);
                 }
             }
             #print STDERR "include $varstr\n";
@@ -641,6 +656,10 @@ EOM
                 $code .= <<"EOM";
 ${indent}\{
 ${indent}  if (defined (my \$file = $varstr)) \{
+            my \$recursed = ++\$HTML::Template::Compiled::FILESTACK{$fullpath};
+            #warn "recursed \$recursed\\n";
+            \$HTML::Template::Compiled::FILESTACK{$fullpath} = 0, die "HTML::Template: recursive include of " . $fullpath . " \$recursed times (max \$HTML::Template::Compiled::MAX_RECURSE)"
+              if \$recursed > \$HTML::Template::Compiled::MAX_RECURSE;
 ${indent}    my \$include = \$t->get_includes()->{$fullpath};
 ${indent}    my \$new = \$include ? \$include->[2] : undef;
 #print STDERR "+++++++got new? \$new\\n";
@@ -650,6 +669,7 @@ ${indent}    }
 #print STDERR "got new? \$new\\n";
 ${indent}    \$new->set_globalstack(\$t->get_globalstack);
 ${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
+            --\$HTML::Template::Compiled::FILESTACK{$fullpath} or delete \$HTML::Template::Compiled::FILESTACK{$fullpath};
 ${indent}  \}
 ${indent}\}
 EOM
@@ -657,6 +677,10 @@ EOM
             else {
                 $code .= <<"EOM";
 ${indent}\{
+            my \$recursed = ++\$HTML::Template::Compiled::FILESTACK{$fullpath};
+            #warn "+recursed \$recursed $fullpath\\n";
+            \$HTML::Template::Compiled::FILESTACK{$fullpath} = 0, die "HTML::Template: recursive include of " . $fullpath . " \$recursed times (max \$HTML::Template::Compiled::MAX_RECURSE)"
+              if \$recursed > \$HTML::Template::Compiled::MAX_RECURSE;
 ${indent}    my \$include = \$t->get_includes()->{$fullpath};
 ${indent}    my \$new = \$include ? \$include->[2] : undef;
 #print STDERR "got new? \$new\\n";
@@ -666,6 +690,7 @@ ${indent}    }
 #print STDERR "got new? \$new\\n";
 ${indent}    \$new->set_globalstack(\$t->get_globalstack);
 ${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
+            --\$HTML::Template::Compiled::FILESTACK{$fullpath} or delete \$HTML::Template::Compiled::FILESTACK{$fullpath};
 ${indent}\}
 EOM
             }

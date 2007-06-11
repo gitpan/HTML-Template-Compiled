@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.306 2007/04/15 14:17:55 tinita Exp $
+# $Id: Compiled.pm,v 1.312 2007/05/24 08:46:56 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.85";
+our $VERSION = "0.86";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -10,6 +10,7 @@ use constant D => $ENV{HTC_DEBUG} || 0;
 use strict;
 use warnings;
 
+our $Storable = 0;
 use Carp;
 use Fcntl qw(:seek :flock);
 use File::Spec;
@@ -22,13 +23,18 @@ eval {
     require HTML::Entities;
     require URI::Escape;
 };
+eval {
+    require Encode;
+};
+my $Encode = $@ ? 0 : 1;
+
 use base 'Exporter';
 our @EXPORT_OK = qw(&HTC);
 use HTML::Template::Compiled::Parser qw(
     $CASE_SENSITIVE_DEFAULT $NEW_CHECK
     $DEBUG_DEFAULT $SEARCHPATH
-    %FILESTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
-    $UNTAINT $DEFAULT_TAGSTYLE
+    %FILESTACK %COMPILE_STACK %PATHS $DEFAULT_ESCAPE $DEFAULT_QUERY
+    $UNTAINT $DEFAULT_TAGSTYLE $MAX_RECURSE
 );
 use vars qw($__ix__);
 
@@ -407,7 +413,7 @@ sub from_cache {
         return unless -d $dir;
         ref $self and $self->lock;
         opendir my $dh, $dir or die "Could not open '$dir': $!";
-        my @files = grep { m/\.pl$/ } readdir $dh;
+        my @files = grep { m/(\.pl|\.storable)$/ } readdir $dh;
         for my $file (@files) {
             my $file = File::Spec->catfile( $dir, $file );
             unlink $file or die "Could not delete '$file': $!";
@@ -457,17 +463,11 @@ sub compile {
     my $compiler = $self->get_compiler;
     if ( my $file = $self->get_file and !$self->get_scalar ) {
 
-        # thanks to sam tregars testsuite
-        # don't recursively include
-        my $recursed = ++$FILESTACK{$file};
         D && $self->log( "compile from file " . $file );
         die "Could not open '$file': $!" unless -f $file;
         my @times = $self->_checktimes($file);
         my $text  = $self->_readfile($file);
-        die "HTML::Template: recursive include of " . $file . " $recursed times"
-          if $recursed > 10;
         my ( $source, $compiled ) = $compiler->compile( $self, $text, $file );
-        --$FILESTACK{$file} or delete $FILESTACK{$file};
         $self->set_perl($compiled);
         $self->get_cache and $self->add_mem_cache(
             checked => time,
@@ -515,8 +515,28 @@ sub add_file_cache {
     my $filename = $self->get_filename;
     my $lmtime   = localtime $times{mtime};
     my $lchecked = localtime $times{checked};
-    D && $self->log("add_file_cache() $cache/$plfile");
-    open my $fh, ">$cache/$plfile.pl" or die $!;    # TODO File::Spec
+    my $cachefile = "$cache/$plfile";
+    D && $self->log("add_file_cache() $cachefile");
+    if ($Storable) {
+        require Storable;
+        local $Storable::Deparse = 1;
+        my $clone = $self->clone;
+        $clone->prepare_for_cache;
+        my $v = $self->VERSION || '0.01';
+        my $to_cache = {
+            htc => $clone,
+            version => $v,
+            times => {
+                mtime => $times{mtime},
+                checked => $times{checked},
+            },
+        };
+        Storable::store($to_cache, "$cachefile.storable");
+    }
+    else {
+    my $utf8 = $Encode && Encode::is_utf8($source);
+    my $use_utf8 = $utf8 ? 'use utf8;' : '';
+    open my $fh, ">" . ($utf8 ? ':utf8' : ''), "$cachefile.pl" or die $!;    # TODO File::Spec
     my $path     = $self->get_path;
     my $path_str = '['
       . ( join ', ', map { $self->quote_file($_) } @$path )
@@ -548,13 +568,15 @@ EOM
         filename => '@{[$self->get_filename]}',
 EOM
     my $package = <<"EOM";
+    $use_utf8
     package HTML::Template::Compiled;
 # file date $lmtime
 # last checked date $lchecked
 # @$plugins
 my $plugin_dump;
 my $query_info;
-my $parser;
+my \$parser;
+$parser;
 my $includes_to_string;
 my \$args = {
     # HTC version
@@ -589,6 +611,7 @@ $file_args
 EOM
     print $fh $package;
     D && $self->log("$cache/$plfile.pl generated");
+    }
     $self->unlock;
 }
 
@@ -598,7 +621,7 @@ sub from_file_cache {
     D && $self->log("include file: $file");
 
     my $escaped = $self->escape_filename($file);
-    my $req     = File::Spec->catfile( $dir, "$escaped.pl" );
+    my $req     = File::Spec->catfile( $dir, "$escaped.".($Storable?"storable":"pl") );
     return unless -f $req;
     return $self->include_file($req);
 }
@@ -607,16 +630,48 @@ sub include_file {
     my ( $self, $req ) = @_;
     D && $self->log("do $req");
     my $r;
+    my $t;
+    if ($Storable) {
+        require Storable;
+        local $Storable::Eval = 1;
+        my $cache;
+        eval {
+            $cache = Storable::retrieve($req);
+        };
+        return if $@;
+        my $cached_version = $cache->{version};
+        $t = $cache->{htc};
+        if (($t->VERSION || '0.01') ne $cached_version || !$t->uptodate( $cache->{times} )) {
+            # is not uptodate
+            return;
+        }
+        my $plug = $t->get_plugins || [];
+        $t->init_plugins(@$plug);
+		$t->get_cache and $t->add_mem_cache(
+			checked => $cache->{times}->{checked},
+			mtime   => $cache->{times}->{mtime},
+		);
+    }
+    else {
     if ($UNTAINT) {
         # you said explicitly that you can trust your compiled code
-        open my $fh, '<', $req or die "Could not open '$req': $!";
-        local $/;
+        open my $fh, '<:utf8', $req or die "Could not open '$req': $!";
         my $code = <$fh>;
+        if ($code =~ m/use utf8/) {
+            binmode $fh, ':utf8';
+            $Encode and Encode::_utf8_on($code);
+        }
+        local $/;
+        $code .= <$fh>;
+        my $utf8 = $Encode && Encode::is_utf8($code);
         if ( $code =~ m/(\A.*\z)/ms ) {
             $code = $1;
         }
         else {
             $code = "";
+        }
+        if ($utf8) {
+            Encode::_utf8_on($code);
         }
         $r = eval $code;
     }
@@ -631,7 +686,7 @@ sub include_file {
     my $class = $r->{class} || 'HTML::Template::Compiled';
     my $args = $r->{htc};
     # we first just create from cached perl-code
-    my $t = $class->new_from_perl(%$args);
+    $t = $class->new_from_perl(%$args);
     if ($VERSION ne $cached_version || !$t->uptodate( $r->{times} )) {
         # is not uptodate
         return;
@@ -642,6 +697,7 @@ sub include_file {
         checked => $r->{times}->{checked},
         mtime   => $r->{times}->{mtime},
     );
+    }
     return $t;
 }
 
@@ -649,22 +705,31 @@ sub createFilename {
     my ( $self, $path, $filename ) = @_;
     D && $self->log("createFilename($path,$filename)");
     D && $self->stack(1);
-    if ( !$path or !length $path or
+    if ($path) {
+        local $" = "\\";
+        my $cached = $PATHS{"@$path"}->{$filename};
+        return $cached if defined $cached;
+    }
+    if ( !$path or
         (File::Spec->file_name_is_absolute($filename) &&
         -f $filename) ) {
         return $filename;
     }
     else {
         D && $self->log( "file: " . File::Spec->catfile( $path, $filename ) );
-        my @paths = ref $path ? @$path : $path;
-        if (@paths) {
-            for ( @paths ) {
+        if ($path && @$path) {
+            for ( @$path ) {
                 my $fp = File::Spec->catfile( $_, $filename );
-                return $fp if -f $fp;
+                if (-f $fp) {
+                    local $" = "\\";
+                    $PATHS{"@$path"}->{$filename} = $fp;
+                    return $fp;
+                }
             }
         }
-        else {
-            return $filename if -f $filename;
+        elsif (-f $filename) {
+            $PATHS{''}->{$filename} = $filename;
+            return $filename;
         }
 
         # TODO - bug with scalarref
@@ -760,26 +825,33 @@ sub init {
     $self->set_compiler($compiler);
     if ($defaults{plugin}) {
         my @plugins = ref $defaults{plugin} eq 'ARRAY' ? @{ $defaults{plugin} } : $defaults{plugin};;
-        for my $plug (@plugins) {
-            if ($plug =~ m/^::/) {
-                $plug = "HTML::Template::Compiled::Plugin$plug";
-            }
-            eval "require $plug";
-            if ($@) {
-                carp "Could not load plugin $plug\n";
-            }
-            my $actions = $self->get_plugin_actions($plug);
-            if (my $tagnames = $actions->{tagnames}) {
-                $parser->add_tagnames($tagnames);
-            }
-            if (my $escape = $actions->{escape}) {
-                $compiler->add_escapes($escape);
-            }
-            if (my $tags = $actions->{compile}) {
-                $compiler->set_tags($tags);
-            }
-        }
+        $self->init_plugins(@plugins);
         $self->set_plugins(\@plugins);
+    }
+}
+
+sub init_plugins {
+    my ($self, @plugins) = @_;
+    my $parser = $self->get_parser;
+    my $compiler = $self->get_compiler;
+    for my $plug (@plugins) {
+        if ($plug =~ m/^::/) {
+            $plug = "HTML::Template::Compiled::Plugin$plug";
+        }
+        eval "require $plug";
+        if ($@) {
+            carp "Could not load plugin $plug\n";
+        }
+        my $actions = $self->get_plugin_actions($plug);
+        if (my $tagnames = $actions->{tagnames}) {
+            $parser->add_tagnames($tagnames);
+        }
+        if (my $escape = $actions->{escape}) {
+            $compiler->add_escapes($escape);
+        }
+        if (my $tags = $actions->{compile}) {
+            $compiler->set_tags($tags);
+        }
     }
 }
 
@@ -976,10 +1048,15 @@ sub new_from_object {
     return $new;
 }
 
+sub prepare_for_cache {
+    my ($self) = @_;
+    $self->clear_params;
+}
+
 sub preload {
     my ( $class, $dir ) = @_;
     opendir my $dh, $dir or die "Could not open '$dir': $!";
-    my @files = grep { m/\.pl$/ } readdir $dh;
+    my @files = grep { m/\.pl|\.storable$/ } readdir $dh;
     closedir $dh;
     my $loaded = 0;
     for my $file (@files) {
@@ -1260,13 +1337,14 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.85"
+$VERSION = "0.86"
 
 =cut
 
 sub __test_version {
     my $v = __PACKAGE__->VERSION;
     my ($v_test) = $version_pod =~ m/VERSION\s*=\s*"(.+)"/m;
+    no warnings;
     return $v == $v_test ? 1 : 0;
 }
 

@@ -1,4 +1,4 @@
-# $Id: 27_chomp.t,v 1.1 2006/11/03 18:56:51 tinita Exp $
+# $Id: 27_chomp.t,v 1.2 2007/05/23 20:58:06 tinita Exp $
 use warnings;
 use strict;
 use blib;
@@ -10,11 +10,12 @@ use HTC_Utils qw($cache $tdir &cdir);
 {
     my $htc = HTML::Template::Compiled->new(
         scalarref => \<<'EOM',
-<tmpl_var foo  ~>
+<+-tmpl_var foo  >
 <tmpl_var  foo >
-<~!-- tmpl_var foo  -->
-<~%var foo %~>
+<-+!-- tmpl_var foo  -->
+<--%var foo %>
 EOM
+        tagstyle => [qw(classic classic_chomp asp asp_chomp comment comment_chomp)],
         debug => 0,
     );
     $htc->param(foo => 23);

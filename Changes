@@ -1,5 +1,14 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.86 Mon Jun 11 22:38:04 CEST 2007
+- Experimental Feature: use Storable for filecaching (set
+  $HTML::Template::Compiled::Storable to 1 if you want to test it.
+  It should be 1.5-2 times as fast as normal filecaching)
+- Fix: a test didn't skip if necessary
+- utf8 in templates (you probably need Encode (and thus 5.8) for that)
+- Fix: recursive includes didn't really work because of compile-time
+  instead of runtime check
+
 0.85 Sun Apr 15 16:15:22 CEST 2007
 - New Feature: JOIN attribute for loop-tag
 - Fix: uri_escape_utf8 for parameters in utf8

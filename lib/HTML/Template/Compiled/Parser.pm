@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.65 2007/03/01 22:53:45 tinita Exp $
+# $Id: Parser.pm,v 1.68 2007/05/23 20:58:05 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -14,12 +14,13 @@ BEGIN {
     $ENABLE_SUB
     $DEBUG_DEFAULT
     $SEARCHPATH
-    %FILESTACK $DEFAULT_ESCAPE $DEFAULT_QUERY
-    $UNTAINT $DEFAULT_TAGSTYLE
+    %FILESTACK %COMPILE_STACK %PATHS $DEFAULT_ESCAPE $DEFAULT_QUERY
+    $UNTAINT $DEFAULT_TAGSTYLE $MAX_RECURSE
 );
 }
 our @EXPORT_OK = @vars;
 use vars @vars;
+$MAX_RECURSE = 10;
 
 $NEW_CHECK              = 60 * 10; # 10 minutes default
 $DEBUG_DEFAULT          = 0;
@@ -81,11 +82,20 @@ sub add_tagnames {
 
 sub default_tags {
     return {
-        classic => ['<~?TMPL_'      ,'~?>',     '<~?/TMPL_',      '~?>',    '~'],
-        comment => ['<~?!--\s*TMPL_','\s*--~?>','<~?!--\s*/TMPL_','\s*--~?>','~'],
-        asp     => ['<~?%'          ,'%~?>',    '<~?%/',          '%~?>',   '~'],
-        php     => ['<~?\?'         ,'\?~?>',    '<~?\?/',          '\?~?>','~'   ],
-        tt      => ['\[~?%'         ,'%~?\]',   '\[%~?/',         '%~?\]'  ,'~' ],
+        classic => ['<TMPL_'      ,'>',     '</TMPL_',      '>',  ],
+        classic_chomp => ['<[+-][+-]TMPL_'      ,'>',     '</TMPL_',      '>',    1],
+
+        comment => ['<!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->',],
+        comment_chomp => ['<[+-][+-]!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->',1],
+
+        asp     => ['<%'          ,'%>',    '<%/',          '%>',   ],
+        asp_chomp  => ['<[+-][+-]%'          ,'%>',    '<%/',          '%>', 1],
+
+        php     => ['<\?'         ,'\?>',    '<\?/',          '\?>', ],
+        php_chomp  => ['<[+-][+-]\?'         ,'\?>',    '<\?/',          '\?>', 1],
+
+        tt      => ['\[%'         ,'%\]',   '\[%/',         '%\]'  , ],
+        tt_chomp   => ['\[[+-][+-]%'         ,'%\]',   '\[%/',         '%\]'  ,1 ],
     };
 }
 
@@ -193,8 +203,14 @@ sub find_start_of_tag {
                 $arg->{close_match} = $val->[1];
                 $arg->{open_or_close} = $val->[0];
                 $arg->{chomp_find} = $arg->{chomp_map}->{$key};
-                if ($arg->{open} =~ m/$arg->{chomp_find}/) {
-                    $arg->{chomp} |= 1;
+                if ($arg->{chomp_find}) {
+                    my ($c1, $c2) = $arg->{open} =~ m/([+-])([+-])/;
+                    if ($c1 eq '-') {
+                        $arg->{chomp} |= 1;
+                    }
+                    if ($c2 eq '-') {
+                        $arg->{chomp} |= 2;
+                    }
                 }
                 #print STDERR "=== tag type $key, searching for $arg->{close_match}\n";
                 last TYPES;
@@ -462,9 +478,6 @@ sub find_attributes {
                 if ($arg->{template} =~ s/^($arg->{close_match})//) {
                     $arg->{close} = $1;
                     $arg->{token} .= $1;
-                    if ($arg->{close} =~ m/$arg->{chomp_find}/) {
-                        $arg->{chomp} |= 2;
-                    }
                 }
                 else {
                     $self->_error_wrong_tag_syntax( $arg, "" );
