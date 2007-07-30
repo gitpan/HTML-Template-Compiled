@@ -1,4 +1,4 @@
-# $Id: 20_precompile.t,v 1.1 2006/04/24 20:38:11 tinita Exp $
+# $Id: 20_precompile.t,v 1.2 2007/07/30 20:42:25 tinita Exp $
 use warnings;
 use strict;
 use lib qw(blib/lib t);
@@ -15,7 +15,8 @@ Precompiled scalarref!
 EOM
     my $templates = HTML::Template::Compiled->precompile(
         path     => $tdir,
-        cache_dir => $cache,
+        file_cache_dir => $cache,
+        file_cache => 1,
         filenames => [$pre, \$scalar],
     );
     #warn Data::Dumper->Dump([\$templates], ['templates']);

@@ -74,7 +74,7 @@ t/templates/dyn_include.htc
 t/templates/dyn_included1.htc
 t/templates/dyn_included2.htc
 t/templates/formatter.htc
-t/templates/dummy.tmpl
+t/templates/subdir2/dummy.tmpl
 t/templates/precompiled1.tmpl
 t/templates/include_w_global.htc
 t/templates/subdir/a/file1.html

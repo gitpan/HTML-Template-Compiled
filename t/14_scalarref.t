@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 14_scalarref.t,v 1.2 2007/02/11 12:30:03 tinita Exp $
+# $Id: 14_scalarref.t,v 1.3 2007/07/30 20:42:25 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 5;
@@ -26,7 +26,8 @@ SKIP: {
 	my $text = qq{<TMPL_VAR .URITEST ESCAPE=URL>\n};
 	my $htc = HTML::Template::Compiled->new(
 		scalarref => \$text,
-		cache_dir => $cache,
+		file_cache_dir => $cache,
+        file_cache => 1,
 	);
 	ok($htc, "scalarref template");
 	$htc->param(%$hash);
@@ -38,7 +39,8 @@ SKIP: {
 	my $text = [qq(<TMPL_VAR .URITEST),qq( ESCAPE=URL >\n)];
 	my $htc = HTML::Template::Compiled->new(
 		arrayref => $text,
-		cache_dir => $cache,
+		file_cache_dir => $cache,
+        file_cache => 1,
 	);
 	ok($htc, "arrayref template");
 	$htc->param(%$hash);

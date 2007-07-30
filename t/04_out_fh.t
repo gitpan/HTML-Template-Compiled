@@ -1,4 +1,4 @@
-# $Id: 04_out_fh.t,v 1.5 2005/11/21 21:19:21 tinita Exp $
+# $Id: 04_out_fh.t,v 1.6 2007/07/30 20:42:25 tinita Exp $
 use lib 'blib/lib';
 use Test::More tests => 5;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -19,7 +19,8 @@ sub test {
 		path => 't/templates',
 		filename => 'out_fh.htc',
 		out_fh => 1,
-		cache_dir => 't/cache',
+		file_cache_dir => 't/cache',
+        file_cache => 1,
 	);
 	my $out = File::Spec->catfile('t', 'templates', 'out_fh.htc.output');
 	open my $fh, '>', $out or die $!;

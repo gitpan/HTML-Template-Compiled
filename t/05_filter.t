@@ -1,4 +1,4 @@
-# $Id: 05_filter.t,v 1.7 2006/09/10 21:29:20 tinita Exp $
+# $Id: 05_filter.t,v 1.8 2007/07/30 20:42:25 tinita Exp $
 use lib 'blib/lib';
 use Test::More tests => 4;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -29,7 +29,8 @@ sub test {
 		path => 't/templates',
 		filename => 'filter.htc',
 		filter => $f,
-        cache_dir => 't/cache',
+        file_cache_dir => 't/cache',
+        file_cache => 1,
 	);
 	$htc->param(
 		omen => 'Caesar',

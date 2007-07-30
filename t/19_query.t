@@ -1,4 +1,4 @@
-# $Id: 19_query.t,v 1.8 2006/10/07 18:27:26 tinita Exp $
+# $Id: 19_query.t,v 1.9 2007/07/30 20:42:25 tinita Exp $
 use warnings;
 use strict;
 use lib 'blib/lib';
@@ -50,7 +50,8 @@ sub query_template {
     my $template = HTML::Template::Compiled->new(
         path     => 't/templates',
         filename => 'query-test-copy.tmpl',
-        cache_dir => 't/cache',
+        file_cache_dir => 't/cache',
+        file_cache => 1,
     );
     my %params;
     eval {

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.68 2007/05/23 20:58:05 tinita Exp $
+# $Id: Parser.pm,v 1.69 2007/07/17 19:12:50 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -80,23 +80,24 @@ sub add_tagnames {
 }
 
 
+my $_default_tags = {
+    classic => ['<TMPL_'      ,'>',     '</TMPL_',      '>',  ],
+    classic_chomp => ['<[+-][+-]TMPL_'      ,'>',     '</TMPL_',      '>',    1],
+
+    comment => ['<!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->',],
+    comment_chomp => ['<[+-][+-]!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->',1],
+
+    asp     => ['<%'          ,'%>',    '<%/',          '%>',   ],
+    asp_chomp  => ['<[+-][+-]%'          ,'%>',    '<%/',          '%>', 1],
+
+    php     => ['<\?'         ,'\?>',    '<\?/',          '\?>', ],
+    php_chomp  => ['<[+-][+-]\?'         ,'\?>',    '<\?/',          '\?>', 1],
+
+    tt      => ['\[%'         ,'%\]',   '\[%/',         '%\]'  , ],
+    tt_chomp   => ['\[[+-][+-]%'         ,'%\]',   '\[%/',         '%\]'  ,1 ],
+};
 sub default_tags {
-    return {
-        classic => ['<TMPL_'      ,'>',     '</TMPL_',      '>',  ],
-        classic_chomp => ['<[+-][+-]TMPL_'      ,'>',     '</TMPL_',      '>',    1],
-
-        comment => ['<!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->',],
-        comment_chomp => ['<[+-][+-]!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->',1],
-
-        asp     => ['<%'          ,'%>',    '<%/',          '%>',   ],
-        asp_chomp  => ['<[+-][+-]%'          ,'%>',    '<%/',          '%>', 1],
-
-        php     => ['<\?'         ,'\?>',    '<\?/',          '\?>', ],
-        php_chomp  => ['<[+-][+-]\?'         ,'\?>',    '<\?/',          '\?>', 1],
-
-        tt      => ['\[%'         ,'%\]',   '\[%/',         '%\]'  , ],
-        tt_chomp   => ['\[[+-][+-]%'         ,'%\]',   '\[%/',         '%\]'  ,1 ],
-    };
+    return $_default_tags;
 }
 
 my $default_validation = sub { exists $_[1]->{NAME} };

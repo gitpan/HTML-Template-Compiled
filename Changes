@@ -1,5 +1,18 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.87 Mon Jul 30 22:46:31 CEST 2007
+- Change: file-caching now stores as Storable. If you get problems
+  with file-caching please report and set $HTML::Template::Compiled::Storable to 0
+  as a workaround.
+- Change: escape=HTML now only escapes '"&<>
+  http://rt.cpan.org/Public/Bug/Display.html?id=27446
+- Change: allow every character for TMPL_* NAMEs
+  http://rt.cpan.org/Ticket/Display.html?id=28094
+- Bugfix: ALIAS did only work for simple varnames
+  http://rt.cpan.org/Ticket/Display.html?id=28430
+- Change: in future versions you should use file_cache and
+  file_cache_dir like in HTML::Template
+
 0.86 Mon Jun 11 22:38:04 CEST 2007
 - Experimental Feature: use Storable for filecaching (set
   $HTML::Template::Compiled::Storable to 1 if you want to test it.

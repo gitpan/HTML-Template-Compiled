@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm,v 1.16 2007/04/15 12:53:51 tinita Exp $
+# $Id: Utils.pm,v 1.17 2007/07/17 20:08:42 tinita Exp $
 $VERSION = "0.04";
 use strict;
 use warnings;
@@ -11,7 +11,7 @@ my @paths = qw(PATH_METHOD PATH_DEREF PATH_FORMATTER PATH_ARRAY);
 @EXPORT_OK = (
     @paths, qw(
         &log &stack
-        &escape_html &escape_uri &escape_js
+        &escape_html &escape_html_all &escape_uri &escape_js
         &md5
     )
 );
@@ -139,6 +139,24 @@ HTML-escapes the input string and returns it;
 =cut
 
 sub escape_html {
+    my ($str) = @_;
+    $str =~ s/&/&amp;/g;
+    $str =~ s/"/&quot;/g;
+    $str =~ s/'/&#39;/g;
+    $str =~ s/>/&gt;/g;
+    $str =~ s/</&lt;/g;
+    return $str;
+}
+
+=head2 escape_html_all
+
+  my $escaped_html = escape_html($raw_html);
+
+HTML-escapes the input string and returns it;
+
+=cut
+
+sub escape_html_all {
     # hopefully encode_entities() works correct
     # and doesn't change its arg when called in scalar context
     return HTML::Entities::encode_entities($_[0]);

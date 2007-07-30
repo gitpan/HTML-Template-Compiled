@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.312 2007/05/24 08:46:56 tinita Exp $
+# $Id: Compiled.pm,v 1.318 2007/07/30 20:42:25 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.86";
+our $VERSION = "0.87";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -10,11 +10,11 @@ use constant D => $ENV{HTC_DEBUG} || 0;
 use strict;
 use warnings;
 
-our $Storable = 0;
+our $Storable = 1;
 use Carp;
 use Fcntl qw(:seek :flock);
 use File::Spec;
-use File::Basename qw(dirname);
+use File::Basename qw(dirname basename);
 use HTML::Template::Compiled::Utils qw(:walkpath :log :escape &md5);
 use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Compiler;
@@ -50,7 +50,7 @@ BEGIN {
     my @map = (
         undef, qw(
           path filename file scalar filehandle
-          cache_dir cache search_path
+          file_cache cache_dir cache search_path
           loop_context case_sensitive global_vars
           default_path
           debug perl out_fh default_escape
@@ -150,6 +150,7 @@ sub new_from_perl {
     my $self = bless [], $class;
     D && $self->log("new(perl) filename: $args{filename}");
 
+    $self->init_cache(\%args);
     $self->init(%args);
     $self->set_perl( $args{perl} );
     $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
@@ -180,7 +181,8 @@ sub new_file {
     }
     $self->set_filename( $filename );
     $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
-    $self->set_cache_dir( $args{cache_dir} );
+    $self->init_cache(\%args);
+    #$self->set_cache_dir( $args{cache_dir} );
     $self->set_path( $args{path} );
     if (my $t = $self->from_cache()) {
         $t->init_includes;
@@ -204,7 +206,8 @@ sub new_filehandle {
     $args{path} = $self->build_path($args{path});
     $self->set_filehandle( $args{filehandle} );
     $self->set_cache(0);
-    $self->set_cache_dir( $args{cache_dir} );
+    $self->init_cache(\%args);
+    #$self->set_cache_dir( $args{cache_dir} );
     $self->set_path( $args{path} );
     if (my $t = $self->from_cache()) {
         return $t;
@@ -237,7 +240,8 @@ sub new_scalar_ref {
     $args{scalarref} = $scalarref;
     $args{path} = $self->build_path($args{path});
     $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
-    $self->set_cache_dir( $args{cache_dir} );
+    $self->init_cache(\%args);
+    #$self->set_cache_dir( $args{cache_dir} );
     $self->set_scalar( $args{scalarref} );
     my $text = $self->get_scalar;
     my $md5  = md5($$text);
@@ -719,6 +723,23 @@ sub createFilename {
         D && $self->log( "file: " . File::Spec->catfile( $path, $filename ) );
         if ($path && @$path) {
             for ( @$path ) {
+                #if (ref $_) {
+                #    my $foo = basename $$_;
+                #    my ($dir, $f) = (dirname($$_), basename($$_));
+                #    my $found = 0;
+                #    while (defined $f) {
+                #        ($dir, $f) = (dirname($dir), basename($dir));
+                #        #sleep 1;
+                #        my $fp = File::Spec->catfile( $dir, $filename );
+                #        #warn __PACKAGE__.':'.__LINE__.": fp=$fp\n";
+                #        if (-f $fp) {
+                #            local $" = "\\";
+                #            $PATHS{"@$path"}->{$filename} = $fp;
+                #            return $fp;
+                #        }
+                #        last if $dir eq '.';
+                #    }
+                #}
                 my $fp = File::Spec->catfile( $_, $filename );
                 if (-f $fp) {
                     local $" = "\\";
@@ -760,12 +781,25 @@ sub _check_deprecated_args {
     }
 }
 
-sub init {
-    my ( $self, %args ) = @_;
+sub init_cache {
+    my ($self, $args) = @_;
+    if (exists $args->{cache_dir}) {
+        # will soon be deprecated
+        $args->{file_cache_dir} = $args->{cache_dir};
+        unless (exists $args->{file_cache}) {
+            # warn in future versions
+            $args->{file_cache} = 1;
+        }
+    }
+    $self->set_cache_dir($args->{file_cache_dir}) if $args->{file_cache};
     my $cachedir = $self->get_cache_dir;
-    if (defined $cachedir and not -d $cachedir) {
+    if ($args->{file_cache} and defined $cachedir and not -d $cachedir) {
         croak "Cachedir '$cachedir' does not exist";
     }
+}
+
+sub init {
+    my ( $self, %args ) = @_;
     my %defaults = (
 
         # defaults
@@ -979,8 +1013,11 @@ sub try_global {
 # end ugly code, phooey
 
 # returns if the var is valid
+# fix 2007-07-23: HTML::Template allows every character
+# although the documentation says it doesn't.
 sub validate_var {
-    return $_[1] !~ tr{a-zA-Z0-9._[]/#-}{}c;
+    return 1;
+    #return $_[1] !~ tr{a-zA-Z0-9._[]/#-}{}c;
 }
 
 sub escape_filename {
@@ -1337,7 +1374,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.86"
+$VERSION = "0.87"
 
 =cut
 
@@ -1394,20 +1431,21 @@ for what you need to know if you want (almost) the same behaviour). Internally
 it works different, because it turns the template into perl code,
 and once that is done, generating the output is much faster than with
 HTML::Template (3-7 times at the moment, depending on the options you use (see
-L<"Benchmarks"> for some examples), when both are run with loop_context_vars 0.
+L<"BENCHMARKS"> for some examples), when both are run with loop_context_vars 0.
 It also can generate perl files so that
 the next time the template is loaded it doesn't have to be parsed again. The best
 performance gain is probably reached in applications running under mod_perl, for example.
 
-If you don't use memory caching (e.g. CGI environment), HTC will be even
-slower than H::T.
-If you don't use caching at all (e.g. CGI environment without file caching),
-HTC will be much slower than H::T and TT.
+If you don't use any caching HTC will be very slow, slower than TT. Also
+with file caching but without memory caching it's the slowest templating
+module I know. With memory caching, though, it is one of the fastest,
+even faster sometimes (depending on options and template size) than
+C modules.
 
 You might want to use L<HTML::Template::Compiled::Lazy> for CGI environments
 as it doesn't parse the template before calling output. But note that HTC::Lazy
-is still in development; there might be bugs with certain combinations
-of includes and file caching.
+isn't much tested, and I don't use it myself, so there's a lack of experience.
+If you use it and have problems, please report.
 
 HTC will use a lot of memory because it keeps all template objects in memory.
 If you are on mod_perl, and have a lot of templates, you should preload them at server
@@ -1467,7 +1505,8 @@ use option case_sensitive => 0 to use this feature (slow down)
 
 =item C<query>
 
-Has a bug (doesn't return parameters in included files)
+Has a bug (doesn't return parameters in included files of included files).
+I'm working on that.
 
 =back
 
@@ -1480,6 +1519,10 @@ What can HTC do for you additionally to HTML::Template?
 =item TMPL_ELSIF
 
 No need to have cascading "if-else-if-else"s
+
+=item TMPL_EACH
+
+Iterate over a hash.
 
 =item TMPL_WITH
 
@@ -1634,6 +1677,10 @@ which is the default but depending on user wishes that might change.
 
 =head3 Different behaviour from HTML::Template
 
+=over 4
+
+=item Arrayrefs
+
 At the moment this snippet
 
   <tmpl_if arrayref>true<tmpl_else>false</tmpl_if arrayref>
@@ -1653,10 +1700,27 @@ As of L<HTML::Template::Compiled> 0.85 you can use this syntax:
 
 In L<HTML::Template::Compiled::Classic> 0.04 it works as in HTML::Template.
 
+=item Searching the path
+
+In HTML::Template, if you have a file a/b/c/d/template.html and in
+that template you do an include of include.html, and include.html
+is in /a/b/include.html, HTML::Template will find it. As this
+wasn't so clear to me when reading the docs, I implemented
+this differently. You'd either have to include ../../include.html,
+or you should set search_path_on_include to 1 and include a/b/include.html.
+
+If you really need this feature, write me. I'm still thinking of how
+I would implement this, and I don't like it much, because it
+seems to me like a global_vars for filenames, and I don't like
+global_vars =)
+
+=back
+
 =head2 ESCAPING
 
 Like in HTML::Template, you have C<ESCAPE=HTML>, C<ESCAPE=URL> and C<ESCAPE_JS>.
-(C<ESCAPE=1> won't follow!  It's old and ugly...)
+C<ESCAPE=HTML> will only escape '"&<>. If you want to escape more, use
+C<ESCAPE=HTML_ALL>.
 Additionally you have C<ESCAPE=DUMP>, which by default will generate a Data::Dumper output.
 
 You can also chain different escapings, like C<ESCAPE=DUMP|HTML>.
@@ -2025,9 +2089,19 @@ Path to template files
 Search the list of paths specified with C<path> when including a template.
 Default is 0
 
-=item cache_dir
+=item file_cache
+
+Set to 1 if you want to use file caching and specify the path
+with file_cache_dir.
+
+=item file_cache_dir
 
 Path to caching directory (you have to create it before)
+
+=item cache_dir
+
+Replaced by file_cache_dir like in L<HTML::Template>. Will be deprecated
+in future versions.
 
 =item cache
 

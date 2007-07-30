@@ -1,4 +1,5 @@
-package HTC_Utils;
+package # hide from cpan =)
+    HTC_Utils;
 use base 'Exporter';
 use File::Spec;
 @EXPORT_OK = qw($cache $tdir &cdir);

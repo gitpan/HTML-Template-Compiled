@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.65 2007/06/04 08:55:13 tinita Exp $
+# $Id: Compiler.pm,v 1.70 2007/07/30 20:15:00 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -38,11 +38,14 @@ use constant CLOSING_TAG   => 2;
 
 use constant ATTR_ESCAPES    => 0;
 use constant ATTR_TAGS       => 1;
+use constant ATTR_NAME_RE    => 2;
 
 sub set_escapes    { $_[0]->[ATTR_ESCAPES] = $_[1] }
 sub get_escapes    { $_[0]->[ATTR_ESCAPES] }
 sub set_tags       { $_[0]->[ATTR_TAGS] = $_[1] }
 sub get_tags       { $_[0]->[ATTR_TAGS] }
+sub set_name_re    { $_[0]->[ATTR_NAME_RE] = $_[1] }
+sub get_name_re    { $_[0]->[ATTR_NAME_RE] }
 
 sub delete_subs {
     # delete all userdefined subs
@@ -94,6 +97,11 @@ sub _escape_expression {
                 _expr_function( 'HTML::Template::Compiled::Utils::escape_html',
                 $exp, );
         }
+        elsif ( $_ eq 'HTML_ALL' ) {
+            $exp =
+                _expr_function( 'HTML::Template::Compiled::Utils::escape_html_all',
+                $exp, );
+        }
         elsif ( $_ eq 'URL' ) {
             $exp =
                 _expr_function( 'HTML::Template::Compiled::Utils::escape_uri',
@@ -114,6 +122,27 @@ sub _escape_expression {
     return $exp;
 } ## end sub _escape_expression
 
+sub init_name_re {
+    my ($self, %args) = @_;
+    my $re = qr#
+        \Q$args{deref}\E |
+        \Q$args{method_call}\E |
+        \Q$args{formatter_path}\E
+        #x;
+        $self->set_name_re($re);
+}
+
+my %loop_context = (
+    __index__   => '$__ix__',
+    __counter__ => '$__ix__+1',
+    __first__   => '$__ix__ == $[',
+    __last__    => '$__ix__ == $size',
+    __odd__     => '!($__ix__ & 1)',
+    __inner__   => '$__ix__ != $[ && $__ix__ != $size',
+    __key__     => '$__key__',
+    __value__   => '$__value__',
+);
+
 sub parse_var {
     my ( $self, $t, %args ) = @_;
     my $lexicals = $args{lexicals};
@@ -133,31 +162,24 @@ sub parse_var {
     if ( grep { defined $_ && $args{var} eq $_ } @$lexicals ) {
         return "\$$args{var}";
     }
+    my $lexi = join '|', grep defined, @$lexicals;
+    my $varstr = 'do {my $var = $$C; ';
+    my $re = $self->get_name_re;
+    #warn __PACKAGE__.':'.__LINE__.": ========== ($args{var})\n";
     my $root         = 0;
-    my %loop_context = (
-        __index__   => '$__ix__',
-        __counter__ => '$__ix__+1',
-        __first__   => '$__ix__ == $[',
-        __last__    => '$__ix__ == $size',
-        __odd__     => '!($__ix__ & 1)',
-        __inner__   => '$__ix__ != $[ && $__ix__ != $size',
-        __key__     => '$__key__',
-        __value__   => '$__value__',
-    );
+    my $up_stack = 0;
     if ( $t->get_loop_context && $args{var} =~ m/^__(\w+)__$/ ) {
         if (exists $loop_context{ lc $args{var} }) {
             my $lc = $loop_context{ lc $args{var} };
             return $lc;
         }
     }
-    my $re = qr#
-        \Q$args{deref}\E |
-        \Q$args{method_call}\E |
-        \Q$args{formatter_path}\E
-        #x;
-    my $up_stack = 0;
-    my $varstr = 'do {my $var = $$C; ';
-    if ( $args{var} =~ m/^_/ && $args{var} !~ m/^__(\w+)__$/ ) {
+    if ($lexi and $args{var} =~ s/^($lexi)($re)/$2/) {
+        my $name = $1;
+        $varstr .= "\$var = \$$name;";
+        #return "\$$args{var}";
+    }
+    elsif ( $args{var} =~ m/^_/ && $args{var} !~ m/^__(\w+)__$/ ) {
         $args{var} =~ s/^_//;
         $root = 0;
     }
@@ -201,7 +223,8 @@ EOM
     my @paths;
     #print STDERR "paths: (@split)\n";
     my $count = 0;
-    for my $p (@split) {
+    for my $i (0 .. $#split) {
+        my $p = $split[$i];
         $p =~ s#\\#\\\\#g;
         $p =~ s#'#\\'#g;
         next unless length $p;
@@ -318,20 +341,25 @@ EOM
     my @lexicals;
     my @switches;
     my $tags = $class->get_tags;
+        my $meth     = $self->method_call;
+        my $deref    = $self->deref;
+        my $format   = $self->formatter_path;
+    $class->init_name_re(
+        deref          => $deref,
+        method_call    => $meth,
+        formatter_path => $format,
+    );
+    my %var_args = (
+        deref          => $deref,
+        method_call    => $meth,
+        formatter_path => $format,
+        lexicals       => \@lexicals,
+    );
     for my $token (@p) {
         my ($text, $line, $open_close, $tname, $attr, $f, $nlevel) = @$token;
         #print STDERR "tags: ($text, $line, $open_close, $tname, $attr)\n";
         #print STDERR "p: '$text'\n";
         my $indent = INDENT x $nlevel;
-        my $meth     = $self->method_call;
-        my $deref    = $self->deref;
-        my $format   = $self->formatter_path;
-        my %var_args = (
-            deref          => $deref,
-            method_call    => $meth,
-            formatter_path => $format,
-            lexicals       => \@lexicals,
-        );
         if (!$token->is_tag) {
             if ( length $text ) {
                 # don't ask me about this line. i tried to get HTC
@@ -627,13 +655,17 @@ EOM
                 # generate included template
                 {
                     D && $self->log("compile include $filename!!");
-                    $fullpath = $self->createFilename( $path, $filename );
+                    #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\$self->get_file], ['file']);
+                    #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\$path], ['path']);
+                    #$fullpath = $self->createFilename( [@$path, \$self->get_file], $filename );
+                    $fullpath = $self->createFilename( [@$path], $filename );
                     my $recursed = ++$HTML::Template::Compiled::COMPILE_STACK{$fullpath};
                     #warn __PACKAGE__." fullpath $fullpath ($recursed)\n";
                     if ($recursed <= 1) {
                         my $cached_or_new;
                         $self->compile_early() and $cached_or_new
                             = $self->new_from_object(
+                                #[@$path, \$self->get_file], $filename, '', $self->get_cache_dir
                               $path, $filename, '', $self->get_cache_dir
                           );
                           #$fullpath = $cached_or_new->get_file;

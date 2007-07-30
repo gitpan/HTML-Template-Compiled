@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 13_loop.t,v 1.7 2007/03/01 22:54:39 tinita Exp $
+# $Id: 13_loop.t,v 1.8 2007/07/23 21:26:23 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 5;
@@ -12,14 +12,20 @@ BEGIN { use_ok('HTML::Template::Compiled') };
 <tmpl_loop array alias=iterator>
 <tmpl_var iterator>
 </tmpl_loop>
+<tmpl_loop array2 alias=iterator>
+<tmpl_var iterator.foo>
+</tmpl_loop>
 EOM
 		debug => 0,
         loop_context_vars => 1,
 	);
-	$htc->param(array => [qw(a b c)]);
+	$htc->param(
+        array => [qw(a b c)],
+        array2 => [{ foo => 'a' }, { foo => 'b' }, { foo => 'c' }],
+    );
 	my $out = $htc->output;
 	$out =~ s/\s+//g;
-	cmp_ok($out, "eq", "abc", "tmpl_loop array alias=iterator");
+	cmp_ok($out, "eq", "abcabc", "tmpl_loop array alias=iterator");
 	#print "out: $out\n";
 }
 my $text1 = <<'EOM';
