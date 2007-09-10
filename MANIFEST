@@ -34,6 +34,7 @@ examples/test.tt
 examples/test.tst
 examples/dhtml.html
 t/HTC_Utils.pm
+t/HTC_Plugin.pm
 t/01_HTML-Template-Compiled.t
 t/02_version.t
 t/03_param.t
@@ -63,6 +64,7 @@ t/28_perl.t
 t/29_encoding.t
 t/30_arrays.t
 t/31_recurse.t
+t/32_compile_plugin.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html

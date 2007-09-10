@@ -1,5 +1,14 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.88 Mon Sep 10 22:05:44 CEST 2007
+- Bugfix: file-caching and Storable need B::Deparse >= 0.61.
+  Checking for proper version now.
+- Fix: broken test
+- Bugfix: avoid warnings when using html escape
+- Bugfix: using more than one plugin
+  http://rt.cpan.org/Ticket/Display.html?id=28764
+- Bugfix Plugin::XMLEscape: use numeric entities
+
 0.87 Mon Jul 30 22:46:31 CEST 2007
 - Change: file-caching now stores as Storable. If you get problems
   with file-caching please report and set $HTML::Template::Compiled::Storable to 0

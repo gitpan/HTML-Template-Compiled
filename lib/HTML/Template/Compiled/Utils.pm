@@ -1,6 +1,6 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm,v 1.17 2007/07/17 20:08:42 tinita Exp $
-$VERSION = "0.04";
+# $Id: Utils.pm,v 1.19 2007/08/13 11:12:40 tinita Exp $
+$VERSION = "0.05";
 use strict;
 use warnings;
 use Data::Dumper qw(Dumper);
@@ -134,12 +134,13 @@ sub log {
 
   my $escaped_html = escape_html($raw_html);
 
-HTML-escapes the input string and returns it;
+HTML-escapes the input string (only &, ", single quotes, C<<> and C<>> and returns it;
 
 =cut
 
 sub escape_html {
     my ($str) = @_;
+    return $str unless defined $str;
     $str =~ s/&/&amp;/g;
     $str =~ s/"/&quot;/g;
     $str =~ s/'/&#39;/g;
@@ -150,13 +151,14 @@ sub escape_html {
 
 =head2 escape_html_all
 
-  my $escaped_html = escape_html($raw_html);
+  my $escaped_html = escape_html_all($raw_html);
 
-HTML-escapes the input string and returns it;
+HTML-escapes the input string (with HTML::Entities) and returns it;
 
 =cut
 
 sub escape_html_all {
+    return $_[0] unless defined $_[0];
     # hopefully encode_entities() works correct
     # and doesn't change its arg when called in scalar context
     return HTML::Entities::encode_entities($_[0]);

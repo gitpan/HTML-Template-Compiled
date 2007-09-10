@@ -1,12 +1,11 @@
 package HTML::Template::Compiled::Plugin::XMLEscape;
-# $Id: XMLEscape.pm,v 1.8 2006/10/07 20:01:46 tinita Exp $
+# $Id: XMLEscape.pm,v 1.10 2007/09/10 20:08:42 tinita Exp $
 use strict;
 use warnings;
 use Carp qw(croak carp);
-use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled;
 HTML::Template::Compiled->register(__PACKAGE__);
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 sub register {
     my ($class) = @_;
@@ -22,21 +21,21 @@ sub register {
 
 sub escape_xml {
     defined( my $escaped = $_[0] ) or return;
-    $escaped =~ s/&/&amp;/g;
-    $escaped =~ s/</&lt;/g;
-    $escaped =~ s/>/&gt;/g;
-    $escaped =~ s/"/&quot;/g;
-    $escaped =~ s/'/&apos;/g;
+    $escaped =~ s/&/&#x26;/g;
+    $escaped =~ s/</&#x3C;/g;
+    $escaped =~ s/>/&#x3E;/g;
+    $escaped =~ s/"/&#x22;/g;
+    $escaped =~ s/'/&#x27;/g;
     return $escaped;
 }
 
 sub escape_xml_attr {
     defined( my $escaped = $_[0] ) or return;
-    $escaped =~ s/&/&amp;/g;
-    $escaped =~ s/</&lt;/g;
-    $escaped =~ s/>/&gt;/g;
-    $escaped =~ s/"/&quot;/g;
-    $escaped =~ s/'/&apos;/g;
+    $escaped =~ s/&/&#x26;/g;
+    $escaped =~ s/</&#x3C;/g;
+    $escaped =~ s/>/&#x3E;/g;
+    $escaped =~ s/"/&#x22;/g;
+    $escaped =~ s/'/&#x27;/g;
     return $escaped;
 }
 

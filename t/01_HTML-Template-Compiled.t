@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t,v 1.20 2007/07/30 20:42:25 tinita Exp $
+# $Id: 01_HTML-Template-Compiled.t,v 1.21 2007/07/31 19:04:16 tinita Exp $
 
 use lib 'blib/lib';
 use Test::More tests => 6;
@@ -86,7 +86,7 @@ $DUMP = {
 'LINK' => 'http://...'
 };
 EOM
-	HTML::Entities::encode_entities($dump);
+    $dump = HTML::Template::Compiled::Utils::escape_html($dump);
 	my $exp = <<'EOM' . $dump . <<'EOM';
 /path/to/script.pl?lang=de
 Band: Bauhaus

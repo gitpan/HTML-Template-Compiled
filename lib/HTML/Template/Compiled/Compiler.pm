@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.70 2007/07/30 20:15:00 tinita Exp $
+# $Id: Compiler.pm,v 1.71 2007/08/13 11:50:02 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -43,6 +43,11 @@ use constant ATTR_NAME_RE    => 2;
 sub set_escapes    { $_[0]->[ATTR_ESCAPES] = $_[1] }
 sub get_escapes    { $_[0]->[ATTR_ESCAPES] }
 sub set_tags       { $_[0]->[ATTR_TAGS] = $_[1] }
+sub add_tags       {
+    for my $key (keys %{ $_[1] }) {
+        $_[0]->[ATTR_TAGS]->{$key} = $_[1]->{$key};
+    }
+}
 sub get_tags       { $_[0]->[ATTR_TAGS] }
 sub set_name_re    { $_[0]->[ATTR_NAME_RE] = $_[1] }
 sub get_name_re    { $_[0]->[ATTR_NAME_RE] }

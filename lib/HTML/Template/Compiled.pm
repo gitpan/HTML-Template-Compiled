@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.318 2007/07/30 20:42:25 tinita Exp $
+# $Id: Compiled.pm,v 1.324 2007/09/10 20:03:04 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.87";
+our $VERSION = "0.88";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -521,8 +521,8 @@ sub add_file_cache {
     my $lchecked = localtime $times{checked};
     my $cachefile = "$cache/$plfile";
     D && $self->log("add_file_cache() $cachefile");
-    if ($Storable) {
-        require Storable;
+    if ($Storable and require_storable()) {
+        #require Storable;
         local $Storable::Deparse = 1;
         my $clone = $self->clone;
         $clone->prepare_for_cache;
@@ -625,7 +625,7 @@ sub from_file_cache {
     D && $self->log("include file: $file");
 
     my $escaped = $self->escape_filename($file);
-    my $req     = File::Spec->catfile( $dir, "$escaped.".($Storable?"storable":"pl") );
+    my $req     = File::Spec->catfile( $dir, "$escaped.".($Storable && require_storable()?"storable":"pl") );
     return unless -f $req;
     return $self->include_file($req);
 }
@@ -635,8 +635,8 @@ sub include_file {
     D && $self->log("do $req");
     my $r;
     my $t;
-    if ($Storable) {
-        require Storable;
+    if ($Storable && require_storable()) {
+        #require Storable;
         local $Storable::Eval = 1;
         my $cache;
         eval {
@@ -872,9 +872,11 @@ sub init_plugins {
         if ($plug =~ m/^::/) {
             $plug = "HTML::Template::Compiled::Plugin$plug";
         }
-        eval "require $plug";
-        if ($@) {
-            carp "Could not load plugin $plug\n";
+        unless ($plug->can('register')) {
+            eval "require $plug";
+            if ($@) {
+                carp "Could not load plugin $plug\n";
+            }
         }
         my $actions = $self->get_plugin_actions($plug);
         if (my $tagnames = $actions->{tagnames}) {
@@ -884,7 +886,7 @@ sub init_plugins {
             $compiler->add_escapes($escape);
         }
         if (my $tags = $actions->{compile}) {
-            $compiler->set_tags($tags);
+            $compiler->add_tags($tags);
         }
     }
 }
@@ -1365,6 +1367,29 @@ sub popGlobalstack {
     }
 }
 
+
+{
+    my $loaded = 0;
+    my $error = 0;
+    sub require_storable {
+        return 1 if $loaded;
+        return 0 if $error;
+        eval {
+            require Storable;
+        };
+        if ($@) {
+            $error = 1;
+            return 0;
+        }
+        eval "use B::Deparse 0.61";
+        if ($@) {
+            $error = 1;
+            return 0;
+        }
+        return 1;
+    }
+}
+
 my $version_pod = <<'=cut';
 =pod
 
@@ -1374,7 +1399,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.87"
+$VERSION = "0.88"
 
 =cut
 
@@ -2615,8 +2640,8 @@ Bjoern Kriews for original idea and contributions
 
 Special Thanks to Sascha Kiefer - he finds all the bugs!
 
-Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Jan Willamowius, Justin Day
-for ideas, beta-testing and patches
+Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Jan Willamowius, Justin Day,
+Steffen Winkler for ideas, beta-testing and patches
 
 perlmonks.org and perl-community.de for everyday learning
 
