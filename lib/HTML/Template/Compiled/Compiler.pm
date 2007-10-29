@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.71 2007/08/13 11:50:02 tinita Exp $
+# $Id: Compiler.pm,v 1.72 2007/09/19 23:23:37 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -146,6 +146,7 @@ my %loop_context = (
     __inner__   => '$__ix__ != $[ && $__ix__ != $size',
     __key__     => '$__key__',
     __value__   => '$__value__',
+    __break__   => '$__break__',
 );
 
 sub parse_var {
@@ -334,7 +335,7 @@ sub compile {
     }
     my $header = <<"EOM";
 sub {
-    use vars qw(\$__ix__ \$__key__ \$__value__);
+    use vars qw(\$__ix__ \$__key__ \$__value__ \$__break__);
     use strict;
     no warnings;
 $anon
@@ -449,6 +450,13 @@ EOM
                 push @$info_stack, $info_stack->[-1]->{lc $var}->{children};
             }
             my $lexical = $attr->{ALIAS};
+            my $insert_break = '';
+            if (defined (my $break = $attr->{BREAK})) {
+                $break =~ tr/0-9//cd;
+                if ($break) {
+                    $insert_break = qq#local \$__break__ = ! ((\$__ix__+1 ) \% $break);#;
+                }
+            }
             push @lexicals, $lexical;
             my $pop_global = _expr_method(
                 'pushGlobalstack',
@@ -465,6 +473,7 @@ EOM
                 $code .= <<"EOM";
 $global
 ${indent}${indent}local \$__ix__ = -1;
+$insert_break
 ${indent}${ind}while (my \$next = $varstr) {
 ${indent}${indent}\$__ix__++;
 ${indent}${indent}my \$C = \\\$next;
@@ -474,8 +483,11 @@ EOM
             elsif ($tname eq T_EACH) {
                 $code .= <<"EOM";
 ${indent}if (UNIVERSAL::isa(my \$hash = $varstr, 'HASH') ) \{
+${indent}${indent}local \$__ix__ = -1;
 ${indent}${ind}local (\$__key__,\$__value__);
 ${indent}${ind}while ((\$__key__,\$__value__) = each %\$hash) \{
+${indent}${indent}\$__ix__++;
+$insert_break
 EOM
             }
             else {
@@ -501,6 +513,7 @@ $global
 ${indent}${ind}# loop over $var
 ${indent}${ind}for \$__ix__ (\$[..\$size + \$[) \{
 ${indent}${ind}${ind}my \$C = \\ (\$array->[\$__ix__]);
+$insert_break
 $lexi
 $join_code
 EOM

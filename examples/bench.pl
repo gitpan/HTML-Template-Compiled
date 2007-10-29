@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.23 2007/04/17 11:49:02 tinita Exp $
+# $Id: bench.pl,v 1.24 2007/10/27 10:23:34 tinita Exp $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -49,12 +49,14 @@ my $MEM_CACHE      = 1;
 my $LOOP_CONTEXT   = 1;
 my $GLOBAL_VARS    = 0;
 my $CASE_SENSITIVE = 1;
+my $default_escape = 0;
 GetOptions(
     "file-cache=i" => \$FILE_CACHE,
     "mem-cache=i" => \$MEM_CACHE,
     "loop-context=i" => \$LOOP_CONTEXT,
     "global-vars=i" => \$GLOBAL_VARS,
     "case-sensitive=i" => \$CASE_SENSITIVE,
+    "default-escape=i" => \$default_escape,
 );
 my $iterations = shift;
 
@@ -71,6 +73,7 @@ sub new_htc {
 		#path => 'examples',
 		case_sensitive => $CASE_SENSITIVE, # slow down
 		loop_context_vars => $LOOP_CONTEXT,
+        $default_escape ? (default_escape => 'HTML') : (),
 		debug => $debug,
 		# note that you have to create the cachedir
 		# first, otherwise it will run without cache
@@ -88,6 +91,7 @@ sub new_htcc {
 		#path => 'examples',
 		case_sensitive => $CASE_SENSITIVE, # slow down
 		loop_context_vars => $LOOP_CONTEXT,
+        $default_escape ? (default_escape => 'HTML') : (),
 		debug => $debug,
 		# note that you have to create the cachedir
 		# first, otherwise it will run without cache
@@ -114,6 +118,7 @@ sub new_htp {
 	my $t2 = HTML::Template::Pro->new(
 		case_sensitive => $CASE_SENSITIVE,
 		loop_context_vars => $LOOP_CONTEXT,
+        $default_escape ? (default_escape => 'HTML') : (),
 		#path => 'examples',
 		filename => $ht_file,
 #		cache => $MEM_CACHE,
@@ -130,6 +135,7 @@ sub new_ht {
 	my $t2 = HTML::Template->new(
 		case_sensitive => $CASE_SENSITIVE,
 		loop_context_vars => $LOOP_CONTEXT,
+        $default_escape ? (default_escape => 'HTML') : (),
 		#path => 'examples',
 		filename => $ht_file,
 		cache => $MEM_CACHE,
@@ -145,6 +151,7 @@ sub new_hte {
 	my $t2 = HTML::Template::Expr->new(
 		case_sensitive => $CASE_SENSITIVE,
 		loop_context_vars => $LOOP_CONTEXT,
+        $default_escape ? (default_escape => 'HTML') : (),
 		#path => 'examples',
 		filename => $ht_file,
 		cache => $MEM_CACHE,
@@ -160,6 +167,7 @@ sub new_htpl {
 	my $t2 = HTML::Template::Pluggable->new(
 		case_sensitive => $CASE_SENSITIVE,
 		loop_context_vars => $LOOP_CONTEXT,
+        $default_escape ? (default_escape => 'HTML') : (),
 		#path => 'examples',
 		filename => $ht_file,
 		cache => $MEM_CACHE,
@@ -175,6 +183,7 @@ sub new_htpl {
 sub new_htj {
 	my $t2 = HTML::Template::JIT->new(
 		loop_context_vars => 1,
+        $default_escape ? (default_escape => 'HTML') : (),
 		#path => 'examples',
 		filename => $ht_file,
 		cache => 1,

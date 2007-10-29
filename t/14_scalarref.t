@@ -1,9 +1,9 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 14_scalarref.t,v 1.3 2007/07/30 20:42:25 tinita Exp $
+# $Id: 14_scalarref.t,v 1.5 2007/09/20 12:52:20 tinita Exp $
 
 use lib 'blib/lib';
-use Test::More tests => 5;
+use Test::More tests => 6;
 use Data::Dumper;
 use File::Spec;
 use strict;
@@ -48,3 +48,21 @@ SKIP: {
 	ok($out eq 'a%20b%20c%20%26%20d'.$/, "arrayref output");
 }
 
+eval { require Encode };
+my $encode = $@ ? 0 : 1;
+SKIP: {
+    skip "no Encode.pm installed", 1 unless $INC{'Encode.pm'};
+    #use Devel::Peek;
+    my $string = "\x{263A} <%= foo %>";
+    #Dump $string;
+    my $htc = HTML::Template::Compiled->new(
+        scalarref => \$string,
+    );
+    $htc->param(foo => "\x{263A}");
+    my $out = $htc->output;
+    binmode STDOUT, ':utf8';
+    binmode STDERR, ':utf8';
+    #Dump $out;
+    #print $out, $/;
+    cmp_ok($out, 'eq', "\x{263A} \x{263A}", "scalarref with utf8");
+}

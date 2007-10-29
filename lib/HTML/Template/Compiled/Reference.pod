@@ -110,6 +110,15 @@ Can be used in C<LOOP> and C<WHILE>
 
 can be used in C<LOOP>
 
+=item BREAK
+
+    <%loop cds break="3" %>
+    <%= _.title%><%if __break__ %>\n</%if %>
+    <%/loop cds%>
+
+Sets C<__break__> to 1 every xth loop.
+Can be used in C<LOOP>, C<WHILE> and C<EACH>
+
 =back
 
 =cut

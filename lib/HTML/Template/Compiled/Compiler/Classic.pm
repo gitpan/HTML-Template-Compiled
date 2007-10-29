@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler::Classic;
-# $Id: Classic.pm,v 1.8 2006/10/11 20:52:50 tinita Exp $
+# $Id: Classic.pm,v 1.9 2007/09/19 23:23:38 tinita Exp $
 use strict;
 use warnings;
 our $VERSION = "0.01";
@@ -22,6 +22,7 @@ sub parse_var {
         __last__    => '$__ix__ == $size',
         __odd__     => '!($__ix__ & 1)',
         __inner__   => '$__ix__ != $[ && $__ix__ != $size',
+        __break__   => '$__break__',
     );
 
     if ( $t->get_loop_context && $args{var} =~ m/^__(\w+)__$/ ) {

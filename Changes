@@ -1,5 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.89
+- New Feature: BREAK attribute for loops (see docs)
+- Bugfix: utf8 in scalarrefs (thanks to Chris Hagglund)
+- Experimental feature: chomp newlines before/after tags. See docs.
+
 0.88 Mon Sep 10 22:05:44 CEST 2007
 - Bugfix: file-caching and Storable need B::Deparse >= 0.61.
   Checking for proper version now.

@@ -1,9 +1,9 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 13_loop.t,v 1.8 2007/07/23 21:26:23 tinita Exp $
+# $Id: 13_loop.t,v 1.9 2007/09/19 23:23:38 tinita Exp $
 
 use lib 'blib/lib';
-use Test::More tests => 5;
+use Test::More tests => 6;
 BEGIN { use_ok('HTML::Template::Compiled') };
 
 {
@@ -72,4 +72,22 @@ EOM
     $out =~ s/\s+\z//;
     #print $out, $/;
     cmp_ok($out, 'eq','a, b, c', "loop join attribute");
+}
+
+{
+    my $htc = HTML::Template::Compiled->new(
+        scalarref => \<<EOM,
+<%loop list break="3" %><%= _ %><%if __break__%>.<%/if %><%/loop list %>
+EOM
+        debug => 0,
+        loop_context_vars => 1,
+    );
+    $htc->param(
+        list => [qw(a b c d e f g h)]
+    );
+    my $out = $htc->output;
+    $out =~ s/^\s+//;
+    $out =~ s/\s+\z//;
+    #print $out, $/;
+    cmp_ok($out, 'eq','abc.def.gh', "loop break attribute");
 }

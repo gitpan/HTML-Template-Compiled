@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.324 2007/09/10 20:03:04 tinita Exp $
+# $Id: Compiled.pm,v 1.326 2007/10/09 21:15:41 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.88";
+our $VERSION = "0.89";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -1399,7 +1399,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.88"
+$VERSION = "0.89"
 
 =cut
 
@@ -1565,6 +1565,10 @@ see L<"TMPL_COMMENT">, L<"TMPL_NOPARSE">, L<"TMPL_VERBATIM">
 
 Additional loop variable (C<__counter__ -1>)
 
+=item C<__break__>
+
+Additional loop variable (see L<"TMPL_LOOP">)
+
 =item TMPL_SWITCH, TMPL_CASE
 
 see L<"TMPL_SWITCH">
@@ -1572,6 +1576,28 @@ see L<"TMPL_SWITCH">
 =item C<TMPL_PERL>
 
 Include perl code in your template. See L<"TMPL_PERL">
+
+=item Chomp
+
+Experimental feature, added in version 0.89. By using special tags the
+newlines before and/or after the tags will be deleted.
+I'm not sure about the syntax, so this might change. I'd be very glad about
+comments. Example:
+
+    my $htc = HTML::Template::Compiled->new(
+        ...
+        tagstyle => [qw/+asp_chomp/], # classic_chomp tt_chomp comment_chomp
+    );
+    template:
+    <+-%= foo %>
+    bar
+    <-+%= baz %>
+    is the same as
+    <%= foo %>bar<%= baz %>
+
+So C<+-> means, leave the newline in front alone, but chomp after it,
+C<-+> is the opposite, C<--> chomps both and C<++> is just a no-op and
+behaves like a normal tag.
 
 =item Generating perl code
 
@@ -2010,6 +2036,20 @@ This is easier than doing:
  <tmpl_unless __first__>, </tmpl_unless>
   <tmpl_var _ >
  </tmpl_loop>
+
+The C<LOOP>, C<WHILE> and C<EACH> tags allow you to define a BREAK attribute:
+
+ <tmpl_loop bingo break="3"> <tmpl_var _ ><if __break__>\n</if></tmpl_loop>
+
+    $htc->param(bingo => [qw(X 0 _ _ X 0 _ _ X)]);
+
+outputs
+
+    X 0 _
+    _ X 0
+    _ _ X
+
+So specifying BREAK=3 sets __break__ to 1 every 3rd loop iteration.
 
 =head2 TMPL_WHILE
 

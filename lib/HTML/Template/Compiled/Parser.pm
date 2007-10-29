@@ -1,11 +1,11 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.69 2007/07/17 19:12:50 tinita Exp $
+# $Id: Parser.pm,v 1.71 2007/10/09 18:24:59 tinita Exp $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
 use base qw(Exporter);
 use HTML::Template::Compiled::Token qw(:tagtypes);
-our $VERSION = 0.06;
+our $VERSION = 0.07;
 my @vars;
 BEGIN {
 @vars = qw(
@@ -82,19 +82,19 @@ sub add_tagnames {
 
 my $_default_tags = {
     classic => ['<TMPL_'      ,'>',     '</TMPL_',      '>',  ],
-    classic_chomp => ['<[+-][+-]TMPL_'      ,'>',     '</TMPL_',      '>',    1],
+    classic_chomp => ['<[+-][+-]TMPL_'      ,'>',     '<[+-][+-]/TMPL_',      '>',    1],
 
     comment => ['<!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->',],
     comment_chomp => ['<[+-][+-]!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->',1],
 
     asp     => ['<%'          ,'%>',    '<%/',          '%>',   ],
-    asp_chomp  => ['<[+-][+-]%'          ,'%>',    '<%/',          '%>', 1],
+    asp_chomp  => ['<[+-][+-]%'          ,'%>',    '<[+-][+-]%/',          '%>', 1],
 
     php     => ['<\?'         ,'\?>',    '<\?/',          '\?>', ],
-    php_chomp  => ['<[+-][+-]\?'         ,'\?>',    '<\?/',          '\?>', 1],
+    php_chomp  => ['<[+-][+-]\?'         ,'\?>',    '<[+-][+-]\?/',          '\?>', 1],
 
     tt      => ['\[%'         ,'%\]',   '\[%/',         '%\]'  , ],
-    tt_chomp   => ['\[[+-][+-]%'         ,'%\]',   '\[%/',         '%\]'  ,1 ],
+    tt_chomp   => ['\[[+-][+-]%'         ,'%\]',   '\[[+-][+-]%/',         '%\]'  ,1 ],
 };
 sub default_tags {
     return $_default_tags;
@@ -115,9 +115,9 @@ my %allowed_tagnames = (
         COMMENT     => [undef, qw(NAME)],
         VERBATIM    => [undef, qw(NAME)],
         NOPARSE     => [undef, qw(NAME)],
-        LOOP        => [$default_validation, qw(NAME ALIAS JOIN)],
-        WHILE       => [$default_validation, qw(NAME ALIAS)],
-        EACH        => [$default_validation, qw(NAME)],
+        LOOP        => [$default_validation, qw(NAME ALIAS JOIN BREAK)],
+        WHILE       => [$default_validation, qw(NAME ALIAS BREAK)],
+        EACH        => [$default_validation, qw(NAME BREAK)],
         SWITCH      => [$default_validation, qw(NAME)],
         CASE        => [undef, qw(NAME)],
         INCLUDE_VAR => [$default_validation, qw(NAME)],
@@ -205,12 +205,13 @@ sub find_start_of_tag {
                 $arg->{open_or_close} = $val->[0];
                 $arg->{chomp_find} = $arg->{chomp_map}->{$key};
                 if ($arg->{chomp_find}) {
-                    my ($c1, $c2) = $arg->{open} =~ m/([+-])([+-])/;
-                    if ($c1 eq '-') {
-                        $arg->{chomp} |= 1;
-                    }
-                    if ($c2 eq '-') {
-                        $arg->{chomp} |= 2;
+                    if (my ($c1, $c2) = $arg->{open} =~ m/([+-])([+-])/) {
+                        if ($c1 eq '-') {
+                            $arg->{chomp} |= 1;
+                        }
+                        if ($c2 eq '-') {
+                            $arg->{chomp} |= 2;
+                        }
                     }
                 }
                 #print STDERR "=== tag type $key, searching for $arg->{close_match}\n";

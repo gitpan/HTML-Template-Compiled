@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm,v 1.19 2007/08/13 11:12:40 tinita Exp $
+# $Id: Utils.pm,v 1.20 2007/09/20 12:40:50 tinita Exp $
 $VERSION = "0.05";
 use strict;
 use warnings;
@@ -72,9 +72,12 @@ otherwise returns the empty string.
 
 =cut
 
+eval { require Encode };
+my $encode = $@ ? 0 : 1;
 sub md5 {
     my ($text) = @_;
     if ($digest_md5) {
+        $encode and Encode::_utf8_off($text);
         return Digest::MD5::md5_base64($text);
     }
     return '';
@@ -172,8 +175,6 @@ URI-escapes the input string and returns it;
 
 =cut
 
-eval { require Encode };
-my $encode = $@ ? 0 : 1;
 sub escape_uri {
     # if we want to use utf8 we require Encode.pm to be installed
     my $x = ($encode and Encode::is_utf8($_[0]))
