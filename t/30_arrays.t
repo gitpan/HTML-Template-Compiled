@@ -1,9 +1,9 @@
-# $Id: 30_arrays.t,v 1.2 2007/04/15 14:22:15 tinita Exp $
+# $Id: 30_arrays.t,v 1.3 2007/11/14 22:35:56 tinita Exp $
 use warnings;
 use strict;
 use blib;
 use lib 't';
-use Test::More tests => 2;
+use Test::More tests => 5;
 use_ok('HTML::Template::Compiled');
 use HTC_Utils qw($cache $tdir &cdir);
 
@@ -12,6 +12,7 @@ use HTC_Utils qw($cache $tdir &cdir);
         scalarref => \<<'EOM',
 test <%= .array[0][0] %>
 Count outer:   <%= .array# %>
+Count undef:   <%= .undef# %>
 Count inner 1: <%= .array[0]# %>
 Count inner 2: <%= .array[1]# %>
 EOM
@@ -25,8 +26,11 @@ EOM
         ],
     );
     my $out = $htc->output;
-    print "out: $out\n";
-    cmp_ok($out, '=~', "Count outer: +2", "array count");
+    #print "out: $out\n";
+    cmp_ok($out, '=~', "Count outer: +2", "array count 1");
+    cmp_ok($out, '=~', "Count inner 1: +3", "array count 2");
+    cmp_ok($out, '=~', "Count inner 2: +4", "array count 3");
+    cmp_ok($out, '=~', "Count undef: +0", "undef array count");
 
 }
 

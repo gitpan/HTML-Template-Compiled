@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.72 2007/09/19 23:23:37 tinita Exp $
+# $Id: Compiler.pm,v 1.73 2007/11/12 22:57:19 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -239,7 +239,7 @@ EOM
             $varstr .= "\$var = \$var->[$1];\n";
         }
         elsif ( $p =~ s/^#$// ) {
-            $varstr .= "\$var = scalar \@{\$var};\n";
+            $varstr .= "\$var = scalar \@{\$var || []};\n";
         }
         elsif ( $p =~ s/^\Q$args{method_call}// ) {
             if ($count == 0 && $t->get_global_vars & 1) {

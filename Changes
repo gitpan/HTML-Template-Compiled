@@ -1,6 +1,12 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
-0.89
+0.90 Thu Nov 15 00:39:35 CET 2007
+- New Feature: use objects as plugins
+- New Feature: option open_mode (e.g. '<:utf8') (thanks to Moritz
+  Lenz and Chris Hagglund)
+- Fixed tests: permission problems on Win32
+
+0.89 Mon Oct 29 21:50:40 CET 2007
 - New Feature: BREAK attribute for loops (see docs)
 - Bugfix: utf8 in scalarrefs (thanks to Chris Hagglund)
 - Experimental feature: chomp newlines before/after tags. See docs.

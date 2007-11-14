@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.326 2007/10/09 21:15:41 tinita Exp $
+# $Id: Compiled.pm,v 1.330 2007/11/12 19:53:16 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.89";
+our $VERSION = "0.90";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -56,7 +56,7 @@ BEGIN {
           debug perl out_fh default_escape
           filter formatter
           globalstack use_query parser compiler includes
-          plugins
+          plugins open_mode
         )
     );
 
@@ -619,6 +619,14 @@ EOM
     $self->unlock;
 }
 
+sub get_plugin {
+    my ($self, $class) = @_;
+    for my $plug (@{ $self->get_plugins || [] }) {
+        return $plug if (ref $plug || $plug) eq $class;
+    }
+    return;
+}
+
 sub from_file_cache {
     my ($self, $dir, $file) = @_;
     D && $self->stack;
@@ -813,6 +821,7 @@ sub init {
         default_path           => PATH_DEREF,
         use_query              => $DEFAULT_QUERY,
         use_perl               => 0,
+        open_mode              => '',
         %args,
     );
     $self->set_loop_context(1) if $args{loop_context_vars};
@@ -820,6 +829,7 @@ sub init {
     $self->set_default_escape( $defaults{default_escape} );
     $self->set_default_path( $defaults{default_path} );
     $self->set_use_query( $defaults{use_query} );
+    $self->set_open_mode( $defaults{open_mode} );
     $self->set_search_path( $defaults{search_path_on_include} );
     $self->set_includes({});
     if ( $args{filter} ) {
@@ -869,7 +879,9 @@ sub init_plugins {
     my $parser = $self->get_parser;
     my $compiler = $self->get_compiler;
     for my $plug (@plugins) {
-        if ($plug =~ m/^::/) {
+        if (ref $plug) {
+        }
+        elsif ($plug =~ m/^::/) {
             $plug = "HTML::Template::Compiled::Plugin$plug";
         }
         unless ($plug->can('register')) {
@@ -899,20 +911,28 @@ sub init_plugins {
         $plugins = [$plugins] unless ref $plugins eq 'ARRAY';
         for my $plug (@$plugins) {
             my $actions = $plug->register;
-            $classes->{$plug} = $actions;
+            $classes->{ref $plug || $plug} = $actions;
         }
     }
 
     sub get_plugin_actions {
         my ($self, $pclass) = @_;
-        return $classes->{$pclass};
+        return $classes->{ref $pclass || $pclass};
     }
 }
     
 
 sub _readfile {
     my ( $self, $file ) = @_;
-    open my $fh, $file or die "Cannot open '$file': $!";
+    my $open_mode = $self->get_open_mode;
+    my $fh;
+    if ($] < 5.007001) {
+        open $fh, $file or die "Cannot open '$file': $!";
+    }
+    else {
+        $open_mode = '<' unless length $open_mode;
+        open $fh, $open_mode, $file or die "Cannot open '$file': $!";
+    }
     local $/;
     my $text = <$fh>;
     return $text;
@@ -1399,7 +1419,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.89"
+$VERSION = "0.90"
 
 =cut
 
@@ -1713,6 +1733,14 @@ default is now 0, like in HTML::Template. Set it to 1 by
 
 default is 0 (off). Set it via
     HTML::Template::Compiled->UseQuery(1);
+
+=item open_mode
+
+If you want to have your templates read in utf-8, use
+
+    open_mode => ':utf8',
+
+as an option.
 
 =back
 
@@ -2500,6 +2528,14 @@ cache directory. See L<"PRECOMPILE">.
 =item clear_params
 
 Empty all parameters.
+
+=item get_plugin
+
+    my $plugin = $htc->get_plugin('Name::of::plugin');
+
+Returns the plugin object of that classname. If the plugin is only a string
+(the classname itself), it returns this string, so this method is only
+useful for plugin objects.
 
 =back
 

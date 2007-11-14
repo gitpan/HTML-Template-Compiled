@@ -1,5 +1,6 @@
 use strict;
 use warnings;
+require 5.6.1;
 use Module::Build;
 
 my $build = Module::Build->new(
@@ -8,6 +9,7 @@ my $build = Module::Build->new(
     module_name        => 'HTML::Template::Compiled',
     dist_author        => 'Tina Mueller',
     requires => {
+        perl => '5.6.1',
         'Test::More'     => 0,
         'File::Spec'     => 0,
         'File::Basename' => 0,

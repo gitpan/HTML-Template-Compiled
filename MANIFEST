@@ -65,6 +65,7 @@ t/29_encoding.t
 t/30_arrays.t
 t/31_recurse.t
 t/32_compile_plugin.t
+t/33_plugins.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html
@@ -85,6 +86,5 @@ t/templates/query-test.tmpl
 t/templates/query-include.tmpl
 t/templates/query-test2.tmpl
 t/templates/include_perl.htc
-t/templates/utf8.htc
 t/templates/recurse.html
 META.yml                                 Module meta-data (added by MakeMaker)

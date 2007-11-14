@@ -1,4 +1,4 @@
-# $Id: 05_filter.t,v 1.8 2007/07/30 20:42:25 tinita Exp $
+# $Id: 05_filter.t,v 1.9 2007/11/04 21:00:19 tinita Exp $
 use lib 'blib/lib';
 use Test::More tests => 4;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -22,8 +22,12 @@ test($filters, 3);
 sub test {
 	my ($f, $i) = @_;
 	# test filter
-    utime(time, time, 't/templates/filter.htc') or die $!;
-    utime(time, time, 't/templates/filter_included.htc');
+    my $f1 = File::Spec->catfile(qw/ t templates filter.htc /);
+    my $f2 = File::Spec->catfile(qw/ t templates filter_included.htc /);
+    chmod 0644, $f1;
+    chmod 0644, $f2;
+    utime(time, time, $f1) or die $!;
+    utime(time, time, $f2) or die $!;
     sleep 1;
 	my $htc = HTML::Template::Compiled->new(
 		path => 't/templates',

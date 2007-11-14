@@ -1,4 +1,4 @@
-# $Id: 19_query.t,v 1.9 2007/07/30 20:42:25 tinita Exp $
+# $Id: 19_query.t,v 1.10 2007/11/04 21:00:19 tinita Exp $
 use warnings;
 use strict;
 use lib 'blib/lib';
@@ -15,6 +15,7 @@ use Fcntl qw(:seek);
 my $file_orig = File::Spec->catfile(qw(t templates query-test.tmpl));
 my $file_copy = File::Spec->catfile(qw(t templates query-test-copy.tmpl));
 copy($file_orig, $file_copy);
+chmod 0644, $file_copy;
 my $ok1 = query_template();
 ok($ok1, "query 1");
 #print `ls t/cache`;
