@@ -1,4 +1,4 @@
-# $Id: 29_encoding.t,v 1.4 2007/11/12 19:41:41 tinita Exp $
+# $Id: 29_encoding.t,v 1.5 2008/01/24 20:27:44 tinita Exp $
 use warnings;
 use strict;
 use blib;
@@ -39,9 +39,14 @@ EOM
         utf8 => $u,
     );
     my $out = $htc->output;
+    my $test = "\x{f6}";
+    #Dump $test;
+    $test = Encode::encode('utf-8', $test);
+    #Dump $test;
+    Encode::_utf8_on($test);
     #print "out: $out\n";
     #Dump $out;
-    cmp_ok($out, '=~', qr{\x{f6}.*%C3%A4.*&auml;}is, "uri_escape_utf8");
+    cmp_ok($out, '=~', qr{$test.*%C3%A4.*&auml;}is, "uri_escape_utf8");
     unlink $template;
 }
 

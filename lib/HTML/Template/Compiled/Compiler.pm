@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.73 2007/11/12 22:57:19 tinita Exp $
+# $Id: Compiler.pm,v 1.74 2007/11/18 16:54:19 tinita Exp $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -812,7 +812,7 @@ EOM
 
     }
     if ($self->get_use_query) {
-        $self->set_use_query($info);
+        $self->set_parse_tree($info);
     }
     #warn Data::Dumper->Dump([\$info], ['info']);
     $code .= qq#return \$OUT;\n#;

@@ -1,4 +1,4 @@
-# $Id: 19_query.t,v 1.10 2007/11/04 21:00:19 tinita Exp $
+# $Id: 19_query.t,v 1.11 2008/01/24 20:32:28 tinita Exp $
 use warnings;
 use strict;
 use lib 'blib/lib';
@@ -21,7 +21,7 @@ ok($ok1, "query 1");
 #print `ls t/cache`;
 
 
-{
+if (1) {
     my $htc = HTML::Template::Compiled::Lazy->new(
         scalarref => \"<%= foo%>",
         use_query => 1,
@@ -45,6 +45,7 @@ sleep 3;
 }
 my $ok2 = query_template();
 ok(!$ok2, "query 2");
+#exit;
 
 sub query_template {
     local $HTML::Template::Compiled::DEFAULT_QUERY = 1;
@@ -68,6 +69,7 @@ sub query_template {
     $@ =~ /error/ and
     $template->query(name => 'var') eq 'VAR' and
     $template->query(name => 'included_var') eq 'VAR' and
+    #$template->query(name => 'included_var2') eq 'VAR' and
        $template->query(name => 'EXAMPLE_LOOP') eq 'LOOP' and
        exists $params{bee} and
        exists $params{bop} and

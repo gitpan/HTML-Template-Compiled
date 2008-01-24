@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-require 5.6.1;
+require 5.006001;
 use Module::Build;
 
 my $build = Module::Build->new(
@@ -15,7 +15,10 @@ my $build = Module::Build->new(
         'File::Basename' => 0,
         Carp             => 0,
     },
-    recommends         => {},
+    recommends         => {
+        'HTML::Entities' => 0,
+        'URI::Escape' => 0,
+    },
     create_readme      => 0,
     sign               => 0,
 );

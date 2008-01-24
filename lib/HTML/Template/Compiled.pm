@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.330 2007/11/12 19:53:16 tinita Exp $
+# $Id: Compiled.pm,v 1.334 2008/01/24 20:28:35 tinita Exp $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.90";
+our $VERSION = "0.91";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -55,7 +55,7 @@ BEGIN {
           default_path
           debug perl out_fh default_escape
           filter formatter
-          globalstack use_query parser compiler includes
+          globalstack use_query parse_tree parser compiler includes
           plugins open_mode
         )
     );
@@ -546,7 +546,7 @@ sub add_file_cache {
       . ( join ', ', map { $self->quote_file($_) } @$path )
       . ']';
     my $isScalar = $self->get_scalar ? 1 : 0;
-    my $query_info = $self->get_use_query;
+    my $query_info = $self->get_parse_tree;
     $query_info = Data::Dumper->Dump([$query_info], ['query_info']);
     my $parser =$self->get_parser;
     $parser = Data::Dumper->Dump([\$parser], ['parser']);
@@ -829,6 +829,9 @@ sub init {
     $self->set_default_escape( $defaults{default_escape} );
     $self->set_default_path( $defaults{default_path} );
     $self->set_use_query( $defaults{use_query} );
+    if ($defaults{open_mode}) {
+        $defaults{open_mode} =~ s/^[<>]//; # <:utf8
+    }
     $self->set_open_mode( $defaults{open_mode} );
     $self->set_search_path( $defaults{search_path_on_include} );
     $self->set_includes({});
@@ -930,8 +933,8 @@ sub _readfile {
         open $fh, $file or die "Cannot open '$file': $!";
     }
     else {
-        $open_mode = '<' unless length $open_mode;
-        open $fh, $open_mode, $file or die "Cannot open '$file': $!";
+        $open_mode = '' unless length $open_mode;
+        open $fh, "<$open_mode", $file or die "Cannot open '$file': $!";
     }
     local $/;
     my $text = <$fh>;
@@ -1202,7 +1205,7 @@ sub query {
     # use query-like behaviour.
     return unless defined wantarray();
     #print STDERR "query(@_)\n";
-    my $info = $self->get_use_query
+    my $info = $self->get_parse_tree
         or do {
             $self->_error_no_query();
             return;
@@ -1217,7 +1220,7 @@ sub query {
     $tags = [$tags] unless ref $tags eq 'ARRAY';
     my $includes = $self->get_includes;
     my %include_info = map {
-        $includes->{$_}->[1] => $includes->{$_}->[2]->get_use_query;
+        $includes->{$_}->[1] => $includes->{$_}->[2]->get_parse_tree;
     } keys %{ $includes };
     for my $tag (@$tags) {
         my $value;
@@ -1419,7 +1422,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.90"
+$VERSION = "0.91"
 
 =cut
 
@@ -1741,6 +1744,8 @@ If you want to have your templates read in utf-8, use
     open_mode => ':utf8',
 
 as an option.
+
+In the previous version, it was '<:utf8'. This is deprecated.
 
 =back
 

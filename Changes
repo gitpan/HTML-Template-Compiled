@@ -1,5 +1,9 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.91 Thu Jan 24 21:50:20 CET 2008
+- Fixed tests: utf8 problems with perl 5.8.[0-7]
+- Change: open_mode without leading '<'
+
 0.90 Thu Nov 15 00:39:35 CET 2007
 - New Feature: use objects as plugins
 - New Feature: option open_mode (e.g. '<:utf8') (thanks to Moritz
