@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Filter;
-# $Id: Filter.pm,v 1.4 2005/10/03 21:43:49 tinita Exp $
+# $Id: Filter.pm 125 2005-10-03 21:43:49Z tinita $
 $VERSION = "0.03";
 use strict;
 use warnings;

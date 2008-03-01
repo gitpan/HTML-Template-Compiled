@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm,v 1.74 2007/11/18 16:54:19 tinita Exp $
+# $Id: Compiler.pm 1016 2008-03-01 01:31:28Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -147,6 +147,8 @@ my %loop_context = (
     __key__     => '$__key__',
     __value__   => '$__value__',
     __break__   => '$__break__',
+    __filename__ => '$t->get_file',
+    __filenameshort__ => '$t->get_filename',
 );
 
 sub parse_var {
@@ -229,6 +231,8 @@ EOM
     my @paths;
     #print STDERR "paths: (@split)\n";
     my $count = 0;
+    my $use_objects = $t->get_objects;
+    my $strict = $use_objects eq 'strict' ? 1 : 0;
     for my $i (0 .. $#split) {
         my $p = $split[$i];
         $p =~ s#\\#\\\\#g;
@@ -236,21 +240,31 @@ EOM
         next unless length $p;
         #print STDERR "path: $p\n";
         if ( $p =~ s/^\[(-?\d+)\]$/$1/ ) {
+            # array inde
             $varstr .= "\$var = \$var->[$1];\n";
         }
         elsif ( $p =~ s/^#$// ) {
+            # number of elements
             $varstr .= "\$var = scalar \@{\$var || []};\n";
         }
-        elsif ( $p =~ s/^\Q$args{method_call}// ) {
+        elsif ( $use_objects and $p =~ s/^\Q$args{method_call}// ) {
             if ($count == 0 && $t->get_global_vars & 1) {
                 $varstr .= "\$var = \$t->try_global(\$var, '$p');\n";
             }
             else {
                 my $path = $t->get_case_sensitive ? $p : uc $p;
+                # valid method name?
                 if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
-                    $varstr .= <<"EOM";
+                    if ($strict) {
+                        $varstr .= <<"EOM";
 \$var = UNIVERSAL::can(\$var,'can') ? \$var->$p() : \$var->\{'$path'\};
 EOM
+                    }
+                    else {
+                        $varstr .= <<"EOM";
+\$var = (Scalar::Util::blessed(\$var) and \$var->can('$p')) ? \$var->$p() : undef;
+EOM
+                    }
                 }
                 else {
                     $varstr .= <<"EOM";
@@ -290,10 +304,18 @@ EOM
             }
             else {
                 my $path = $t->get_case_sensitive ? $p : uc $p;
+                # valid method name?
                 if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
-                    $varstr .= <<"EOM";
+                    if ($strict) {
+                        $varstr .= <<"EOM";
 \$var = UNIVERSAL::can(\$var,'can') ? \$var->$p() : \$var->\{'$path'\};
 EOM
+                    }
+                    else {
+                        $varstr .= <<"EOM";
+\$var = (Scalar::Util::blessed(\$var) and \$var->can('$p')) ? \$var->$p() : undef;
+EOM
+                    }
                 }
                 else {
                     $varstr .= <<"EOM";
@@ -319,6 +341,23 @@ sub compile {
     }
     my $parser = $self->get_parser;
     my @p = $parser->parse($fname, $text);
+    if (my $df = $self->get_debug_file) {
+        my $debugfile = $df =~ m/short/ ? $self->get_filename : $self->get_file;
+        if ($df =~ m/start/) {
+            unshift @p, 
+            HTML::Template::Compiled::Token::Text->new([
+                '<!-- start ' . $debugfile . ' -->', 0,
+                undef, undef, undef, $self->get_file, 0
+            ]);
+        }
+        if ($df =~ m/end/) {
+            push @p, 
+            HTML::Template::Compiled::Token::Text->new([
+                '<!-- end ' . $debugfile . ' -->', 0,
+                undef, undef, undef, $self->get_file, 0
+            ]);
+        }
+    }
     my $code  = '';
     my $info = {}; # for query()
     my $info_stack = [$info];

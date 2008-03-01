@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Formatter;
-# $Id: Formatter.pm,v 1.2 2006/10/11 21:52:24 tinita Exp $
+# $Id: Formatter.pm 750 2006-10-11 21:52:24Z tinita $
 use strict;
 use warnings;
 our $VERSION = "0.01";

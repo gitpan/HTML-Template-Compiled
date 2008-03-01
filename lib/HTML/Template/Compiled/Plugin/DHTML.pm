@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Plugin::DHTML;
-# $Id: DHTML.pm,v 1.3 2006/11/20 19:02:33 tinita Exp $
+# $Id: DHTML.pm 854 2006-11-20 19:02:33Z tinita $
 use strict;
 use warnings;
 our $VERSION = "0.02";

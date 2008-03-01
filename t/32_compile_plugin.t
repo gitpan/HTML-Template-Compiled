@@ -1,4 +1,4 @@
-# $Id: 32_compile_plugin.t,v 1.2 2007/08/13 12:30:10 tinita Exp $
+# $Id: 32_compile_plugin.t 966 2007-08-13 12:30:10Z tinita $
 use warnings;
 use strict;
 use blib;

@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 15_comment.t,v 1.6 2007/02/11 12:38:35 tinita Exp $
+# $Id: 15_comment.t 895 2007-02-11 12:38:35Z tinita $
 
 use lib 'blib/lib';
 use Test::More tests => 4;

@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm,v 1.334 2008/01/24 20:28:35 tinita Exp $
+# $Id: Compiled.pm 1018 2008-03-01 01:34:49Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.91";
+our $VERSION = "0.91_001";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -53,7 +53,7 @@ BEGIN {
           file_cache cache_dir cache search_path
           loop_context case_sensitive global_vars
           default_path
-          debug perl out_fh default_escape
+          debug debug_file objects perl out_fh default_escape
           filter formatter
           globalstack use_query parse_tree parser compiler includes
           plugins open_mode
@@ -561,6 +561,10 @@ sub add_file_cache {
     #$includes_to_string =~ s/\$includes = //;
     my $search_path = $self->get_search_path || 0;
     my $gl = $self->get_global_vars;
+    my $debug_file = $self->get_debug_file;
+    $debug_file =~ tr/a-z0,//cd;
+    my $use_objects = $self->get_objects;
+    $use_objects =~ tr/a-z0//cd;
     my $plugins = $self->get_plugins;
     my $plugin_dump = Data::Dumper->Dump([\@$plugins], ['plugin_dump']);
     my $file_args = $isScalar
@@ -603,6 +607,8 @@ $file_args
     use_query => \$query_info,
     parser => \$parser,
     global_vars => $gl,
+    debug_file => '$debug_file',
+    objects => '$use_objects',
     includes => \$includes,
     search_path_on_include => $search_path,
     plugin => \$plugin_dump,
@@ -815,6 +821,8 @@ sub init {
         loop_context_vars      => 0,
         case_sensitive         => $CASE_SENSITIVE_DEFAULT,
         debug                  => $DEBUG_DEFAULT,
+        debug_file             => 0,
+        objects                => 'strict',
         out_fh                 => 0,
         global_vars            => 0,
         default_escape         => $DEFAULT_ESCAPE,
@@ -841,6 +849,11 @@ sub init {
             HTML::Template::Compiled::Filter->new( $args{filter} ) );
     }
     $self->set_debug( $defaults{debug} );
+    $self->set_debug_file( $defaults{debug_file} );
+    $self->set_objects( $defaults{objects} );
+    if ($defaults{objects} and $defaults{objects} eq 'nostrict') {
+        require Scalar::Util;
+    }
     $self->set_out_fh( $defaults{out_fh} );
     $self->set_global_vars( $defaults{global_vars} );
     my $tagstyle = $args{tagstyle};
@@ -1422,7 +1435,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.91"
+$VERSION = "0.91_001"
 
 =cut
 
@@ -1591,6 +1604,19 @@ Additional loop variable (C<__counter__ -1>)
 =item C<__break__>
 
 Additional loop variable (see L<"TMPL_LOOP">)
+
+=item C<__filename__>, C<__filenameshort__> (since 0.91_001)
+
+Insert the template filename for debugging:
+
+    <%= __filename__ %>
+    <%= __filenameshort__ %>
+
+will turn out as:
+    templates/path/file.html
+    path/file.html
+
+See also option debug_file in L<"OPTIONS"> for adding the filename globally.
 
 =item TMPL_SWITCH, TMPL_CASE
 
@@ -2267,6 +2293,36 @@ browse through the stack.
 
 Now everything will be escaped for HTML unless you explicitly specify C<ESCAPE=0> (no escaping)
 or C<ESCAPE=URL>.
+
+=item debug_file (fixed) (since 0.91_001)
+
+Additionally to the context_vars __filename__ and __filenameshort__ you
+can enable filename debugging globally.
+
+If the option is set to 'start', at the start of every template will be added:
+    <!-- start templates/path/filename.html -->
+
+If set to 'end', at the end will be added:
+    <!-- end templates/path/filename.html -->
+
+If set to 'start,end', both coments will be added.
+
+If set to 'start,short', 'end,short' or 'start,end,short' the path
+to the templates will be stripped:
+    <!-- start path/filename.html -->
+    <!-- end path/filename.html -->
+
+=item objects (fixed) (since 0.91_001)
+
+if set to true, you can use method calls like
+    <%= object.method %>
+
+Default is 'strict' (true).
+If set to 'strict', the method will be called if we have an object, otherwise
+it's treated as a hash lookup. If the method doesn't exist, it dies.
+If set to 'nostrict', the method will be called only if the object 'can' do the
+method, otherwise it will return undef (this will need Scalar::Util).
+If set to 0, no method calls are allowed.
 
 =item deref (fixed)
 

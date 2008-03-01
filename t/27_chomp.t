@@ -1,4 +1,4 @@
-# $Id: 27_chomp.t,v 1.3 2007/10/09 18:24:59 tinita Exp $
+# $Id: 27_chomp.t 977 2007-10-09 18:24:59Z tinita $
 use warnings;
 use strict;
 use blib;

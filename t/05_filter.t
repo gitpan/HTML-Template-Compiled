@@ -1,4 +1,4 @@
-# $Id: 05_filter.t,v 1.9 2007/11/04 21:00:19 tinita Exp $
+# $Id: 05_filter.t 984 2007-11-04 21:00:19Z tinita $
 use lib 'blib/lib';
 use Test::More tests => 4;
 BEGIN { use_ok('HTML::Template::Compiled') };

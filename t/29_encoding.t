@@ -1,4 +1,4 @@
-# $Id: 29_encoding.t,v 1.5 2008/01/24 20:27:44 tinita Exp $
+# $Id: 29_encoding.t 1000 2008-01-24 20:27:44Z tinita $
 use warnings;
 use strict;
 use blib;

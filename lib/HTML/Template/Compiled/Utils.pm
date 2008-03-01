@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm,v 1.20 2007/09/20 12:40:50 tinita Exp $
+# $Id: Utils.pm 973 2007-09-20 12:40:50Z tinita $
 $VERSION = "0.05";
 use strict;
 use warnings;

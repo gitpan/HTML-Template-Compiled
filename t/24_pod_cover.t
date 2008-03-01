@@ -1,4 +1,4 @@
-# $Id: 24_pod_cover.t,v 1.5 2006/10/02 16:09:19 tinita Exp $
+# $Id: 24_pod_cover.t 668 2006-10-02 16:09:19Z tinita $
 use blib; # for development
 
 use Test::More;

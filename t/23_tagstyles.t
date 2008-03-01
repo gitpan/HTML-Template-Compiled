@@ -1,4 +1,4 @@
-# $Id: 23_tagstyles.t,v 1.1 2006/07/02 21:53:13 tinita Exp $
+# $Id: 23_tagstyles.t 435 2006-07-02 21:53:13Z tinita $
 use warnings;
 use strict;
 use lib qw(blib/lib t);

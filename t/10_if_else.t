@@ -1,4 +1,4 @@
-# $Id: 10_if_else.t,v 1.4 2006/06/07 20:54:29 tinita Exp $
+# $Id: 10_if_else.t 1008 2008-02-25 19:21:27Z tinita $
 use lib 'blib/lib';
 use Test::More tests => 3;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -15,6 +15,7 @@ sub test_defined {
 <tmpl_if_defined undef>WRONG<tmpl_elsif undef>WRONG<tmpl_else>RIGHT</tmpl_if>
 <tmpl_if_defined zero>RIGHT<tmpl_elsif zero>WRONG<tmpl_else>RIGHT</tmpl_if>
 <tmpl_if_defined true>RIGHT<tmpl_elsif true>RIGHT<tmpl_else>WRONG</tmpl_if>
+<tmpl_if_defined true>RIGHT</tmpl_if>
 EOM
 	my $htc = HTML::Template::Compiled->new(
 		path => 't/templates',
@@ -27,10 +28,10 @@ EOM
 		'true' => 'a true value',
 	);
 	my $out = $htc->output;
-	#print $out;
+    #print $out;
 	my @right = $out =~ m/RIGHT/g;
 	my @wrong = $out =~ m/WRONG/g;
-	ok(@right == 3 && @wrong == 0, "if defined");
+	ok(@right == 4 && @wrong == 0, "if defined");
 }
 
 sub test_double_else {

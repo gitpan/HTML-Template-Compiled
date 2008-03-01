@@ -30,9 +30,9 @@ conditions like in Perl
 
 for-loop and while-loop like in Perl.
 
-    <%loop cds%><%= __count__%>. Title: <%= _.title%><%/loop cds%>
+    <%loop cds%><%= __counter__%>. Title: <%= _.title%><%/loop cds%>
     <%loop cds join=", " %><%= _.title%><%/loop cds%>
-    <%while resultset.next%><%= __count__%>. <%= _.foo %><%/while %>
+    <%while resultset.next%><%= __counter__%>. <%= _.foo %><%/while %>
     <%each hashref%><%= __key__ %>=<%= __value__ %><%/each %>
 
 =item WITH
@@ -118,6 +118,26 @@ can be used in C<LOOP>
 
 Sets C<__break__> to 1 every xth loop.
 Can be used in C<LOOP>, C<WHILE> and C<EACH>
+
+=back
+
+=head1 OPTIONS
+
+=over 4
+
+=item (loop)_context_vars
+
+    <%= __index__         %> the current loop index starting at 0
+    <%= __counter__       %> the current loop index starting at 1
+    <%= __first__         %> true if first iteration
+    <%= __last__          %> true if last iteration
+    <%= __odd__           %> true if __counter__ is odd
+    <%= __inner__         %> true if not last or first iteration
+    <%= __key__           %> the key of an EACH iteration
+    <%= __value__         %> the value of an EACH iteration
+    <%= __break__         %> see L<"BREAK"> above
+    <%= __filename__      %> filename of current template (since 0.91_001)
+    <%= __filenameshort__ %> short filename of current template (since 0.91_001)
 
 =back
 

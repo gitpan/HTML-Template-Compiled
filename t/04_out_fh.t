@@ -1,4 +1,4 @@
-# $Id: 04_out_fh.t,v 1.6 2007/07/30 20:42:25 tinita Exp $
+# $Id: 04_out_fh.t 952 2007-07-30 20:42:25Z tinita $
 use lib 'blib/lib';
 use Test::More tests => 5;
 BEGIN { use_ok('HTML::Template::Compiled') };

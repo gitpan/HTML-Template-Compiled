@@ -1,8 +1,8 @@
 package HTML::Template::Compiled::Compiler::Classic;
-# $Id: Classic.pm,v 1.9 2007/09/19 23:23:38 tinita Exp $
+# $Id: Classic.pm 1011 2008-03-01 00:04:51Z tinita $
 use strict;
 use warnings;
-our $VERSION = "0.01";
+our $VERSION = "0.02";
 
 use base 'HTML::Template::Compiled::Compiler';
 
@@ -23,6 +23,8 @@ sub parse_var {
         __odd__     => '!($__ix__ & 1)',
         __inner__   => '$__ix__ != $[ && $__ix__ != $size',
         __break__   => '$__break__',
+        __filename__ => '$t->get_file',
+        __filenameshort__ => '$t->get_filename',
     );
 
     if ( $t->get_loop_context && $args{var} =~ m/^__(\w+)__$/ ) {

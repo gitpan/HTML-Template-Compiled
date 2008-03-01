@@ -1,11 +1,11 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm,v 1.71 2007/10/09 18:24:59 tinita Exp $
+# $Id: Parser.pm 1008 2008-02-25 19:21:27Z tinita $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
 use base qw(Exporter);
 use HTML::Template::Compiled::Token qw(:tagtypes);
-our $VERSION = 0.07;
+our $VERSION = 0.08;
 my @vars;
 BEGIN {
 @vars = qw(
@@ -587,7 +587,7 @@ sub find_attribute {
         T_CASE()   => [T_SWITCH],
     };
     $map[CLOSING_TAG] = {
-        IF         => [ T_IF, T_UNLESS, T_ELSE ],
+        IF         => [ T_IF, T_UNLESS, T_ELSE, T_IF_DEFINED ],
         UNLESS     => [T_UNLESS, T_ELSE, T_IF_DEFINED],
         ELSIF      => [ T_IF, T_UNLESS, T_IF_DEFINED ],
         LOOP       => [T_LOOP],

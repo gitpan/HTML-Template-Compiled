@@ -1,4 +1,4 @@
-# $Id: 21_while.t,v 1.4 2006/11/20 18:55:16 tinita Exp $
+# $Id: 21_while.t 852 2006-11-20 18:55:16Z tinita $
 use warnings;
 use strict;
 use lib qw(blib/lib t);

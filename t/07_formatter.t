@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 07_formatter.t,v 1.3 2006/10/11 21:52:50 tinita Exp $
+# $Id: 07_formatter.t 751 2006-10-11 21:52:50Z tinita $
 
 use lib 'blib/lib';
 use Test::More tests => 2;

@@ -1,4 +1,4 @@
-# $Id: 19_query.t,v 1.11 2008/01/24 20:32:28 tinita Exp $
+# $Id: 19_query.t 1003 2008-01-24 20:32:28Z tinita $
 use warnings;
 use strict;
 use lib 'blib/lib';

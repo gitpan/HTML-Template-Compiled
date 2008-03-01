@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Lazy;
-# $Id: Lazy.pm,v 1.4 2006/10/04 20:29:26 tinita Exp $
+# $Id: Lazy.pm 693 2006-10-04 20:29:26Z tinita $
 use strict;
 use warnings;
 our $VERSION = "0.01";

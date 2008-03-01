@@ -1,4 +1,4 @@
-# $Id: 20_precompile.t,v 1.2 2007/07/30 20:42:25 tinita Exp $
+# $Id: 20_precompile.t 952 2007-07-30 20:42:25Z tinita $
 use warnings;
 use strict;
 use lib qw(blib/lib t);

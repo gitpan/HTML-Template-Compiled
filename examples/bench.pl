@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl,v 1.24 2007/10/27 10:23:34 tinita Exp $
+# $Id: bench.pl 1007 2008-02-15 13:47:49Z tinita $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -22,13 +22,14 @@ mkdir "cache/htpl";
 mkdir "cache/jit";
 my %use = (
 	'HTML::Template'           => 0,
-	'HTML::Template::Pro'      => 0,
+    'HTML::Template::Pro'      => 0,
 	'HTML::Template::Compiled' => 0,
 	'HTML::Template::Pluggable' => 0,
 	'HTML::Template::Expr' => 0,
 	'HTML::Template::Compiled::Classic' => 0,
 #	'HTML::Template::JIT'      => 0,
 	'Template'                 => 0,
+    'Template::Like'           => 0,
 	'CGI::Ex::Template'        => 0,
 	# not yet
 	'Text::ScriptTemplate'     => 0,
@@ -193,6 +194,26 @@ sub new_htj {
 	return $t2;
 }
 
+sub new_tl {
+	my $tt= Template::Like->new(
+    );
+=pod
+        $FILE_CACHE
+            ? (
+                COMPILE_EXT => '.ttc',
+                COMPILE_DIR => 'cache/tt',
+            )
+            : (),
+        $MEM_CACHE
+            ? ()
+            : (CACHE_SIZE => 0),
+		INCLUDE_PATH => 'examples',
+=cut
+	#my $size = total_size($tt);
+	#print "size tt  = $size\n";
+	return $tt;
+}
+
 sub new_tt {
 	my $tt= Template->new(
         $FILE_CACHE
@@ -279,6 +300,21 @@ sub output_tst {
 	#print "output_tst():$out\n";
 	print OUT $out;
 }
+sub output_tl {
+	my $t = shift;
+	return unless defined $t;
+    chdir 'examples';
+	my $filett = $tt_file;
+	#$t->process($filett, \%params, \*OUT);
+	$t->process($filett, \%params, \*OUT) or die $t->error();
+	#my $size = total_size($t);
+	#print "size $t = $size\n";
+	#print $t->{code} if exists $t->{code};
+	#my $out = $t->output;
+	#print "\nOUT: $out";
+    chdir '..';
+}
+
 sub output_tt {
 	my $t = shift;
 	return unless defined $t;
@@ -299,6 +335,7 @@ my $global_htp = $use{'HTML::Template::Pro'} ? new_htp : undef;
 my $global_htpl = $use{'HTML::Template::Pluggable'} ? new_htpl : undef;
 my $global_htj = $use{'HTML::Template::JIT'} ? new_htj : undef;
 my $global_tt = $use{'Template'} ? new_tt : undef;
+my $global_tl = $use{'Template::Like'} ? new_tl : undef;
 my $global_cet = $use{'CGI::Ex::Template'} ? new_cet : undef;
 my $global_tst = $use{'Text::ScriptTemplate'} ? new_tst : undef;
 if(1) {
@@ -352,6 +389,9 @@ if(1) {
             $MEM_CACHE
                 ? ()
                 : (all_tt_new_object => sub {my $t = new_tt();output_tt($t)}),
+        ): (),
+        $use{'Template::Like'} ? (
+            process_tl => sub {output_tl($global_tl)},
         ): (),
         $use{'CGI::Ex::Template'} ? (
             #new_tt => sub {my $t = new_tt();},
