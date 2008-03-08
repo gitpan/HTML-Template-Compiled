@@ -1,5 +1,9 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.91_002
+- Bugfix: option objects
+- Bugfix: object plugins
+
 0.91_001
 - Bugfix: TMPL_IF_DEFINED without TMPL_ELSE
   http://rt.cpan.org/Public/Bug/Display.html?id=33383

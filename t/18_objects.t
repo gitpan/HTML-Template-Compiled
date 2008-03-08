@@ -1,4 +1,4 @@
-# $Id: 18_objects.t 1015 2008-03-01 01:19:09Z tinita $
+# $Id: 18_objects.t 1019 2008-03-02 16:26:48Z tinita $
 
 use lib 'blib/lib';
 use Test::More tests => 4;
@@ -38,35 +38,45 @@ EOM
     cmp_ok($out, "eq", 23 x 4, "global objects");
 }
 
-for my $strict (qw/ strict nostrict/) {
-	my $htc = HTML::Template::Compiled->new(
-		scalarref => \<<'EOM',
-        <%= object.get_content %>
-        <%= object.dummy %>
+eval { require Scalar::Util };
+my $scalar_util = $@ ? 0 : 1;
+SKIP: {
+	skip "no Scalar::Util", 2 unless $scalar_util;
+
+    for my $strict (qw/ strict nostrict/) {
+        my $htc = HTML::Template::Compiled->new(
+            scalarref => \<<'EOM',
+            <%= object.get_content %>
+            <%= object.dummy %>
+            <%= hash.key %>
 EOM
-		debug => 0,
-        global_vars => 1,
-        objects => $strict,
-        cache => 0,
-	);
-    my $object = bless {
-        content => 23,
-    }, "HTC_Dummy";
-	$htc->param(
-        object => $object,
-	);
-    my $out = '';
-    eval {
-        $out = $htc->output;
-    };
-    #warn __PACKAGE__.':'.__LINE__.": error: $@\n";
-	$out =~ s/\s+//g;
-    #print $out,$/;
-    if ($strict eq 'strict') {
-        cmp_ok($@, "=~", q/Can't locate object method "dummy"/ , "global objects '$strict'");
-    }
-    else {
-        cmp_ok($out, "eq", 23, "global objects '$strict'");
+            debug => 0,
+            global_vars => 1,
+            objects => $strict,
+            cache => 0,
+        );
+        my $object = bless {
+            content => 23,
+        }, "HTC_Dummy";
+        $htc->param(
+            object => $object,
+            hash => {
+                key => 42,
+            },
+        );
+        my $out = '';
+        eval {
+            $out = $htc->output;
+        };
+        #warn __PACKAGE__.':'.__LINE__.": error: $@\n";
+        $out =~ s/\s+//g;
+        #print $out,$/;
+        if ($strict eq 'strict') {
+            cmp_ok($@, "=~", q/Can't locate object method "dummy"/ , "global objects '$strict'");
+        }
+        else {
+            cmp_ok($out, "eq", 2342, "global objects '$strict'");
+        }
     }
 }
 

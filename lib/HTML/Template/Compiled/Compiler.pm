@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1016 2008-03-01 01:31:28Z tinita $
+# $Id: Compiler.pm 1019 2008-03-02 16:26:48Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -262,7 +262,7 @@ EOM
                     }
                     else {
                         $varstr .= <<"EOM";
-\$var = (Scalar::Util::blessed(\$var) and \$var->can('$p')) ? \$var->$p() : undef;
+\$var = Scalar::Util::blessed(\$var) ? \$var->can('$p') ? \$var->$p() : undef : \$var->\{'$path'\};
 EOM
                     }
                 }
@@ -313,7 +313,7 @@ EOM
                     }
                     else {
                         $varstr .= <<"EOM";
-\$var = (Scalar::Util::blessed(\$var) and \$var->can('$p')) ? \$var->$p() : undef;
+\$var = Scalar::Util::blessed(\$var) ? \$var->can('$p') ? \$var->$p() : undef : \$var->\{'$path'\};
 EOM
                     }
                 }

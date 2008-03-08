@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1018 2008-03-01 01:34:49Z tinita $
+# $Id: Compiled.pm 1024 2008-03-08 16:04:26Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.91_001";
+our $VERSION = "0.91_002";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -184,8 +184,8 @@ sub new_file {
     $self->init_cache(\%args);
     #$self->set_cache_dir( $args{cache_dir} );
     $self->set_path( $args{path} );
-    if (my $t = $self->from_cache()) {
-        $t->init_includes;
+    if (my $t = $self->from_cache(\%args)) {
+        $t->init_includes();
         return $t;
     }
     $self->init(%args);
@@ -209,7 +209,7 @@ sub new_filehandle {
     $self->init_cache(\%args);
     #$self->set_cache_dir( $args{cache_dir} );
     $self->set_path( $args{path} );
-    if (my $t = $self->from_cache()) {
+    if (my $t = $self->from_cache(\%args)) {
         return $t;
     }
     $self->init(%args);
@@ -248,7 +248,7 @@ sub new_scalar_ref {
     $self->set_filename($md5);
     D && $self->log("md5: $md5");
     $self->set_path( $args{path} );
-    if (my $t = $self->from_cache()) {
+    if (my $t = $self->from_cache(\%args)) {
         return $t;
     }
     $self->init(%args);
@@ -270,6 +270,7 @@ sub init_includes {
             $htc = $self->new_from_object($path,$filename,$fullpath,$cache);
         }
         $includes->{$fullpath}->[2] = $htc;
+        $includes->{$fullpath}->[2]->set_plugins($self->get_plugins);
     }
 }
 
@@ -318,10 +319,12 @@ sub from_scratch {
 }
 
 sub from_cache {
-    my ($self) = @_;
+    my ($self, $args) = @_;
     my $t;
     D && $self->log( "from_cache() filename=" . $self->get_filename );
 
+    $args ||= {};
+    my $plug = $args->{plugin} || [];
     # try to get memory cache
     if ( $self->get_cache ) {
         my $dir = $self->get_cache_dir;
@@ -329,6 +332,7 @@ sub from_cache {
         my $fname  = $self->get_filename;
         $t = $self->from_mem_cache($dir,$fname);
         if ($t) {
+            $t->set_plugins($plug) if @$plug;
             return $t;
         }
     }
@@ -343,6 +347,7 @@ sub from_cache {
         my $dir     = $self->get_cache_dir;
         $t = $self->from_file_cache($dir, $file);
         if ($t) {
+            $t->set_plugins($plug) if @$plug;
             return $t;
         }
     }
@@ -395,6 +400,15 @@ sub from_cache {
         D && $self->log( "add_mem_cache $fname" );
         my $clone = $self->clone;
         $clone->clear_params();
+        my $plugs = $self->get_plugins || [];
+        for my $i (0 .. $#$plugs) {
+            if (ref $plugs->[$i]) {
+                if ($plugs->[$i]->can('serialize')) {
+                    $plugs->[$i] = $plugs->[$i]->serialize();
+                }
+            }
+        }
+        $self->set_plugins($plugs);
         $cache->{$dir}->{$fname} = $clone;
         $times->{$dir}->{$fname} = \%times;
     }
@@ -656,6 +670,7 @@ sub include_file {
         eval {
             $cache = Storable::retrieve($req);
         };
+        #warn __PACKAGE__.':'.__LINE__.": error? $@\n";
         return if $@;
         my $cached_version = $cache->{version};
         $t = $cache->{htc};
@@ -664,11 +679,11 @@ sub include_file {
             return;
         }
         my $plug = $t->get_plugins || [];
-        $t->init_plugins(@$plug);
-		$t->get_cache and $t->add_mem_cache(
-			checked => $cache->{times}->{checked},
-			mtime   => $cache->{times}->{mtime},
-		);
+        $t->get_cache and $t->add_mem_cache(
+            checked => $cache->{times}->{checked},
+            mtime   => $cache->{times}->{mtime},
+        );
+        $t->init_plugins($plug);
     }
     else {
     if ($UNTAINT) {
@@ -884,17 +899,17 @@ sub init {
     my $compiler = $self->compiler_class->new;
     $self->set_compiler($compiler);
     if ($defaults{plugin}) {
-        my @plugins = ref $defaults{plugin} eq 'ARRAY' ? @{ $defaults{plugin} } : $defaults{plugin};;
-        $self->init_plugins(@plugins);
-        $self->set_plugins(\@plugins);
+        my $plugins = ref $defaults{plugin} eq 'ARRAY' ? $defaults{plugin} : [$defaults{plugin}];
+        $self->init_plugins($plugins);
+        $self->set_plugins($plugins);
     }
 }
 
 sub init_plugins {
-    my ($self, @plugins) = @_;
+    my ($self, $plugins) = @_;
     my $parser = $self->get_parser;
     my $compiler = $self->get_compiler;
-    for my $plug (@plugins) {
+    for my $plug (@$plugins) {
         if (ref $plug) {
         }
         elsif ($plug =~ m/^::/) {
@@ -1126,6 +1141,15 @@ sub new_from_object {
 sub prepare_for_cache {
     my ($self) = @_;
     $self->clear_params;
+    my @plugs = @{ $self->get_plugins || [] };
+    for my $i (0 .. $#plugs) {
+        if (ref $plugs[$i]) {
+            if ($plugs[$i]->can('serialize')) {
+                $plugs[$i] = $plugs[$i]->serialize();
+            }
+        }
+    }
+    $self->set_plugins(\@plugs);
 }
 
 sub preload {
@@ -1435,7 +1459,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.91_001"
+$VERSION = "0.91_002"
 
 =cut
 
