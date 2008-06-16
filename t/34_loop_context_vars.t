@@ -28,7 +28,7 @@ my $long_path = cdir($tdir, $long_tmpl);
     my $out = $htc->output;
     #print $out, $/;
     $out =~ s/\s+/ /g;
-    cmp_ok($out, "=~", qr#^test $short_path $short_tmpl end#,
+    cmp_ok($out, "=~", qr#^test \Q$short_path $short_tmpl\E end#,
         "filename debug 1");
 }
 {
@@ -44,7 +44,7 @@ my $long_path = cdir($tdir, $long_tmpl);
     my $out = $htc->output;
     #print $out, $/;
     $out =~ s/\s+/ /g;
-    cmp_ok($out, "=~", qr#^test $long_path $long_tmpl end#,
+    cmp_ok($out, "=~", qr#^test \Q$long_path $long_tmpl\E end#,
         "filename debug 2");
 }
 for my $debug (qw/ start end /, 'start,end') {
@@ -68,11 +68,11 @@ for my $debug (qw/ start end /, 'start,end') {
             "filename debug '$debug_string'");
         my $testpath = $short ? $long_tmpl : $long_path;
         if ($debug =~ m/start/) {
-            cmp_ok($out, "=~", qr#<!-- start $testpath -->#,
+            cmp_ok($out, "=~", qr#<!-- start \Q$testpath\E -->#,
                 "filename debug '$debug_string' start");
         }
         if ($debug =~ m/end/) {
-            cmp_ok($out, "=~", qr#<!-- end $testpath -->#,
+            cmp_ok($out, "=~", qr#<!-- end \Q$testpath\E -->#,
                 "filename debug '$debug_string' end");
         }
     }

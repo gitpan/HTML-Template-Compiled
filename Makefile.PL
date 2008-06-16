@@ -2,16 +2,16 @@
 use ExtUtils::MakeMaker;
 WriteMakefile
 (
-          'PL_FILES' => {},
-          'INSTALLDIRS' => 'site',
           'NAME' => 'HTML::Template::Compiled',
-          'EXE_FILES' => [],
           'VERSION_FROM' => 'lib/HTML/Template/Compiled.pm',
           'PREREQ_PM' => {
-                           'Test::More' => 0,
-                           'File::Spec' => 0,
-                           'File::Basename' => 0,
-                           'Carp' => 0
-                         }
+                           'Carp' => '0',
+                           'File::Basename' => '0',
+                           'File::Spec' => '0',
+                           'Test::More' => '0'
+                         },
+          'INSTALLDIRS' => 'site',
+          'EXE_FILES' => [],
+          'PL_FILES' => {}
         )
 ;

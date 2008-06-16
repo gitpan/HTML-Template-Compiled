@@ -1,8 +1,9 @@
-# $Id: Expressions.pm 496 2006-07-17 22:57:37Z tinita $
+# $Id: Expressions.pm 1046 2008-06-04 19:28:02Z tinita $
 
 package HTML::Template::Compiled::Expression::Close;
 use strict;
 use warnings;
+our $VERSION = '0.01';
 use base qw(HTML::Template::Compiled::Expression);
 
 sub to_string {
@@ -69,6 +70,7 @@ sub to_string {
     my ($op) = $self->get_operands;
     my $dump = Data::Dumper->Dump([\$op], ['op']);
     $dump =~ s#^\$op *= *\\##;
+    $dump =~ s/;$//;
     return $dump;
 }
 

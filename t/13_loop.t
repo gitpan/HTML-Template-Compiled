@@ -1,10 +1,12 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 13_loop.t 972 2007-09-19 23:23:38Z tinita $
+# $Id: 13_loop.t 1042 2008-05-10 21:51:45Z tinita $
 
 use lib 'blib/lib';
-use Test::More tests => 6;
+use Test::More tests => 7;
 BEGIN { use_ok('HTML::Template::Compiled') };
+use lib 't';
+use HTC_Utils qw($cache $tdir &cdir);
 
 {
 	my $htc = HTML::Template::Compiled->new(
@@ -91,3 +93,24 @@ EOM
     #print $out, $/;
     cmp_ok($out, 'eq','abc.def.gh', "loop break attribute");
 }
+
+{
+    my $htc = HTML::Template::Compiled->new(
+        scalarref => \<<'EOM',
+<%loop list %>
+<%include loop_included.tmpl %>
+<%/loop list %>
+EOM
+        debug => 0,
+        loop_context_vars => 1,
+        path => $tdir,
+    );
+    $htc->param(
+        list => [qw(a b c d e f g h)]
+    );
+    my $out = $htc->output;
+    $out =~ s/\s+/ /g;
+    #print $out, $/;
+    cmp_ok($out, 'eq',' 0 1 2 3 4 5 6 7 h ', "loop context vars in include");
+}
+

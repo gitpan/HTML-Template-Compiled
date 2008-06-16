@@ -1,5 +1,13 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.91_003 Mon Jun 16 23:03:46 CEST 2008
+- New feature: Debug compiled code (see method debug_code)
+- Bufix: __last__ and __inner__ in included templates (thanks
+  to Henrik Tougaard for the patch)
+- Bugfix: Ternary operator didn't produce correct syntax always
+  (also thanks to Henrik Tougaard)
+- New feature: Expressions like in HTML::Template::Expr
+
 0.91_002
 - Bugfix: option objects
 - Bugfix: object plugins

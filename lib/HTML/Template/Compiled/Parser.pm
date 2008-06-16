@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm 1008 2008-02-25 19:21:27Z tinita $
+# $Id: Parser.pm 1048 2008-06-13 22:39:18Z tinita $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -32,9 +32,10 @@ $UNTAINT                = 0;
 $DEFAULT_QUERY          = 0;
 $DEFAULT_TAGSTYLE       = [qw(classic comment asp)];
 
-use constant ATTR_TAGSTYLE => 0;
-use constant ATTR_TAGNAMES => 1;
-use constant ATTR_PERL     => 2;
+use constant ATTR_TAGSTYLE   => 0;
+use constant ATTR_TAGNAMES   => 1;
+use constant ATTR_PERL       => 2;
+use constant ATTR_EXPRESSION => 3;
 
 use constant T_VAR         => 'VAR';
 use constant T_IF          => 'IF';
@@ -71,6 +72,9 @@ sub get_tagnames { $_[0]->[ATTR_TAGNAMES] }
 sub set_perl   { $_[0]->[ATTR_PERL] = $_[1] }
 sub get_perl   { $_[0]->[ATTR_PERL] }
 
+sub set_expressions { $_[0]->[ATTR_EXPRESSION] = $_[1] }
+sub get_expressions { $_[0]->[ATTR_EXPRESSION] }
+
 sub add_tagnames {
     my ($self, $hash) = @_;
     my $open = $hash->{OPENING_TAG()};
@@ -100,28 +104,33 @@ sub default_tags {
     return $_default_tags;
 }
 
-my $default_validation = sub { exists $_[1]->{NAME} };
+my $default_validation = sub {
+    my ($p, $attr) = @_;
+    my $test = $p->get_expressions;
+    exists $attr->{NAME} or
+    ($p->get_expressions and exists $attr->{EXPR})
+};
 my %allowed_tagnames = (
     OPENING_TAG() => {
-        VAR         => [$default_validation, qw(NAME ESCAPE DEFAULT)],
+        VAR         => [$default_validation, qw(NAME ESCAPE DEFAULT EXPR)],
         # just an alias for VAR
-        '='         => [$default_validation, qw(NAME ESCAPE DEFAULT)],
-        IF_DEFINED  => [$default_validation, qw(NAME)],
-        IF          => [$default_validation, qw(NAME)],
-        UNLESS      => [$default_validation, qw(NAME)],
-        ELSIF       => [$default_validation, qw(NAME)],
+        '='         => [$default_validation, qw(NAME ESCAPE DEFAULT EXPR)],
+        IF_DEFINED  => [$default_validation, qw(NAME EXPR)],
+        IF          => [$default_validation, qw(NAME EXPR)],
+        UNLESS      => [$default_validation, qw(NAME EXPR)],
+        ELSIF       => [$default_validation, qw(NAME EXPR)],
         ELSE        => [undef, qw(NAME)],
-        WITH        => [$default_validation, qw(NAME)],
+        WITH        => [$default_validation, qw(NAME EXPR)],
         COMMENT     => [undef, qw(NAME)],
         VERBATIM    => [undef, qw(NAME)],
         NOPARSE     => [undef, qw(NAME)],
-        LOOP        => [$default_validation, qw(NAME ALIAS JOIN BREAK)],
-        WHILE       => [$default_validation, qw(NAME ALIAS BREAK)],
-        EACH        => [$default_validation, qw(NAME BREAK)],
-        SWITCH      => [$default_validation, qw(NAME)],
+        LOOP        => [$default_validation, qw(NAME ALIAS JOIN BREAK EXPR)],
+        WHILE       => [$default_validation, qw(NAME ALIAS BREAK EXPR)],
+        EACH        => [$default_validation, qw(NAME BREAK EXPR)],
+        SWITCH      => [$default_validation, qw(NAME EXPR)],
         CASE        => [undef, qw(NAME)],
-        INCLUDE_VAR => [$default_validation, qw(NAME)],
-        INCLUDE_STRING => [$default_validation, qw(NAME)],
+        INCLUDE_VAR => [$default_validation, qw(NAME EXPR)],
+        INCLUDE_STRING => [$default_validation, qw(NAME EXPR)],
         INCLUDE     => [$default_validation, qw(NAME)],
     },
     CLOSING_TAG() => {
@@ -253,7 +262,7 @@ sub find_attributes {
         $attr->{$key} = $val;
         $arg->{token} .= $orig;
     }
-    my $ok = $validate_sub ? $validate_sub->(undef, $attr) : 1;
+    my $ok = $validate_sub ? $validate_sub->($self, $attr) : 1;
     $self->_error_wrong_tag_syntax(
         $arg, $arg->{template}
     ) unless $ok;

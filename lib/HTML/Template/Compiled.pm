@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1024 2008-03-08 16:04:26Z tinita $
+# $Id: Compiled.pm 1056 2008-06-16 21:10:07Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.91_002";
+our $VERSION = "0.91_003";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -43,6 +43,9 @@ use constant CHECKED  => 1;
 use constant LMTIME   => 2;
 use constant LCHECKED => 3;
 
+our $DEBUG = 0;
+our $LAST_EXCEPTION;
+
 # options / object attributes
 use constant PARAM => 0;
 
@@ -58,6 +61,7 @@ BEGIN {
           globalstack use_query parse_tree parser compiler includes
           plugins open_mode
         )
+          #use_expressions
     );
 
     for my $i ( 1 .. $#map ) {
@@ -400,15 +404,15 @@ sub from_cache {
         D && $self->log( "add_mem_cache $fname" );
         my $clone = $self->clone;
         $clone->clear_params();
-        my $plugs = $self->get_plugins || [];
-        for my $i (0 .. $#$plugs) {
-            if (ref $plugs->[$i]) {
-                if ($plugs->[$i]->can('serialize')) {
-                    $plugs->[$i] = $plugs->[$i]->serialize();
+        my @plugs = @{ $self->get_plugins || [] };
+        for my $i (0 .. $#plugs) {
+            if (ref $plugs[$i]) {
+                if ($plugs[$i]->can('serialize')) {
+                    $plugs[$i] = $plugs[$i]->serialize();
                 }
             }
         }
-        $self->set_plugins($plugs);
+        $clone->set_plugins(\@plugs);
         $cache->{$dir}->{$fname} = $clone;
         $times->{$dir}->{$fname} = \%times;
     }
@@ -843,6 +847,7 @@ sub init {
         default_escape         => $DEFAULT_ESCAPE,
         default_path           => PATH_DEREF,
         use_query              => $DEFAULT_QUERY,
+        #use_expressions        => 0,
         use_perl               => 0,
         open_mode              => '',
         %args,
@@ -852,6 +857,10 @@ sub init {
     $self->set_default_escape( $defaults{default_escape} );
     $self->set_default_path( $defaults{default_path} );
     $self->set_use_query( $defaults{use_query} );
+    #$self->set_use_expressions( $defaults{use_expressions} );
+    if ($defaults{use_expressions}) {
+        require HTML::Template::Compiled::Expr;
+    }
     if ($defaults{open_mode}) {
         $defaults{open_mode} =~ s/^[<>]//; # <:utf8
     }
@@ -877,6 +886,7 @@ sub init {
         # user specified named styles or regexes
         $parser = $self->parser_class->new(
             tagstyle => $tagstyle,
+            use_expressions => $defaults{use_expressions},
         );
         $parser->set_perl($defaults{use_perl});
     }
@@ -887,6 +897,7 @@ sub init {
     unless ($parser) {
         $parser ||= $self->parser_class->default();
         $parser->set_perl($defaults{use_perl});
+        $parser->set_expressions($defaults{use_expressions});
     }
     if ($defaults{use_perl}) {
         $parser->add_tagnames({
@@ -1348,7 +1359,21 @@ sub output {
         : $p;
     my $f = $self->get_file;
     $fh = \*STDOUT unless $fh;
-    $self->get_perl()->( $self, $p, \$p, $fh );
+    if ($DEBUG) {
+        my $output;
+        eval {
+            $output = $self->get_perl()->( $self, $p, \$p, $fh );
+        };
+        if ($@) {
+            $LAST_EXCEPTION = $@;
+            my $filename = $self->get_file;
+            die "Error while executing '$filename': $@";
+        }
+        return $output;
+    }
+    else {
+        $self->get_perl()->( $self, $p, \$p, $fh );
+    }
 }
 
 sub import {
@@ -1450,6 +1475,53 @@ sub popGlobalstack {
     }
 }
 
+sub debug_code {
+    my ($self, $html) = @_;
+    my $perl = $self->get_perl;
+    require B::Deparse;
+    my $deparse = B::Deparse->new("-p", "-sC");
+    my $body = $deparse->coderef2text($perl);
+    my $filename = $self->get_file;
+    #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\$body], ['body']);
+    my $message = '';
+    if ($LAST_EXCEPTION and $LAST_EXCEPTION =~ m/at \(eval \d*\) line (\d+)\./) {
+        my $rline = $1;
+        my $line = $rline;
+        $line--;
+        my @lines = split m#$/#, $body;
+        if ($line > $#lines) {
+            $line = $#lines;
+        }
+        my $pre = $line > 0 ? join $/, @lines[0 .. $line - 1] : '';
+        my $post = $line < $#lines ? join $/, @lines[$line + 1 .. $#lines] : '';
+        my $error = "$/$/# ------------------- ERROR line $rline in template $filename -----------------$/";
+        my $last = $LAST_EXCEPTION;
+        $LAST_EXCEPTION =~ s#$/# #g;
+        $error .= "# $last$/$lines[$line]$/";
+        if ($html) {
+            for ($pre, $error, $post) {
+                s/</&lt;/g;
+                s/>/&gt;/g;
+            }
+            $message = <<"EOM";
+<table border="0" style="background-color: #eeeeee;"><tr><td><pre>$pre</pre></td></tr>
+<tr><td style="background-color: #ffffff; color: #ff0000"><pre>$error</pre></td></tr>
+<tr><td><pre>$post</pre></td></tr></table>
+EOM
+        }
+        else {
+            $message .= $pre;
+            $message .= $error;
+            $message .= $post;
+        }
+    }
+    else {
+        $message = $LAST_EXCEPTION;
+    }
+    return $message;
+
+}
+
 my $version_pod = <<'=cut';
 =pod
 
@@ -1459,7 +1531,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.91_002"
+$VERSION = "0.91_003"
 
 =cut
 
@@ -2508,6 +2580,28 @@ tt-style and your own C<{{}} > style, then say:
         ],
     );
 
+=item use_expressions
+
+Set to 1 if you want to use expressions. They work more or less like
+in L<HTML::Template::Expr> - I took the parsing code from it and
+used it with some minor changes - thanks to Sam Tregar.
+
+    <%if expr="some.var > 3" %>It's grater than 3<%/if %>
+
+Additionally you can use object methods with parameters. While a
+normal method call can only be called without parameters, like
+
+    <%= object.name %>
+
+with expressions you can give it parameters:
+
+    <%= expr="object.create_link('navi')" %>
+
+Inside function and method calls you also can use template
+vars.
+
+It is only minimally tested yet, so use with care and please report any
+bugs you find.
 
 =item formatter
 
@@ -2613,6 +2707,29 @@ cache directory. See L<"PRECOMPILE">.
 =item clear_params
 
 Empty all parameters.
+
+=item debug_code (since 0.91_003)
+
+If you get an error from the generated template, you might want to debug
+the executed code. You can now call C<debug_code> to get the compiled code
+and the line the error occurred. Note that the reported line might not be
+the exact line where the error occurred, also look around the line.
+The template filename reported does currently only report the main template,
+not the name of an included template. I'll try to fix that.
+
+    local $HTML::Template::Compiled::DEBUG = 1;
+    my $htc = HTML::Template::Compiled->new(
+        filename => 'some_file_with_runtime_error.html',
+    );
+    eval {
+        print $htc->output;
+    };
+    if ($@) {
+        # reports as text
+        my $msg = $htc->debug_code;
+        # reports as a html table
+        my $msg_html = $htc->debug_code('html');
+    }
 
 =item get_plugin
 
@@ -2802,7 +2919,7 @@ Bjoern Kriews for original idea and contributions
 Special Thanks to Sascha Kiefer - he finds all the bugs!
 
 Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Jan Willamowius, Justin Day,
-Steffen Winkler for ideas, beta-testing and patches
+Steffen Winkler, Henrik Tougaard for ideas, beta-testing and patches
 
 perlmonks.org and perl-community.de for everyday learning
 

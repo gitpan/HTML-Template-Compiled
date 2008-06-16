@@ -11,6 +11,7 @@ lib/HTML/Template/Compiled/Parser.pm
 lib/HTML/Template/Compiled/Compiler.pm
 lib/HTML/Template/Compiled/Token.pm
 lib/HTML/Template/Compiled/Exception.pm
+lib/HTML/Template/Compiled/Expr.pm
 lib/HTML/Template/Compiled/Compiler/Classic.pm
 lib/HTML/Template/Compiled/Plugin/DHTML.pm
 lib/HTML/Template/Compiled/Plugin/XMLEscape.pm
@@ -59,6 +60,7 @@ t/21_while.t
 t/22_pod.t
 t/23_tagstyles.t
 t/24_pod_cover.t
+t/26_expr.t
 t/27_chomp.t
 t/28_perl.t
 t/29_encoding.t
@@ -67,6 +69,8 @@ t/31_recurse.t
 t/32_compile_plugin.t
 t/33_plugins.t
 t/34_loop_context_vars.t
+t/35_debug.t
+t/36_default.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html
@@ -91,4 +95,5 @@ t/templates/include_perl.htc
 t/templates/recurse.html
 t/templates/file_debug.html
 t/templates/subdir/file_debug.html
+t/templates/loop_included.tmpl
 META.yml                                 Module meta-data (added by MakeMaker)

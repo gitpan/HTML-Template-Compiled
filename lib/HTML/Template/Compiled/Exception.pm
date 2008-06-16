@@ -2,6 +2,7 @@ use strict;
 use warnings;
 {
 package HTML::Template::Compiled::Exception;
+our $VERSION = '0.01';
 use Data::Dumper;
 use Carp qw(croak carp);
 
@@ -39,10 +40,6 @@ sub parser {
     return $_[0]->[ATTR_PARSER];
 }
 
-
-}
-{
-package HTML::Template::Compiled::Exception::parse;
 
 }
 1;

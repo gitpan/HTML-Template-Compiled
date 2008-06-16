@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler::Classic;
-# $Id: Classic.pm 1011 2008-03-01 00:04:51Z tinita $
+# $Id: Classic.pm 1047 2008-06-13 19:38:05Z tinita $
 use strict;
 use warnings;
 our $VERSION = "0.02";
@@ -19,9 +19,9 @@ sub parse_var {
         __index__   => '$__ix__',
         __counter__ => '$__ix__+1',
         __first__   => '$__ix__ == $[',
-        __last__    => '$__ix__ == $size',
+        __last__    => '$__ix__ == $__size__',
         __odd__     => '!($__ix__ & 1)',
-        __inner__   => '$__ix__ != $[ && $__ix__ != $size',
+        __inner__   => '$__ix__ != $[ && $__ix__ != $__size__',
         __break__   => '$__break__',
         __filename__ => '$t->get_file',
         __filenameshort__ => '$t->get_filename',

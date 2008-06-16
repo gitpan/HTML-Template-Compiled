@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1019 2008-03-02 16:26:48Z tinita $
+# $Id: Compiler.pm 1051 2008-06-16 20:33:46Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -141,9 +141,9 @@ my %loop_context = (
     __index__   => '$__ix__',
     __counter__ => '$__ix__+1',
     __first__   => '$__ix__ == $[',
-    __last__    => '$__ix__ == $size',
+    __last__    => '$__ix__ == $__size__',
     __odd__     => '!($__ix__ & 1)',
-    __inner__   => '$__ix__ != $[ && $__ix__ != $size',
+    __inner__   => '$__ix__ != $[ && $__ix__ != $__size__',
     __key__     => '$__key__',
     __value__   => '$__value__',
     __break__   => '$__break__',
@@ -155,6 +155,20 @@ sub parse_var {
     my ( $self, $t, %args ) = @_;
     my $lexicals = $args{lexicals};
     my $context = $args{context};
+
+
+    if (!defined $args{var} and defined $args{expr}) {
+        my $compiler = $args{compiler};
+        return HTML::Template::Compiled::Expr->parse_expr(
+            $compiler,
+            $t,
+            %args,
+            expr   => $args{expr},
+            context => $context,
+        );
+    }
+
+
     # only allow '.', '/', '+', '-' and '_'
     if (!$t->validate_var($args{var})) {
         $t->get_parser->_error_wrong_tag_syntax(
@@ -233,7 +247,11 @@ EOM
     my $count = 0;
     my $use_objects = $t->get_objects;
     my $strict = $use_objects eq 'strict' ? 1 : 0;
+    my $method_args = '';
     for my $i (0 .. $#split) {
+        if ($i == $#split and defined $args{method_args}) {
+            $method_args = $args{method_args};
+        }
         my $p = $split[$i];
         $p =~ s#\\#\\\\#g;
         $p =~ s#'#\\'#g;
@@ -248,6 +266,7 @@ EOM
             $varstr .= "\$var = scalar \@{\$var || []};\n";
         }
         elsif ( $use_objects and $p =~ s/^\Q$args{method_call}// ) {
+            # maybe mthod call
             if ($count == 0 && $t->get_global_vars & 1) {
                 $varstr .= "\$var = \$t->try_global(\$var, '$p');\n";
             }
@@ -257,12 +276,12 @@ EOM
                 if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
                     if ($strict) {
                         $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p() : \$var->\{'$path'\};
+\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p($method_args) : \$var->\{'$path'\};
 EOM
                     }
                     else {
                         $varstr .= <<"EOM";
-\$var = Scalar::Util::blessed(\$var) ? \$var->can('$p') ? \$var->$p() : undef : \$var->\{'$path'\};
+\$var = Scalar::Util::blessed(\$var) ? \$var->can('$p') ? \$var->$p($method_args) : undef : \$var->\{'$path'\};
 EOM
                     }
                 }
@@ -308,12 +327,12 @@ EOM
                 if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
                     if ($strict) {
                         $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p() : \$var->\{'$path'\};
+\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p($method_args) : \$var->\{'$path'\};
 EOM
                     }
                     else {
                         $varstr .= <<"EOM";
-\$var = Scalar::Util::blessed(\$var) ? \$var->can('$p') ? \$var->$p() : undef : \$var->\{'$path'\};
+\$var = Scalar::Util::blessed(\$var) ? \$var->can('$p') ? \$var->$p($method_args) : undef : \$var->\{'$path'\};
 EOM
                     }
                 }
@@ -337,6 +356,7 @@ sub compile {
     my ( $class, $self, $text, $fname ) = @_;
     D && $self->log("compile($fname)");
     if ( my $filter = $self->get_filter ) {
+        require HTML::Template::Compiled::Filter;
         $filter->filter($text);
     }
     my $parser = $self->get_parser;
@@ -374,7 +394,7 @@ sub compile {
     }
     my $header = <<"EOM";
 sub {
-    use vars qw(\$__ix__ \$__key__ \$__value__ \$__break__);
+    use vars qw/ \$__ix__ \$__key__ \$__value__ \$__break__ \$__size__ /;
     use strict;
     no warnings;
 $anon
@@ -413,7 +433,7 @@ EOM
                 local $Data::Dumper::Deparse = 1;
 
                 my $exp = _expr_string($text);
-                $code .= qq#$indent$output # . $exp->to_string($nlevel) . $/;
+                $code .= qq#$indent$output # . $exp->to_string($nlevel) . ';' . $/;
             }
         }
         elsif ($token->is_open) {
@@ -462,6 +482,8 @@ EOM
                 %var_args,
                 var => $var,
                 context => $token,
+                compiler => $self,
+                expr   => $attr->{EXPR},
             );
             $code .= _expr_open()->to_string($nlevel) .qq# \# WITH $var\n#;
             if ($self->get_global_vars) {
@@ -481,6 +503,8 @@ EOM
                 %var_args,
                 var   => $var,
                 context => $token,
+                compiler => $self,
+                expr   => $attr->{EXPR},
             );
             my $ind    = INDENT;
             if ($self->get_use_query) {
@@ -546,11 +570,11 @@ EOM
                 }
                 $code .= <<"EOM";
 ${indent}if (UNIVERSAL::isa(my \$array = $varstr, 'ARRAY') )\{
-${indent}${ind}my \$size = \$#{ \$array };
+${indent}${ind}local \$__size__ = \$#{ \$array };
 $global
 
 ${indent}${ind}# loop over $var
-${indent}${ind}for \$__ix__ (\$[..\$size + \$[) \{
+${indent}${ind}for \$__ix__ (\$[..\$__size__ + \$[) \{
 ${indent}${ind}${ind}my \$C = \\ (\$array->[\$__ix__]);
 $insert_break
 $lexi
@@ -595,6 +619,8 @@ EOM
                 %var_args,
                 var   => $var,
                 context => $token,
+                compiler => $self,
+                expr   => $attr->{EXPR},
             );
             my $operand = _expr_literal($varstr);
             my $exp = _expr_elsif($operand);
@@ -610,6 +636,8 @@ EOM
                 %var_args,
                 var   => $var,
                 context => $token,
+                compiler => $self,
+                expr   => $attr->{EXPR},
             );
             $code .= <<"EOM";
 ${indent}SWITCH: for my \$_switch ($varstr) \{
@@ -655,6 +683,8 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 %var_args,
                 var   => $var,
                 context => $token,
+                compiler => $self,
+                expr   => $attr->{EXPR},
             );
             my $ref = ref $self;
             $code .= <<"EOM";
@@ -687,6 +717,8 @@ EOM
                     %var_args,
                     var   => $dfilename,
                     context => $token,
+                    compiler => $self,
+                    expr   => $attr->{EXPR},
                 );
             }
             else {
@@ -876,16 +908,22 @@ EOM
     return $code, $sub;
 }
 sub _compile_OPEN_VAR {
-        my ($self, $htc, $args) = @_;
+    my ($self, $htc, $args) = @_;
     #print STDERR "===== VAR ($text)\n";
     my $token = $args->{context};
     my $attr = $token->get_attributes;
     my $var = $attr->{NAME};
+    #my $expr = $attr->{EXPR};
+    my $expr;
+
     my $varstr = $self->parse_var($htc,
         %$args,
         var   => $var,
         context => $token,
+        compiler => $self,
+        expr   => $attr->{EXPR},
     );
+
     #print "line: $text var: $var ($varstr)\n";
     my $exp = _expr_literal($varstr);
     # ---- default
@@ -913,9 +951,13 @@ sub _compile_OPEN_IF {
     my ($self, $htc, $args) = @_;
     #print STDERR "============ IF ($text)\n";
     my $var = $args->{context}->get_attributes->{NAME};
+    my $token = $args->{context};
+    my $attr = $token->get_attributes;
     my $varstr = $self->parse_var($htc,
         %$args,
         var   => $var,
+        compiler => $self,
+        expr   => $attr->{EXPR},
     );
     my $operand = _expr_literal($varstr);
     my $expr = HTML::Template::Compiled::Expression::If->new($operand);
@@ -925,9 +967,13 @@ sub _compile_OPEN_UNLESS {
     my ($self, $htc, $args) = @_;
     #print STDERR "============ IF ($text)\n";
     my $var = $args->{context}->get_attributes->{NAME};
+    my $token = $args->{context};
+    my $attr = $token->get_attributes;
     my $varstr = $self->parse_var($htc,
         %$args,
         var   => $var,
+        compiler => $self,
+        expr   => $attr->{EXPR},
     );
     my $operand = _expr_literal($varstr);
     my $expr = HTML::Template::Compiled::Expression::Unless->new($operand);
@@ -937,9 +983,13 @@ sub _compile_OPEN_IF_DEFINED {
     my ($self, $htc, $args) = @_;
     #print STDERR "============ IF ($text)\n";
     my $var = $args->{context}->get_attributes->{NAME};
+    my $token = $args->{context};
+    my $attr = $token->get_attributes;
     my $varstr = $self->parse_var($htc,
         %$args,
         var   => $var,
+        compiler => $self,
+        expr   => $attr->{EXPR},
     );
     my $operand = _expr_literal($varstr);
     $operand = _expr_defined($operand);
