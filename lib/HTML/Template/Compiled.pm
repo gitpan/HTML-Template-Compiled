@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1056 2008-06-16 21:10:07Z tinita $
+# $Id: Compiled.pm 1070 2008-07-26 11:05:31Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.91_003";
+our $VERSION = "0.92";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -850,6 +850,7 @@ sub init {
         #use_expressions        => 0,
         use_perl               => 0,
         open_mode              => '',
+        no_includes            => 0,
         %args,
     );
     $self->set_loop_context(1) if $args{loop_context_vars};
@@ -905,6 +906,9 @@ sub init {
                 PERL => [sub { 1 }],
             }
         });
+    }
+    if ($defaults{no_includes}) {
+        $parser->remove_tags(qw/ INCLUDE INCLUDE_VAR INCLUDE_STRING /);
     }
     $self->set_parser($parser);
     my $compiler = $self->compiler_class->new;
@@ -1141,6 +1145,7 @@ sub new_from_object {
     $new->set_path($path);
     $new->set_perl(undef);
     if (my $cached = $new->from_cache) {
+        $cached->set_plugins($self->get_plugins);
         $cached->init_includes;
         return $cached
     }
@@ -1531,7 +1536,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.91_003"
+$VERSION = "0.92"
 
 =cut
 
@@ -2390,6 +2395,12 @@ browse through the stack.
 Now everything will be escaped for HTML unless you explicitly specify C<ESCAPE=0> (no escaping)
 or C<ESCAPE=URL>.
 
+=item no_includes (since 0.92)
+
+Default is 0. If set to 1, the tags INCLUDE, INCLUDE_VAR and INCLUDE_STRING
+will cause a template syntax error when creating. This can be useful when opening
+untrusted templates, otherwise any file in the filesystem could be opened.
+
 =item debug_file (fixed) (since 0.91_001)
 
 Additionally to the context_vars __filename__ and __filenameshort__ you
@@ -2580,7 +2591,7 @@ tt-style and your own C<{{}} > style, then say:
         ],
     );
 
-=item use_expressions
+=item use_expressions (since 0.91_003)
 
 Set to 1 if you want to use expressions. They work more or less like
 in L<HTML::Template::Expr> - I took the parsing code from it and

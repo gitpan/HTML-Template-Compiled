@@ -1,11 +1,11 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm 1048 2008-06-13 22:39:18Z tinita $
+# $Id: Parser.pm 1071 2008-07-26 11:14:25Z tinita $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
 use base qw(Exporter);
 use HTML::Template::Compiled::Token qw(:tagtypes);
-our $VERSION = 0.08;
+our $VERSION = 0.09;
 my @vars;
 BEGIN {
 @vars = qw(
@@ -83,6 +83,13 @@ sub add_tagnames {
     @{ $_[0]->[ATTR_TAGNAMES]->{CLOSING_TAG()} }{keys %$close} = values %$close;
 }
 
+sub remove_tags {
+    my ($self, @tags) = @_;
+    my $open = $self->[ATTR_TAGNAMES]->{OPENING_TAG()};
+    my $close = $self->[ATTR_TAGNAMES]->{CLOSING_TAG()};
+    delete @$open{@tags};
+    delete @$close{@tags};
+}
 
 my $_default_tags = {
     classic => ['<TMPL_'      ,'>',     '</TMPL_',      '>',  ],

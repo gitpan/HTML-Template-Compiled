@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Expression;
-# $Id: Expression.pm 665 2006-10-02 15:48:02Z tinita $
+# $Id: Expression.pm 1071 2008-07-26 11:14:25Z tinita $
 use strict;
 use warnings;
 
@@ -9,8 +9,6 @@ use base 'Exporter';
 our $VERSION = 0.02;
 use  HTML::Template::Compiled::Expression::Expressions;
 my @expressions = qw(
-    &_expr_close
-    &_expr_open
     &_expr_else
     &_expr_literal
     &_expr_defined
@@ -25,8 +23,6 @@ our %EXPORT_TAGS = (
     expressions => \@expressions,
 );
 
-sub _expr_close { HTML::Template::Compiled::Expression::Close->new }
-sub _expr_open { HTML::Template::Compiled::Expression::Open->new }
 sub _expr_else { HTML::Template::Compiled::Expression::Else->new }
 sub _expr_literal { HTML::Template::Compiled::Expression::Literal->new(@_) }
 sub _expr_defined { HTML::Template::Compiled::Expression::Defined->new(@_) }
@@ -67,6 +63,7 @@ sub to_string { print "$_[0] to_string\n" }
 
 sub level2indent {
     my ($self, $level) = @_;
+    no warnings;
     return "  " x $level;
 }
 
@@ -86,7 +83,7 @@ sub to_string {
     my ($self, $level) = @_;
     my $indent = $self->level2indent($level);
     my ($op) = $self->get_operands;
-    return $indent . 'if ( ' . $op->to_string . ' ) {';
+    return $indent . 'if ( ' . (ref $op ? $op->to_string : $op) . ' ) {';
 }
 
 package HTML::Template::Compiled::Expression::Unless;
@@ -96,7 +93,7 @@ sub to_string {
     my ($self, $level) = @_;
     my $indent = $self->level2indent($level);
     my ($op) = $self->get_operands;
-    return $indent . 'unless ( ' . $op->to_string . ' ) {';
+    return $indent . 'unless ( ' . (ref $op ? $op->to_string : $op) . ' ) {';
 }
 
 package HTML::Template::Compiled::Expression::Elsif;
@@ -129,10 +126,10 @@ sub to_string {
     my ($self, $level) = @_;
     my $indent = $self->level2indent($level);
     my ($function, @ops) = $self->get_operands;
-    return "$indent$function( " .
-        join(", ", map {
-                $_->to_string($level)
-        } @ops) . " )";
+    my @strings = map {
+        ref $_ ? $_->to_string($level) : $_
+    } @ops;
+    return "$indent$function( " . (join ',', @strings). ')';
 }
 
 package HTML::Template::Compiled::Expression::Method;
@@ -142,11 +139,12 @@ sub to_string {
     my ($self, $level) = @_;
     my $indent = $self->level2indent($level);
     my ($function, $object, @args) = $self->get_operands;
-    return $indent . $object->to_string($level) .
-        "->$function( " .
-        join(", ", map {
-                $_->to_string($level)
-        } @args) . " )";
+    my $start = $indent . (ref $object ? $object->to_string($level) : $object)
+        . "->$function( ";
+    my @strings = map {
+        ref $_ ? $_->to_string($level) : $_
+    } @args;
+    return $start . (join ',', @strings). ')';
 }
 
 1;

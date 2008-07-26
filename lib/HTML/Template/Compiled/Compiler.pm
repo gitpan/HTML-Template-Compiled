@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1051 2008-06-16 20:33:46Z tinita $
+# $Id: Compiler.pm 1071 2008-07-26 11:14:25Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -185,11 +185,12 @@ sub parse_var {
         return "\$$args{var}";
     }
     my $lexi = join '|', grep defined, @$lexicals;
-    my $varstr = 'do {my $var = $$C; ';
+    my $varname = '$var';
     my $re = $self->get_name_re;
     #warn __PACKAGE__.':'.__LINE__.": ========== ($args{var})\n";
     my $root         = 0;
     my $up_stack = 0;
+    my $initial_var = '$$C';
     if ( $t->get_loop_context && $args{var} =~ m/^__(\w+)__$/ ) {
         if (exists $loop_context{ lc $args{var} }) {
             my $lc = $loop_context{ lc $args{var} };
@@ -197,9 +198,7 @@ sub parse_var {
         }
     }
     if ($lexi and $args{var} =~ s/^($lexi)($re)/$2/) {
-        my $name = $1;
-        $varstr .= "\$var = \$$name;";
-        #return "\$$args{var}";
+        $initial_var = "\$$1";
     }
     elsif ( $args{var} =~ m/^_/ && $args{var} !~ m/^__(\w+)__$/ ) {
         $args{var} =~ s/^_//;
@@ -212,13 +211,10 @@ sub parse_var {
         if (@roots > 1) {
             croak "Cannot navigate up the stack" if !$t->get_global_vars & 2;
             $up_stack = $#roots;
-            $varstr .= <<"EOM";
-my \$stack = \$t->get_globalstack;
-\$var = \$stack->[-$up_stack]; #print \$var, \$/;
-EOM
+            $initial_var = "\$t->get_globalstack->[-$up_stack]";
         }
         elsif (@roots == 1) {
-            $varstr .= q#$var = $P;#;
+            $initial_var = '$P';
         }
     }
     my @split = split m/(?=$re)/, $args{var};
@@ -248,109 +244,126 @@ EOM
     my $use_objects = $t->get_objects;
     my $strict = $use_objects eq 'strict' ? 1 : 0;
     my $method_args = '';
+    my $varstr = '';
+    @split = map {
+        s#\\#\\\\#g;
+        s#'#\\'#g;
+        length $_ ? $_ : ()
+    } @split;
+    if (@split == 1) {
+        $varname = $initial_var;
+    }
     for my $i (0 .. $#split) {
         if ($i == $#split and defined $args{method_args}) {
             $method_args = $args{method_args};
         }
         my $p = $split[$i];
-        $p =~ s#\\#\\\\#g;
-        $p =~ s#'#\\'#g;
-        next unless length $p;
-        #print STDERR "path: $p\n";
+        #warn __PACKAGE__.':'.__LINE__.": path: $p\n";
+        my $copy = $p;
+        my $array_index;
+        my $get_length;
+        my $method_call;
+        my $deref;
+        my $formatter_call;
+        my $guess;
+        my $try_global;
         if ( $p =~ s/^\[(-?\d+)\]$/$1/ ) {
-            # array inde
-            $varstr .= "\$var = \$var->[$1];\n";
+            # array index
+            $array_index = $1;
         }
         elsif ( $p =~ s/^#$// ) {
             # number of elements
-            $varstr .= "\$var = scalar \@{\$var || []};\n";
+            $get_length = 1;
         }
         elsif ( $use_objects and $p =~ s/^\Q$args{method_call}// ) {
-            # maybe mthod call
-            if ($count == 0 && $t->get_global_vars & 1) {
-                $varstr .= "\$var = \$t->try_global(\$var, '$p');\n";
-            }
-            else {
-                my $path = $t->get_case_sensitive ? $p : uc $p;
-                # valid method name?
-                if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
-                    if ($strict) {
-                        $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p($method_args) : \$var->\{'$path'\};
-EOM
-                    }
-                    else {
-                        $varstr .= <<"EOM";
-\$var = Scalar::Util::blessed(\$var) ? \$var->can('$p') ? \$var->$p($method_args) : undef : \$var->\{'$path'\};
-EOM
-                    }
-                }
-                else {
-                    $varstr .= <<"EOM";
-\$var = \$var->\{'$path'\};
-EOM
-                }
-            }
+            # maybe method call
+            $method_call = 1;
         }
         elsif ( $p =~ s/^\Q$args{deref}// ) {
-            #print STDERR "$p deref\n";
-            if ($count == 0 && $t->get_global_vars & 1) {
-                $varstr .= "\$var = \$t->try_global(\$var, '$p');\n";
-            }
-            else {
-                my $path = $t->get_case_sensitive ? $p : uc $p;
-                if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
-                    $varstr .= <<"EOM";
-\$var = \$var->\{'$path'\};
-EOM
-                }
-                else {
-                    $varstr .= <<"EOM";
-\$var = \$var->\{'$path'\};
-EOM
-                }
-            }
-        } ## end elsif ( $p =~ s/^\Q$args{deref}//)
+            # deref
+            $deref = 1;
+        }
         elsif ( $p =~ s/^\Q$args{formatter_path}// ) {
-
-            $varstr .= <<"EOM";
-            \$var = \$t->_walk_formatter(\$var, '$p', @{[$t->get_global_vars]});
-EOM
-        } ## end elsif ( $p =~ s/^\Q$args{formatter_path}//)
+            $formatter_call = 1;
+        }
         else {
+            # guess
+            $guess = 1;
+        }
+        if ($method_call || $guess) {
+            unless ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
+                # not a valid method name
+                $deref = 1;
+                $method_call = $guess = 0;
+            }
+        }
+        if ($method_call || $guess || $deref) {
             if ($count == 0 && $t->get_global_vars & 1) {
-                $varstr .= "\$var = \$t->try_global(\$var, '$p');\n";
+                $try_global = 1;
+                $method_call = $guess = $deref = 0;
+            }
+        }
+
+        my $path = $t->get_case_sensitive ? $p : uc $p;
+        my $code;
+        if ( defined $array_index ) {
+            # array index
+            $code = "$varname\->[$array_index]";
+        }
+
+        elsif ( $get_length ) {
+            # number of elements
+            $code = "scalar \@{$varname || []}";
+        }
+
+        elsif ($try_global) {
+            $code = "\$t->try_global($varname, '$p')";
+        }
+
+        elsif ( $method_call || $guess) {
+            # maybe method call
+            if ($strict) {
+                $code = "(UNIVERSAL::can($varname,'can') ? $varname->$p($method_args) : $varname\->\{'$path'\})";
             }
             else {
-                my $path = $t->get_case_sensitive ? $p : uc $p;
-                # valid method name?
-                if ($p =~ m/^[A-Za-z_][A-Za-z0-9_]*\z/) {
-                    if ($strict) {
-                        $varstr .= <<"EOM";
-\$var = UNIVERSAL::can(\$var,'can') ? \$var->$p($method_args) : \$var->\{'$path'\};
-EOM
-                    }
-                    else {
-                        $varstr .= <<"EOM";
-\$var = Scalar::Util::blessed(\$var) ? \$var->can('$p') ? \$var->$p($method_args) : undef : \$var->\{'$path'\};
-EOM
-                    }
-                }
-                else {
-                    $varstr .= <<"EOM";
-\$var = \$var->\{'$path'\};
-EOM
-                }
+                $code = "(Scalar::Util::blessed($varname) ? $varname->can('$p') ? $varname->$p($method_args) : undef : $varname\->\{'$path'\})";
             }
-        } ## end else [ if ( $p =~ s/^\Q$args{method_call}//)
+        }
+
+        elsif ( $deref ) {
+            $code = "$varname\->\{'$path'\}";
+        }
+
+        elsif ( $formatter_call ) {
+            $code = "\$t->_walk_formatter($varname, '$p', @{[$t->get_global_vars]})";
+        }
+        if (0 or @split > 1) {
+            $varstr .= "$varname = $code;";
+        }
+        else {
+            $varstr = $code;
+        }
+
         $count++;
-    } ## end for my $p (@split)
+    }
     #my $final = $context->get_name eq 'VAR' ? 1 : 0;
-        $varstr .= <<'EOM';
-$var }
-EOM
+    if (0 or @split > 1) {
+        $varstr = "do { my $varname = $initial_var; $varstr $varname }";
+    }
+    else {
+        $varstr = $initial_var unless length $varstr;
+        $varstr = "$varstr";
+    }
     return $varstr;
-} ## end sub parse_var
+}
+
+sub dump_string {
+    my ($self, $string) = @_;
+    my $dump = Data::Dumper->Dump([\$string], ['string']);
+    $dump =~ s#^\$string *= *\\##;
+    $dump =~ s/;$//;
+    return $dump;
+}
 
 sub compile {
     my ( $class, $self, $text, $fname ) = @_;
@@ -400,7 +413,6 @@ sub {
 $anon
     my (\$t, \$P, \$C, \$OFH) = \@_;
     my \$OUT = '';
-    #my \$C = \\\$P;
 EOM
 
     my @lexicals;
@@ -432,8 +444,14 @@ EOM
                 # and without this line i only got invalid characters.
                 local $Data::Dumper::Deparse = 1;
 
-                my $exp = _expr_string($text);
-                $code .= qq#$indent$output # . $exp->to_string($nlevel) . ';' . $/;
+                if ($text =~ m/\A(?:\r?\n|\r)\z/) {
+                    $text =~ s/\r/\\r/;
+                    $text =~ s/\n/\\n/;
+                    $code .= qq#$indent$output "$text";# . $/;
+                }
+                else {
+                    $code .= qq#$indent$output # . $class->dump_string($text) . ';' . $/;
+                }
             }
         }
         elsif ($token->is_open) {
@@ -457,7 +475,7 @@ EOM
                     },);
             }
             $code .= qq#${indent}$output #
-            . $expr->to_string($nlevel) . qq#;\n#;
+            . $expr . qq#;\n#;
         }
 
         # ---------- TMPL_PERL
@@ -485,15 +503,19 @@ EOM
                 compiler => $self,
                 expr   => $attr->{EXPR},
             );
-            $code .= _expr_open()->to_string($nlevel) .qq# \# WITH $var\n#;
+            $code .= <<"EOM";
+${indent}\{
+EOM
             if ($self->get_global_vars) {
                 $code .= _expr_method(
                     'pushGlobalstack',
-                    _expr_literal('$t'),
-                    _expr_literal('$$C')
+                    '$t', '$$C'
                 )->to_string($nlevel) . ";\n";
             }
-            $code .= qq#${indent}  my \$C = \\$varstr;\n#;
+            $code .= <<"EOM";
+${indent}    my \$C = \\$varstr;
+${indent}    if (defined \$\$C) {
+EOM
         }
 
         # --------- TMPL_LOOP TMPL_WHILE TMPL_EACH
@@ -521,18 +543,19 @@ EOM
                 }
             }
             push @lexicals, $lexical;
-            my $pop_global = _expr_method(
-                'pushGlobalstack',
-                _expr_literal('$t'),
-                _expr_literal('$$C')
-            );
+            my $global = '';
             my $lexi =
               defined $lexical ? "${indent}my \$$lexical = \$\$C;\n" : "";
-            my $global = $self->get_global_vars
-                ? $pop_global->to_string($nlevel).";\n"
-                : '';
+            if ($self->get_global_vars) {
+                my $pop_global = _expr_method(
+                    'pushGlobalstack',
+                    '$t', '$$C'
+                );
+                $global = $pop_global->to_string($nlevel).";\n";
+
+            }
             if ($tname eq T_WHILE) {
-                $code .= _expr_open()->to_string($nlevel) . "# while $var\n";
+                $code .= "\{" . "\n";
                 $code .= <<"EOM";
 $global
 ${indent}${indent}local \$__ix__ = -1;
@@ -573,7 +596,7 @@ ${indent}if (UNIVERSAL::isa(my \$array = $varstr, 'ARRAY') )\{
 ${indent}${ind}local \$__size__ = \$#{ \$array };
 $global
 
-${indent}${ind}# loop over $var
+${indent}${ind}
 ${indent}${ind}for \$__ix__ (\$[..\$__size__ + \$[) \{
 ${indent}${ind}${ind}my \$C = \\ (\$array->[\$__ix__]);
 $insert_break
@@ -585,8 +608,8 @@ EOM
 
         # --------- TMPL_ELSE
         elsif ($tname eq T_ELSE) {
-            my $exp = _expr_else();
-            $code .= $exp->to_string($nlevel);
+            my $exp = "\} else \{";
+            $code .= $exp;
         }
 
         # --------- TMPL_IF TMPL_UNLESS TMPL_ELSIF TMPL_IF_DEFINED
@@ -595,21 +618,21 @@ EOM
                     %var_args,
                     context => $token,
                 },);
-            $code .= $expr->to_string($nlevel);
+            $code .= $expr;
         }
         elsif ($tname eq T_IF_DEFINED) {
             my $expr = $class->_compile_OPEN_IF_DEFINED($self, {
                     %var_args,
                     context => $token,
                 },);
-            $code .= $expr->to_string($nlevel);
+            $code .= $expr;
         }
         elsif ($tname eq T_UNLESS) {
             my $expr = $class->_compile_OPEN_UNLESS($self, {
                     %var_args,
                     context => $token,
                 },);
-            $code .= $expr->to_string($nlevel);
+            $code .= $expr;
         }
 
         # --------- TMPL_ELSIF
@@ -834,8 +857,7 @@ EOM
             my $var = $attr->{NAME};
             $var = '' unless defined $var;
             #print STDERR "============ IF ($text)\n";
-            my $exp = _expr_close();
-            $code .= $exp->to_string($nlevel) . qq{# end $var\n};
+            $code .= "\}" . ($tname eq 'WITH' ? "\}" : '') . qq{\n};
             if ($self->get_global_vars && $tname eq 'WITH') {
                 $code .= $indent . qq#\$t->popGlobalstack;\n#;
             }
@@ -843,13 +865,12 @@ EOM
 
         # --------- / TMPL_SWITCH
         elsif ($tname eq T_SWITCH) {
-            my $close = _expr_close();
             if ( $switches[$#switches] ) {
 
                 # we had at least one CASE, so we close the last if
-                $code .= $close->to_string($nlevel+1) . " # last case\n";
+                $code .= "\} # last case\n";
             }
-            $code .= $close->to_string($nlevel) . "\n";
+            $code .= "\}\n";
             pop @switches;
         }
         
@@ -859,9 +880,7 @@ EOM
             if ($self->get_use_query) {
                 pop @$info_stack;
             }
-            my $close = _expr_close();
-            $code .= $close->to_string($nlevel+1) ."\n" 
-                . $close->to_string($nlevel) . " # end loop\n";
+            $code .= "\}\n\} # end loop\n";
             if ($self->get_global_vars) {
             $code .= <<"EOM";
 ${indent}\$t->popGlobalstack;
@@ -925,25 +944,23 @@ sub _compile_OPEN_VAR {
     );
 
     #print "line: $text var: $var ($varstr)\n";
-    my $exp = _expr_literal($varstr);
+    my $exp = $varstr;
     # ---- default
     my $default;
-    if (exists $attr->{DEFAULT}) {
-        $default = _expr_string($attr->{DEFAULT});
-    }
-    if ( defined $default ) {
+    if (defined $attr->{DEFAULT}) {
+        $default = $self->dump_string($attr->{DEFAULT});
         $exp = _expr_ternary(
             _expr_defined($exp),
             $exp,
             $default,
-        );
+        )->to_string;
     }
     # ---- escapes
     my $escape = $htc->get_default_escape;
     if (exists $attr->{ESCAPE}) {
         $escape = $attr->{ESCAPE};
     }
-    $exp = $self->_escape_expression($exp, $escape);
+    $exp = $self->_escape_expression($exp, $escape)->to_string if $escape;
     return $exp;
 }
 
@@ -959,9 +976,7 @@ sub _compile_OPEN_IF {
         compiler => $self,
         expr   => $attr->{EXPR},
     );
-    my $operand = _expr_literal($varstr);
-    my $expr = HTML::Template::Compiled::Expression::If->new($operand);
-    return $expr;
+    return "if ($varstr) \{";
 }
 sub _compile_OPEN_UNLESS {
     my ($self, $htc, $args) = @_;
@@ -975,9 +990,7 @@ sub _compile_OPEN_UNLESS {
         compiler => $self,
         expr   => $attr->{EXPR},
     );
-    my $operand = _expr_literal($varstr);
-    my $expr = HTML::Template::Compiled::Expression::Unless->new($operand);
-    return $expr;
+    return "unless ($varstr) \{";
 }
 sub _compile_OPEN_IF_DEFINED {
     my ($self, $htc, $args) = @_;
@@ -991,10 +1004,7 @@ sub _compile_OPEN_IF_DEFINED {
         compiler => $self,
         expr   => $attr->{EXPR},
     );
-    my $operand = _expr_literal($varstr);
-    $operand = _expr_defined($operand);
-    my $expr = HTML::Template::Compiled::Expression::If->new($operand);
-    return $expr;
+    return "if (defined ($varstr)) \{";
 }
 
 1;

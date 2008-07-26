@@ -1,12 +1,12 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 13_loop.t 1042 2008-05-10 21:51:45Z tinita $
+# $Id: 13_loop.t 1060 2008-06-17 22:25:59Z tinita $
 
-use lib 'blib/lib';
 use Test::More tests => 7;
 BEGIN { use_ok('HTML::Template::Compiled') };
 use lib 't';
-use HTC_Utils qw($cache $tdir &cdir);
+use
+HTC_Utils qw($cache $tdir &cdir);
 
 {
 	my $htc = HTML::Template::Compiled->new(
@@ -65,6 +65,7 @@ for (0,1) {
         scalarref => \<<EOM,
 <%loop list join=", " %><%= _ %><%/loop list %>
 EOM
+        debug => 0,
     );
     $htc->param(
         list => [qw(a b c)]

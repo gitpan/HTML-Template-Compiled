@@ -1,32 +1,8 @@
-# $Id: Expressions.pm 1046 2008-06-04 19:28:02Z tinita $
-
-package HTML::Template::Compiled::Expression::Close;
+# $Id: Expressions.pm 1071 2008-07-26 11:14:25Z tinita $
 use strict;
 use warnings;
-our $VERSION = '0.01';
-use base qw(HTML::Template::Compiled::Expression);
-
-sub to_string {
-    my ($self, $level) = @_;
-    my $indent = $self->level2indent($level);
-    return $indent . '}';
-}
-
-package HTML::Template::Compiled::Expression::Open;
-use strict;
-use warnings;
-use base qw(HTML::Template::Compiled::Expression);
-
-sub to_string {
-    my ($self, $level) = @_;
-    my $indent = $self->level2indent($level);
-    return $indent . '{';
-}
-
 
 package HTML::Template::Compiled::Expression::Defined;
-use strict;
-use warnings;
 use base qw(HTML::Template::Compiled::Expression);
 
 sub init {
@@ -36,12 +12,10 @@ sub init {
 sub to_string {
     my ($self) = @_;
     my ($op) = $self->get_operands;
-    return "defined ( " . $op->to_string . " )";
+    return "defined ( " . (ref $op ? $op->to_string : $op) . " )";
 }
 
 package HTML::Template::Compiled::Expression::Literal;
-use strict;
-use warnings;
 use base qw(HTML::Template::Compiled::Expression);
 
 sub init {
@@ -56,8 +30,6 @@ sub to_string {
 }
 
 package HTML::Template::Compiled::Expression::String;
-use strict;
-use warnings;
 use Data::Dumper;
 use base qw(HTML::Template::Compiled::Expression);
 
@@ -75,8 +47,6 @@ sub to_string {
 }
 
 package HTML::Template::Compiled::Expression::Ternary;
-use strict;
-use warnings;
 use base qw(HTML::Template::Compiled::Expression);
 
 sub init {
@@ -88,7 +58,8 @@ sub to_string {
     my $indent = $self->level2indent($level);
     my ($bool, $true, $false) = $self->get_operands;
     return $indent . $bool->to_string($level) . ' ? ' .
-        $true->to_string($level) . ' : ' . $false->to_string($level);
+        (ref $true ? $true->to_string($level) : $true)
+        . ' : ' . (ref $false ? $false->to_string($level) : $false);
 }
 
 1;

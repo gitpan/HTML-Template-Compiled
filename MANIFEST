@@ -71,6 +71,7 @@ t/33_plugins.t
 t/34_loop_context_vars.t
 t/35_debug.t
 t/36_default.t
+t/37_with.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html
@@ -96,4 +97,5 @@ t/templates/recurse.html
 t/templates/file_debug.html
 t/templates/subdir/file_debug.html
 t/templates/loop_included.tmpl
+t/templates/user_template.html
 META.yml                                 Module meta-data (added by MakeMaker)

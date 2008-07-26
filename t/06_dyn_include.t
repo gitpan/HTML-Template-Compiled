@@ -1,9 +1,9 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 06_dyn_include.t 833 2006-11-06 20:19:02Z tinita $
+# $Id: 06_dyn_include.t 1069 2008-07-26 11:04:03Z tinita $
 
 use lib 'blib/lib';
-use Test::More tests => 9;
+use Test::More tests => 10;
 BEGIN { use_ok('HTML::Template::Compiled') };
 #$HTML::Template::Compiled::NEW_CHECK = 2;
 
@@ -52,6 +52,19 @@ EOM
     #print "out: $out\n";
     my $exp = 'inc: included=real';
     cmp_ok($out, '=~', $exp, "include_string");
+}
+
+{
+    my $htc;
+    eval {
+        $htc = HTML::Template::Compiled->new(
+            filename => 'user_template.html',
+            path => 't/templates',
+            no_includes => 1,
+        );
+    };
+    my $error = "$@";
+    cmp_ok($error, '=~', 'Syntax error.*near.*include', "no_includes");
 }
 
 __END__

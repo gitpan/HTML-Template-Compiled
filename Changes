@@ -1,5 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.92 Sat Jul 26 13:02:28 CEST 2008
+- Change: code in TMPL_WITH is now only executed if the var is defined
+- New Feature: Option no_includes like in HTML::Template
+- For changes since 0.91 see 0.91_001, 0.91_002, 0.91_003
+
 0.91_003 Mon Jun 16 23:03:46 CEST 2008
 - New feature: Debug compiled code (see method debug_code)
 - Bufix: __last__ and __inner__ in included templates (thanks
