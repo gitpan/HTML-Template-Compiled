@@ -64,7 +64,7 @@ for my $debug (qw/ start end /, 'start,end') {
         my $out = $htc->output;
         #print $out, $/;
         $out =~ s/\s+/ /g;
-        cmp_ok($out, "=~", qr#test $long_path $long_tmpl end#,
+        cmp_ok($out, "=~", qr#test \Q$long_path\E \Q$long_tmpl\E end#,
             "filename debug '$debug_string'");
         my $testpath = $short ? $long_tmpl : $long_path;
         if ($debug =~ m/start/) {

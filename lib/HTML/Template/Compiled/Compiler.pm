@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1071 2008-07-26 11:14:25Z tinita $
+# $Id: Compiler.pm 1074 2008-08-02 13:03:08Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -124,7 +124,7 @@ sub _escape_expression {
             $exp = _expr_function( $sub, $exp );
         }
     } ## end for (@escapes)
-    return $exp;
+    return ref $exp ? $exp->to_string : $exp;
 } ## end sub _escape_expression
 
 sub init_name_re {
@@ -960,7 +960,7 @@ sub _compile_OPEN_VAR {
     if (exists $attr->{ESCAPE}) {
         $escape = $attr->{ESCAPE};
     }
-    $exp = $self->_escape_expression($exp, $escape)->to_string if $escape;
+    $exp = $self->_escape_expression($exp, $escape) if $escape;
     return $exp;
 }
 

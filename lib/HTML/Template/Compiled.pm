@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1070 2008-07-26 11:05:31Z tinita $
+# $Id: Compiled.pm 1075 2008-08-10 16:55:31Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.92";
+our $VERSION = "0.92_001";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -1536,7 +1536,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.92"
+$VERSION = "0.92_001"
 
 =cut
 
@@ -2868,9 +2868,9 @@ on speed.
 
 Setting case_sensitive to 1, loop_context_vars to 0 and global_vars to 0 saves time.
 
-On the other hand, compared to HTML::Template, the speed gain is biggest (under mod_perl
-you save ca. 86%, under CGI about 10%), if you use case_sensitive = 1, loop_context_vars = 0,
-global_vars = 1.
+On the other hand, compared to HTML::Template, you have a large speed gain under mod_perl
+(you save ca. 87%), if you use case_sensitive = 1, loop_context_vars = 0,
+global_vars = 1. With CGI HTC is slower (about 1 1/2 times).
 
 See the C<examples/bench.pl> contained in this distribution.
 
@@ -2903,7 +2903,7 @@ If I can efficiently use it, it was worth it.
 
 =head1 RESOURCES
 
-See http://htcompiled.sf.net/ for current releases not yet on CPAN and for cvs access.
+See http://htcompiled.sf.net/ for svn access.
 
 =head1 SEE ALSO
 
