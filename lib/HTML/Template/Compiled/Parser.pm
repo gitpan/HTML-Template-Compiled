@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm 1071 2008-07-26 11:14:25Z tinita $
+# $Id: Parser.pm 1079 2008-11-03 18:57:01Z tinita $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -133,7 +133,7 @@ my %allowed_tagnames = (
         NOPARSE     => [undef, qw(NAME)],
         LOOP        => [$default_validation, qw(NAME ALIAS JOIN BREAK EXPR)],
         WHILE       => [$default_validation, qw(NAME ALIAS BREAK EXPR)],
-        EACH        => [$default_validation, qw(NAME BREAK EXPR)],
+        EACH        => [$default_validation, qw(NAME BREAK EXPR SORT REVERSE)],
         SWITCH      => [$default_validation, qw(NAME EXPR)],
         CASE        => [undef, qw(NAME)],
         INCLUDE_VAR => [$default_validation, qw(NAME EXPR)],
@@ -302,7 +302,7 @@ sub find_attributes {
     };
     my $default_callback_tag = sub {
         my ($self, $arg) = @_;
-        #print STDERR "####found tag ${$args{name}}\n";
+        #print STDERR "####found tag $arg->{name}, $arg->{open_or_close}\n";
         $arg->{line} += $arg->{token} =~ tr/\n//;
         my $class = 'HTML::Template::Compiled::Token::' .
             ($arg->{open_or_close} == OPENING_TAG
@@ -604,6 +604,7 @@ sub find_attribute {
     };
     $map[CLOSING_TAG] = {
         IF         => [ T_IF, T_UNLESS, T_ELSE, T_IF_DEFINED ],
+        T_IF_DEFINED() => [ T_ELSE, T_IF_DEFINED ],
         UNLESS     => [T_UNLESS, T_ELSE, T_IF_DEFINED],
         ELSIF      => [ T_IF, T_UNLESS, T_IF_DEFINED ],
         LOOP       => [T_LOOP],
@@ -652,7 +653,7 @@ sub find_attribute {
         }
         elsif ($arg->{open_or_close} == CLOSING_TAG) {
             if (grep { $arg->{name} eq $_ } (
-                    T_IF, T_UNLESS, T_WITH, T_LOOP, T_WHILE, T_SWITCH
+                    T_IF, T_IF_DEFINED, T_UNLESS, T_WITH, T_LOOP, T_WHILE, T_SWITCH
                 )) {
                 pop @{ $arg->{stack} };
             }

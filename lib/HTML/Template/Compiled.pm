@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1075 2008-08-10 16:55:31Z tinita $
+# $Id: Compiled.pm 1078 2008-09-09 20:44:07Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.92_001";
+our $VERSION = "0.93";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -1536,7 +1536,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.92_001"
+$VERSION = "0.93"
 
 =cut
 
@@ -1684,7 +1684,7 @@ No need to have cascading "if-else-if-else"s
 
 =item TMPL_EACH
 
-Iterate over a hash.
+Iterate over a hash. See L<"TMPL_EACH">
 
 =item TMPL_WITH
 
@@ -2229,6 +2229,31 @@ So the special variable name _ is set to the current item returned
 by the iterator.
 
 You also can use L<"ALIAS"> here.
+
+=head2 TMPL_EACH
+
+Iterating over a hash. Internally it is not implemented as an each, so you
+can also sort the output:
+
+    Sorted alphanumerically by default (since 0.93):
+        <tmpl_each letters >
+            <tmpl_var __key__ >:<tmpl_var __value__>
+        </tmpl_each letters >
+    Sorted numerically:
+        <tmpl_each numbers sort=num >
+            <tmpl_var __key__ >:<tmpl_var __value__>
+        </tmpl_each numbers >
+    Not sorted:
+        <tmpl_each numbers sort=0 >
+            <tmpl_var __key__ >:<tmpl_var __value__>
+        </tmpl_each numbers >
+    Sorted alphanumerically:
+        <tmpl_each letters sort=alpha >
+            <tmpl_var __key__ >:<tmpl_var __value__>
+        </tmpl_each letters >
+
+You have to set the option C<loop_context_vars> to true to use
+the special vars C<__key__> and C<__value__>.
 
 =head2 TMPL_COMMENT
 

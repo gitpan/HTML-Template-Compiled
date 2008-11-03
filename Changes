@@ -1,5 +1,12 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.93 Mon Nov  3 20:03:07 CET 2008
+- New Feature: sort-Attribute for TMPL_EACH
+- Change: Allow TMPL_LOOP over an overloaded @{} object 
+  (and TMPL_EACH over %{})
+- Bugfix: closing IF_DEFINED was not recognized
+  http://rt.cpan.org/Ticket/Display.html?id=40341
+
 0.92_001 Sun Aug 10 18:53:48 CEST 2008
 - Bugfix: ESCAPE didn't work always correctly since 0.92
 

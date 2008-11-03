@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1074 2008-08-02 13:03:08Z tinita $
+# $Id: Compiler.pm 1079 2008-11-03 18:57:01Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.14';
+our $VERSION = '0.15';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -543,6 +543,26 @@ EOM
                 }
             }
             push @lexicals, $lexical;
+            my $sort_keys = '';
+            # SORT=ALPHA or SORT not set => cmp
+            # SORT=NUM => <=>
+            # SORT=0 or anything else => don't sort
+            if (!defined $attr->{SORT} or uc $attr->{SORT} eq 'ALPHA') {
+                if ($attr->{REVERSE}) {
+                    $sort_keys = "sort \{ \$b cmp \$a \}";
+                }
+                else {
+                    $sort_keys = "sort \{ \$a cmp \$b \}";
+                }
+            }
+            elsif (uc $attr->{SORT} eq 'NUM') {
+                if ($attr->{REVERSE}) {
+                    $sort_keys = "sort \{ \$b <=> \$a \}";
+                }
+                else {
+                    $sort_keys = "sort \{ \$a <=> \$b \}";
+                }
+            }
             my $global = '';
             my $lexi =
               defined $lexical ? "${indent}my \$$lexical = \$\$C;\n" : "";
@@ -567,11 +587,13 @@ $lexi
 EOM
             }
             elsif ($tname eq T_EACH) {
+                # bug in B::Deparse, so do double ref
                 $code .= <<"EOM";
-${indent}if (UNIVERSAL::isa(my \$hash = $varstr, 'HASH') ) \{
+${indent}if (my \%hash = eval \{ \%\$\{ \\$varstr \} \} ) \{
 ${indent}${indent}local \$__ix__ = -1;
 ${indent}${ind}local (\$__key__,\$__value__);
-${indent}${ind}while ((\$__key__,\$__value__) = each %\$hash) \{
+${indent}${ind}for \$__key__ ($sort_keys keys \%hash) \{
+${indent}${ind}    local \$__value__ = \$hash\{\$__key__};
 ${indent}${indent}\$__ix__++;
 $insert_break
 EOM
@@ -591,14 +613,15 @@ $output $dump;
 EOM
                     
                 }
+                # bug in B::Deparse, so do double ref
                 $code .= <<"EOM";
-${indent}if (UNIVERSAL::isa(my \$array = $varstr, 'ARRAY') )\{
-${indent}${ind}local \$__size__ = \$#{ \$array };
+${indent}if (my \@array = eval { \@\$\{ \\$varstr \} } )\{
+${indent}${ind}local \$__size__ = \$#array;
 $global
 
 ${indent}${ind}
 ${indent}${ind}for \$__ix__ (\$[..\$__size__ + \$[) \{
-${indent}${ind}${ind}my \$C = \\ (\$array->[\$__ix__]);
+${indent}${ind}${ind}my \$C = \\ (\$array[\$__ix__]);
 $insert_break
 $lexi
 $join_code
@@ -853,7 +876,7 @@ EOM
         }
         elsif ($token->is_close) {
         # --------- / TMPL_IF TMPL UNLESS TMPL_WITH
-        if ($tname =~ m/^(?:IF|UNLESS|WITH)$/) {
+        if ($tname =~ m/^(?:IF|UNLESS|WITH|IF_DEFINED)$/) {
             my $var = $attr->{NAME};
             $var = '' unless defined $var;
             #print STDERR "============ IF ($text)\n";

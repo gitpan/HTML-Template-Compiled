@@ -1,4 +1,4 @@
-# $Id: 10_if_else.t 1008 2008-02-25 19:21:27Z tinita $
+# $Id: 10_if_else.t 1079 2008-11-03 18:57:01Z tinita $
 use lib 'blib/lib';
 use Test::More tests => 3;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -14,8 +14,8 @@ sub test_defined {
 	my $str = <<'EOM';
 <tmpl_if_defined undef>WRONG<tmpl_elsif undef>WRONG<tmpl_else>RIGHT</tmpl_if>
 <tmpl_if_defined zero>RIGHT<tmpl_elsif zero>WRONG<tmpl_else>RIGHT</tmpl_if>
-<tmpl_if_defined true>RIGHT<tmpl_elsif true>RIGHT<tmpl_else>WRONG</tmpl_if>
-<tmpl_if_defined true>RIGHT</tmpl_if>
+<tmpl_if_defined true>RIGHT<tmpl_elsif true>RIGHT<tmpl_else>WRONG</tmpl_if_defined>
+<tmpl_if_defined true>RIGHT</tmpl_if_defined>
 EOM
 	my $htc = HTML::Template::Compiled->new(
 		path => 't/templates',
@@ -50,3 +50,5 @@ sub test_double_else {
     like($@, qr/\Q'TMPL_ELSE' does not match opening tag (ELSE)/,
         "including 2 <tmpl_else> tags for one tmpl_if should throw an error");
 }
+
+

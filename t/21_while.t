@@ -1,4 +1,4 @@
-# $Id: 21_while.t 852 2006-11-20 18:55:16Z tinita $
+# $Id: 21_while.t 1078 2008-09-09 20:44:07Z tinita $
 use warnings;
 use strict;
 use lib qw(blib/lib t);
@@ -55,17 +55,20 @@ use HTC_Utils qw($cache $tdir &cdir);
 
 {
     my $htc = HTML::Template::Compiled->new(
-        scalarref => \'<%each foo%><%= __key__ %>=<%= __value__ %>
-<%/each%>',
+        scalarref => \'
+<%each letters%><%= __key__ %>=<%= __value__ %><%/each%>
+<%each numbers sort=num %><%= __key__ %>=<%= __value__ %><%/each%>
+<%each numbers sort=num reverse=1 %><%= __key__ %>=<%= __value__ %><%/each%>',
         debug => 0,
         loop_context_vars => 1,
     );
-    $htc->param(foo => { a => 1, b => 2, c => 3 });
+    $htc->param(letters => { a => 1, b => 2, c => 3 });
+    $htc->param(numbers => { 21 => 'b', 2 => 'a', 100 => 'c' });
     my $out = $htc->output;
     #print "out: $out\n";
-    cmp_ok($out, '=~', 'a=1', 'each 1');
-    cmp_ok($out, '=~', 'b=2', 'each 2');
-    cmp_ok($out, '=~', 'c=3', 'each 3');
+    cmp_ok($out, '=~', 'a=1b=2c=3', 'each alpha sort');
+    cmp_ok($out, '=~', '2=a21=b100=c', 'each numeric sort');
+    cmp_ok($out, '=~', '100=c21=b2=a', 'each numeric sort');
 
 }
 
