@@ -1,4 +1,4 @@
-# $Id: 19_query.t 1003 2008-01-24 20:32:28Z tinita $
+# $Id: 19_query.t 1088 2009-07-04 18:52:56Z tinita $
 use warnings;
 use strict;
 use lib 'blib/lib';
@@ -96,3 +96,5 @@ sub query_template {
 }
 
 HTML::Template::Compiled->clear_filecache('t/cache');
+
+unlink $file_copy;

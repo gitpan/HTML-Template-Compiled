@@ -1,8 +1,7 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t 984 2007-11-04 21:00:19Z tinita $
+# $Id: 01_HTML-Template-Compiled.t 1091 2009-07-11 15:33:39Z tinita $
 
-use lib 'blib/lib';
 use Test::More tests => 6;
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
@@ -100,7 +99,7 @@ Mask (Album)
 Bio: No bio available
 Homepage: http://...
 EOM
-Bio: No bio available
+Bio: No "bio" available
 Homepage: http://...
 Song 0: Hair of the Dog
 a%20b%20c%20%26%20d
@@ -153,3 +152,4 @@ EOM
 
 }
 
+unlink $include;

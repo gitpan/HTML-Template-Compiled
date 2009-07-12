@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1079 2008-11-03 18:57:01Z tinita $
+# $Id: Compiler.pm 1096 2009-07-12 13:50:07Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -317,7 +317,7 @@ sub parse_var {
         }
 
         elsif ($try_global) {
-            $code = "\$t->try_global($varname, '$p')";
+            $code = "\$t->try_global($varname, '$path')";
         }
 
         elsif ( $method_call || $guess) {
@@ -500,7 +500,7 @@ EOM
                 %var_args,
                 var => $var,
                 context => $token,
-                compiler => $self,
+                compiler => $class,
                 expr   => $attr->{EXPR},
             );
             $code .= <<"EOM";
@@ -525,7 +525,7 @@ EOM
                 %var_args,
                 var   => $var,
                 context => $token,
-                compiler => $self,
+                compiler => $class,
                 expr   => $attr->{EXPR},
             );
             my $ind    = INDENT;
@@ -665,7 +665,7 @@ EOM
                 %var_args,
                 var   => $var,
                 context => $token,
-                compiler => $self,
+                compiler => $class,
                 expr   => $attr->{EXPR},
             );
             my $operand = _expr_literal($varstr);
@@ -682,7 +682,7 @@ EOM
                 %var_args,
                 var   => $var,
                 context => $token,
-                compiler => $self,
+                compiler => $class,
                 expr   => $attr->{EXPR},
             );
             $code .= <<"EOM";
@@ -729,7 +729,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
                 %var_args,
                 var   => $var,
                 context => $token,
-                compiler => $self,
+                compiler => $class,
                 expr   => $attr->{EXPR},
             );
             my $ref = ref $self;
@@ -763,7 +763,7 @@ EOM
                     %var_args,
                     var   => $dfilename,
                     context => $token,
-                    compiler => $self,
+                    compiler => $class,
                     expr   => $attr->{EXPR},
                 );
             }

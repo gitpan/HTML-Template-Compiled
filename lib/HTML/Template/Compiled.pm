@@ -1,14 +1,15 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1078 2008-09-09 20:44:07Z tinita $
+# $Id: Compiled.pm 1094 2009-07-11 16:17:57Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.93";
+our $VERSION = "0.93_001";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
 }
 use strict;
 use warnings;
+use Digest::MD5 qw/ md5_hex /;
 
 our $Storable = 1;
 use Carp;
@@ -52,7 +53,7 @@ use constant PARAM => 0;
 BEGIN {
     my @map = (
         undef, qw(
-          path filename file scalar filehandle
+          path md5_path filename file scalar filehandle
           file_cache cache_dir cache search_path
           loop_context case_sensitive global_vars
           default_path
@@ -160,7 +161,9 @@ sub new_from_perl {
     $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
     $self->set_filename( $args{filename} );
     $self->set_cache_dir( $args{cache_dir} );
+    my $md5path = md5_hex(@{ $args{path} || [] });
     $self->set_path( $args{path} );
+    $self->set_md5_path( $md5path );
     $self->set_scalar( $args{scalarref} );
 
     unless ( $self->get_scalar ) {
@@ -187,7 +190,10 @@ sub new_file {
     $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
     $self->init_cache(\%args);
     #$self->set_cache_dir( $args{cache_dir} );
+    my $md5path = md5_hex(@{ $args{path} || [] });
+    my $test = $args{path};
     $self->set_path( $args{path} );
+    $self->set_md5_path( $md5path );
     if (my $t = $self->from_cache(\%args)) {
         $t->init_includes();
         return $t;
@@ -212,7 +218,9 @@ sub new_filehandle {
     $self->set_cache(0);
     $self->init_cache(\%args);
     #$self->set_cache_dir( $args{cache_dir} );
+    my $md5path = md5_hex(@{ $args{path} || [] });
     $self->set_path( $args{path} );
+    $self->set_md5_path( $md5path );
     if (my $t = $self->from_cache(\%args)) {
         return $t;
     }
@@ -251,7 +259,9 @@ sub new_scalar_ref {
     my $md5  = md5($$text);
     $self->set_filename($md5);
     D && $self->log("md5: $md5");
+    my $md5path = md5_hex(@{ $args{path} || [] });
     $self->set_path( $args{path} );
+    $self->set_md5_path( $md5path );
     if (my $t = $self->from_cache(\%args)) {
         return $t;
     }
@@ -268,6 +278,7 @@ sub init_includes {
     for my $fullpath (keys %$includes) {
         my ($path, $filename, $htc) = @{ $includes->{$fullpath} };
         D && $self->log("checking $fullpath ($filename) $htc?");
+        $cache .= '-' . $self->get_md5_path;
         if (HTML::Template::Compiled::needs_new_check(
                 $cache||'',$filename)
         ) {
@@ -333,6 +344,7 @@ sub from_cache {
     if ( $self->get_cache ) {
         my $dir = $self->get_cache_dir;
         $dir = '' unless defined $dir;
+        $dir .= '-' . $self->get_md5_path;
         my $fname  = $self->get_filename;
         $t = $self->from_mem_cache($dir,$fname);
         if ($t) {
@@ -400,6 +412,8 @@ sub from_cache {
         D && $self->stack(1);
         my $dir = $self->get_cache_dir;
         $dir = '' unless defined $dir;
+        my @c = caller();
+        $dir .= '-' . $self->get_md5_path;
         my $fname = $self->get_filename;
         D && $self->log( "add_mem_cache $fname" );
         my $clone = $self->clone;
@@ -1142,7 +1156,9 @@ sub new_from_object {
     $new->set_includes({});
     $new->set_scalar();
     $new->set_filehandle();
+    my $md5path = md5_hex(@{ $path || [] });
     $new->set_path($path);
+    $new->set_md5_path( $md5path );
     $new->set_perl(undef);
     if (my $cached = $new->from_cache) {
         $cached->set_plugins($self->get_plugins);
@@ -1536,7 +1552,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.93"
+$VERSION = "0.93_001"
 
 =cut
 
@@ -2596,7 +2612,7 @@ you want to use {C<{if foo}}{{var bar}}{{/if foo}}>, then your
 definition should be:
 
     [
-        qr({{), start of opening tag
+        qr({{), # start of opening tag
         qr(}}), # end of opening tag
         qr({{/), # start of closing tag
         qr(}}), # end of closing tag

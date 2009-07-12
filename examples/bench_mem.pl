@@ -1,10 +1,12 @@
 #!/usr/bin/perl
-# $Id: bench_mem.pl 235 2005-12-30 17:26:08Z tinita $
+# $Id: bench_mem.pl 1086 2009-07-03 16:45:27Z tinita $
 use strict;
 use warnings;
 use lib "blib/lib";
 $|=1;
 use File::Copy;
+use FindBin qw/ $RealBin /;
+chdir "$RealBin/..";
 # call perl examples/bench_mem.pl htc 1000
 my ($mod, $count) = @ARGV;
 usage() unless $mod;
@@ -121,8 +123,6 @@ my $news = {
 	copy "examples/included.tt", "examples/mem/included.tt" or die $!;
 	-f "examples/mem/included.htc" or
 	copy "examples/included.htc", "examples/mem/included.htc" or die $!;
-	-f "examples/mem/included.html" or
-	copy "examples/included.html", "examples/mem/included.html" or die $!;
     # preprocess half of the templates
     my $t = process($count/2, $mod, $file);
     print_top("root");

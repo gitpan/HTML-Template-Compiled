@@ -1,12 +1,12 @@
 ---
 name: HTML-Template-Compiled
-version: 0.93
+version: 0.93_001
 author:
   - Tina Mueller
 abstract: Template System Compiles HTML::Template files to Perl code
 license: perl
 resources:
-  license: http://dev.perl.org/licenses/
+  license: ~
 requires:
   Carp: 0
   File::Basename: 0
@@ -19,7 +19,7 @@ recommends:
 provides:
   HTML::Template::Compiled:
     file: lib/HTML/Template/Compiled.pm
-    version: 0.93
+    version: 0.93_001
   HTML::Template::Compiled::Classic:
     file: lib/HTML/Template/Compiled/Classic.pm
     version: 0.05
@@ -46,6 +46,8 @@ provides:
     file: lib/HTML/Template/Compiled/Expression.pm
   HTML::Template::Compiled::Expression::Elsif:
     file: lib/HTML/Template/Compiled/Expression.pm
+  HTML::Template::Compiled::Expression::Expressions:
+    file: lib/HTML/Template/Compiled/Expression/Expressions.pm
   HTML::Template::Compiled::Expression::Function:
     file: lib/HTML/Template/Compiled/Expression.pm
   HTML::Template::Compiled::Expression::If:
@@ -92,7 +94,7 @@ provides:
   HTML::Template::Compiled::Utils:
     file: lib/HTML/Template/Compiled/Utils.pm
     version: 0.05
-generated_by: Module::Build version 0.2808
+generated_by: Module::Build version 0.32
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html
   version: 1.2

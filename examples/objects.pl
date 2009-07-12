@@ -10,7 +10,7 @@ __PACKAGE__->mk_accessors(qw(first last age));
 package main;
 use strict;
 use warnings;
-use HTML::Template::Compiled;
+use HTML::Template::Compiled::Formatter;
 use Fcntl qw(:seek);
 
 my ($template, $perlcode);
@@ -20,19 +20,21 @@ my ($template, $perlcode);
     seek DATA, 0, SEEK_SET;
     $perlcode = <DATA>;
 }
-
-my $htc = HTML::Template::Compiled->new(
-    scalarref => \$template,
-    tagstyle => [qw(+tt)],
-    formatter => {
-        'HTC::Object' => {
-            fullname => sub {
-                my $first = $_[0]->get_first;
-                my $last = $_[0]->get_last;
-                return "$last, $first";
-            },
+my $formatter = {
+    'HTC::Object' => {
+        fullname => sub {
+            my $first = $_[0]->get_first;
+            my $last = $_[0]->get_last;
+            return "$last, $first";
         },
     },
+};
+
+local $HTML::Template::Compiled::Formatter::formatter = $formatter;
+
+my $htc = HTML::Template::Compiled::Formatter->new(
+    scalarref => \$template,
+    tagstyle => [qw(+tt)],
 );
 my $persons = [
     HTC::Object->new({first => 'Bart',   last => 'Simpson', age => 10}),

@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm 1079 2008-11-03 18:57:01Z tinita $
+# $Id: Parser.pm 1091 2009-07-11 15:33:39Z tinita $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -578,7 +578,7 @@ sub find_attribute {
         $orig .= $1;
     }
     #print STDERR "match '$$text' (?=$until|\\s)\n";
-    if ($arg->{template} =~ s{^ (\s* (['"]) ([^"]+) \2 \s*) }{}x) {
+    if ($arg->{template} =~ s{^ (\s* (['"]) (.+?) \2 \s*) }{}x) {
         #print STDERR qq{matched $2$3$2\n};
         $var = "$3";
         $orig .= $1;

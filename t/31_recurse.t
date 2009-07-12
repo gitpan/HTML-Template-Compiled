@@ -1,7 +1,6 @@
-# $Id: 31_recurse.t 927 2007-05-22 21:15:27Z tinita $
+# $Id: 31_recurse.t 1089 2009-07-11 15:21:02Z tinita $
 use warnings;
 use strict;
-use blib;
 use lib 't';
 use Test::More tests => 4;
 use_ok('HTML::Template::Compiled');

@@ -1,5 +1,17 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.93_001 Sun Jul 12 17:03:16 CEST 2009
+- Bugfix: single quoted attributes did not allow double quotes in content
+  http://rt.cpan.org/Public/Bug/Display.html?id=43591
+- Bugfix: global vars weren't fetched correctly if case_sensitive off
+  http://rt.cpan.org/Public/Bug/Display.html?id=43591
+- Bugfix: add missing package line
+  http://rt.cpan.org/Public/Bug/Display.html?id=45081
+- Bugfix: added md5sum of paths to cache key so different templates with 
+  the same name are found
+  http://rt.cpan.org/Public/Bug/Display.html?id=28606
+- Bugfix: expressions didn't work in every tag
+
 0.93 Mon Nov  3 20:03:07 CET 2008
 - New Feature: sort-Attribute for TMPL_EACH
 - Change: Allow TMPL_LOOP over an overloaded @{} object 

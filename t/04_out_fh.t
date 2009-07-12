@@ -1,10 +1,11 @@
-# $Id: 04_out_fh.t 952 2007-07-30 20:42:25Z tinita $
+# $Id: 04_out_fh.t 1088 2009-07-04 18:52:56Z tinita $
 use lib 'blib/lib';
 use Test::More tests => 5;
 BEGIN { use_ok('HTML::Template::Compiled') };
 
 use File::Spec;
 my $cache = File::Spec->catfile('t', 'cache');
+my $out = File::Spec->catfile('t', 'templates', 'out_fh.htc.output');
 HTML::Template::Compiled->clear_filecache($cache);
 test('compile', 'clearcache');
 test('filecache');
@@ -22,7 +23,6 @@ sub test {
 		file_cache_dir => 't/cache',
         file_cache => 1,
 	);
-	my $out = File::Spec->catfile('t', 'templates', 'out_fh.htc.output');
 	open my $fh, '>', $out or die $!;
 	$htc->output($fh);
 	close $fh;
@@ -40,3 +40,5 @@ sub test {
 	# this is not portable
 	#ok(-s $out == -s File::Spec->catfile('t', 'out_fh.htc'), "out_fh");
 }
+
+unlink $out;

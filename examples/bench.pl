@@ -1,9 +1,11 @@
 #!/usr/bin/perl
-# $Id: bench.pl 1007 2008-02-15 13:47:49Z tinita $
+# $Id: bench.pl 1085 2009-07-03 16:40:28Z tinita $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
 use Getopt::Long;
+use FindBin qw/ $RealBin /;
+chdir "$RealBin/..";
 #use Devel::Size qw(size total_size);
 my $count = 0;
 my $ht_file = 'test.htc';
@@ -11,8 +13,8 @@ my $ht_file = 'test.htc';
 #$ht_file = 'test.htc.20';
 my $htcc_file = $ht_file . 'c';
 my $tt_file = "test.tt";
-#$tt_file = "examples/test.tt.10";
-#$tt_file = "examples/test.tt.20";
+#$tt_file = "test.tt.10";
+#$tt_file = "test.tt.20";
 my $tst_file = "examples/test.tst";
 mkdir "cache";
 mkdir "cache/htc";
@@ -197,18 +199,18 @@ sub new_htj {
 sub new_tl {
 	my $tt= Template::Like->new(
     );
-=pod
-        $FILE_CACHE
-            ? (
-                COMPILE_EXT => '.ttc',
-                COMPILE_DIR => 'cache/tt',
-            )
-            : (),
-        $MEM_CACHE
-            ? ()
-            : (CACHE_SIZE => 0),
-		INCLUDE_PATH => 'examples',
-=cut
+
+#        $FILE_CACHE
+#            ? (
+#                COMPILE_EXT => '.ttc',
+#                COMPILE_DIR => 'cache/tt',
+#            )
+#            : (),
+#        $MEM_CACHE
+#            ? ()
+#            : (CACHE_SIZE => 0),
+#		INCLUDE_PATH => 'examples',
+
 	#my $size = total_size($tt);
 	#print "size tt  = $size\n";
 	return $tt;

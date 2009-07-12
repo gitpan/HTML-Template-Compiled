@@ -41,7 +41,7 @@ __PACKAGE__-&gt;mk_accessors(qw(first last age));
 package main;
 use strict;
 use warnings;
-use HTML::Template::Compiled;
+use HTML::Template::Compiled::Formatter;
 use Fcntl qw(:seek);
 
 my ($template, $perlcode);
@@ -51,25 +51,27 @@ my ($template, $perlcode);
     seek DATA, 0, SEEK_SET;
     $perlcode = &lt;DATA&gt;;
 }
-
-my $htc = HTML::Template::Compiled-&gt;new(
-    scalarref =&gt; \$template,
-    tagstyle =&gt; [qw(+tt)],
-    formatter =&gt; {
-        'HTC::Object' =&gt; {
-            fullname =&gt; sub {
-                my $first = $_[0]-&gt;get_first;
-                my $last = $_[0]-&gt;get_last;
-                return &quot;$last, $first&quot;;
-            },
+my $formatter = {
+    &#39;HTC::Object&#39; =&gt; {
+        fullname =&gt; sub {
+            my $first = $_[0]-&gt;get_first;
+            my $last = $_[0]-&gt;get_last;
+            return &quot;$last, $first&quot;;
         },
     },
+};
+
+local $HTML::Template::Compiled::Formatter::formatter = $formatter;
+
+my $htc = HTML::Template::Compiled::Formatter-&gt;new(
+    scalarref =&gt; \$template,
+    tagstyle =&gt; [qw(+tt)],
 );
 my $persons = [
-    HTC::Object-&gt;new({first =&gt; 'Bart',   last =&gt; 'Simpson', age =&gt; 10}),
-    HTC::Object-&gt;new({first =&gt; 'Maggie', last =&gt; 'Simpson', age =&gt; 10}),
-    HTC::Object-&gt;new({first =&gt; 'March',  last =&gt; 'Simpson', age =&gt; 42}),
-    HTC::Object-&gt;new({first =&gt; 'Homer',  last =&gt; 'Simpson', age =&gt; 42}),
+    HTC::Object-&gt;new({first =&gt; &#39;Bart&#39;,   last =&gt; &#39;Simpson&#39;, age =&gt; 10}),
+    HTC::Object-&gt;new({first =&gt; &#39;Maggie&#39;, last =&gt; &#39;Simpson&#39;, age =&gt; 10}),
+    HTC::Object-&gt;new({first =&gt; &#39;March&#39;,  last =&gt; &#39;Simpson&#39;, age =&gt; 42}),
+    HTC::Object-&gt;new({first =&gt; &#39;Homer&#39;,  last =&gt; &#39;Simpson&#39;, age =&gt; 42}),
 ];
 $htc-&gt;param(
     count =&gt; scalar @$persons,
