@@ -1,31 +1,33 @@
 ---
 name: HTML-Template-Compiled
-version: 0.93_001
+version: 0.93_002
 author:
   - Tina Mueller
 abstract: Template System Compiles HTML::Template files to Perl code
 license: perl
 resources:
-  license: ~
+  license: http://dev.perl.org/licenses/
 requires:
   Carp: 0
   File::Basename: 0
   File::Spec: 0
   Test::More: 0
-  perl: 5.6.1
+  perl: v5.6.1
 recommends:
   HTML::Entities: 0
   URI::Escape: 0
+configure_requires:
+  Module::Build: 0.340201
 provides:
   HTML::Template::Compiled:
     file: lib/HTML/Template/Compiled.pm
-    version: 0.93_001
+    version: 0.93_002
   HTML::Template::Compiled::Classic:
     file: lib/HTML/Template/Compiled/Classic.pm
     version: 0.05
   HTML::Template::Compiled::Compiler:
     file: lib/HTML/Template/Compiled/Compiler.pm
-    version: 0.15
+    version: 0.16
   HTML::Template::Compiled::Compiler::Classic:
     file: lib/HTML/Template/Compiled/Compiler/Classic.pm
     version: 0.02
@@ -73,7 +75,7 @@ provides:
     version: 0.01
   HTML::Template::Compiled::Parser:
     file: lib/HTML/Template/Compiled/Parser.pm
-    version: 0.09
+    version: 0.1
   HTML::Template::Compiled::Plugin::DHTML:
     file: lib/HTML/Template/Compiled/Plugin/DHTML.pm
     version: 0.02
@@ -94,7 +96,7 @@ provides:
   HTML::Template::Compiled::Utils:
     file: lib/HTML/Template/Compiled/Utils.pm
     version: 0.05
-generated_by: Module::Build version 0.32
+generated_by: Module::Build version 0.340201
 meta-spec:
-  url: http://module-build.sourceforge.net/META-spec-v1.2.html
-  version: 1.2
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4

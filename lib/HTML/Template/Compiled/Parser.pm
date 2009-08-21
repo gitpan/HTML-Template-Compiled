@@ -1,11 +1,11 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm 1091 2009-07-11 15:33:39Z tinita $
+# $Id: Parser.pm 1101 2009-08-21 12:48:00Z tinita $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
 use base qw(Exporter);
 use HTML::Template::Compiled::Token qw(:tagtypes);
-our $VERSION = 0.09;
+our $VERSION = 0.10;
 my @vars;
 BEGIN {
 @vars = qw(
@@ -131,9 +131,9 @@ my %allowed_tagnames = (
         COMMENT     => [undef, qw(NAME)],
         VERBATIM    => [undef, qw(NAME)],
         NOPARSE     => [undef, qw(NAME)],
-        LOOP        => [$default_validation, qw(NAME ALIAS JOIN BREAK EXPR)],
+        LOOP        => [$default_validation, qw(NAME ALIAS JOIN BREAK EXPR CONTEXT)],
         WHILE       => [$default_validation, qw(NAME ALIAS BREAK EXPR)],
-        EACH        => [$default_validation, qw(NAME BREAK EXPR SORT REVERSE)],
+        EACH        => [$default_validation, qw(NAME BREAK EXPR SORT REVERSE CONTEXT)],
         SWITCH      => [$default_validation, qw(NAME EXPR)],
         CASE        => [undef, qw(NAME)],
         INCLUDE_VAR => [$default_validation, qw(NAME EXPR)],
@@ -162,6 +162,7 @@ sub init {
     my $tagnames = $args{tagnames} || {};
     my $tagstyle = $self->_create_tagstyle( $args{tagstyle} );
     $self->[ATTR_TAGSTYLE] = $tagstyle;
+    $self->[ATTR_EXPRESSION] = $args{use_expressions};
     $self->[ATTR_TAGNAMES] = {
         OPENING_TAG() => {
             %{ $allowed_tagnames{ OPENING_TAG() } },

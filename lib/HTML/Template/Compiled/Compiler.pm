@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1096 2009-07-12 13:50:07Z tinita $
+# $Id: Compiler.pm 1101 2009-08-21 12:48:00Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -155,6 +155,8 @@ sub parse_var {
     my ( $self, $t, %args ) = @_;
     my $lexicals = $args{lexicals};
     my $context = $args{context};
+    # calling context. 'list' or empty (which means scalar)
+    my $ccontext = $args{ccontext} || '';
 
 
     if (!defined $args{var} and defined $args{expr}) {
@@ -257,6 +259,15 @@ sub parse_var {
         if ($i == $#split and defined $args{method_args}) {
             $method_args = $args{method_args};
         }
+        my $around = ['', ''];
+        if ($i == $#split and $ccontext eq 'list') {
+            if ($context->get_name eq 'EACH') {
+                $around = ['+{', '}'];
+            }
+            elsif ($context->get_name eq 'LOOP') {
+                $around = ['[', ']'];
+            }
+        }
         my $p = $split[$i];
         #warn __PACKAGE__.':'.__LINE__.": path: $p\n";
         my $copy = $p;
@@ -337,6 +348,7 @@ sub parse_var {
         elsif ( $formatter_call ) {
             $code = "\$t->_walk_formatter($varname, '$p', @{[$t->get_global_vars]})";
         }
+        $code = $around->[0] . $code . $around->[1];
         if (0 or @split > 1) {
             $varstr .= "$varname = $code;";
         }
@@ -521,12 +533,14 @@ EOM
         # --------- TMPL_LOOP TMPL_WHILE TMPL_EACH
         elsif ( ($tname eq T_LOOP || $tname eq T_WHILE || $tname eq T_EACH) ) {
             my $var     = $attr->{NAME};
+            my $ccontext = $attr->{CONTEXT} || '';
             my $varstr = $class->parse_var($self,
                 %var_args,
-                var   => $var,
-                context => $token,
-                compiler => $class,
-                expr   => $attr->{EXPR},
+                var         => $var,
+                context     => $token,
+                compiler    => $class,
+                expr        => $attr->{EXPR},
+                ccontext    => $ccontext,
             );
             my $ind    = INDENT;
             if ($self->get_use_query) {

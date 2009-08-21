@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1094 2009-07-11 16:17:57Z tinita $
+# $Id: Compiled.pm 1101 2009-08-21 12:48:00Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.93_001";
+our $VERSION = "0.93_002";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -1552,7 +1552,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.93_001"
+$VERSION = "0.93_002"
 
 =cut
 
@@ -2227,6 +2227,14 @@ outputs
 
 So specifying BREAK=3 sets __break__ to 1 every 3rd loop iteration.
 
+TMPL_LOOP expects an array reference, also if it is a method call. If
+you want to iterate with TMPL_LOOP over a list from a method call, set
+the attribute C<context=list>:
+
+    <tmpl_loop object.list_method context=list>
+        <tmpl_var _ >
+    </tmpl_loop>
+
 =head2 TMPL_WHILE
 
 Useful for iterating, for example over database resultsets.
@@ -2270,6 +2278,14 @@ can also sort the output:
 
 You have to set the option C<loop_context_vars> to true to use
 the special vars C<__key__> and C<__value__>.
+
+If you want to iterate over a hash instead of a hashref (some
+methods might return plain hashes instead of references and
+TMPL_EACH expects a ref), then you can set C<context=list>:
+
+    <tmpl_each object.hash_method context=list>
+    <tmpl_var __key__ >
+    </tmpl_each>
 
 =head2 TMPL_COMMENT
 

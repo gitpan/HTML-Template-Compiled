@@ -1,5 +1,12 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.93_002 Fri Aug 21 14:47:09 CEST 2009
+- Bugfix: Expressions were only activated when using default
+  tagstyle; using tagstyle would overwrite use_expression option
+- New feaure: in TMPL_LOOP and TMPL_EACH you can set context="list"
+  This is necessary if you call a method that returns a list
+  instead of array- or hashref
+
 0.93_001 Sun Jul 12 17:03:16 CEST 2009
 - Bugfix: single quoted attributes did not allow double quotes in content
   http://rt.cpan.org/Public/Bug/Display.html?id=43591
