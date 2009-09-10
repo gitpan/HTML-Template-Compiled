@@ -1,4 +1,4 @@
-# $Id: 26_expr.t 1100 2009-08-21 12:19:29Z tinita $
+# $Id: 26_expr.t 1103 2009-08-23 13:10:31Z tinita $
 use warnings;
 use strict;
 use lib 't';
@@ -13,7 +13,7 @@ use HTC_Utils qw($cache $tdir &cdir);
 sub HT_Utils::list { my @a = qw/ a b c /; return @a }
 sub HT_Utils::each { my %a = ( a => 1, b => 2 ); return %a }
 SKIP: {
-    skip "No Parse::RecDescent installed", 8 unless $prd;
+    skip "No Parse::RecDescent installed", 11 unless $prd;
     use_ok('HTML::Template::Compiled::Expr');
     my $htc;
     eval {

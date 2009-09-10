@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1101 2009-08-21 12:48:00Z tinita $
+# $Id: Compiled.pm 1105 2009-09-10 17:56:17Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.93_002";
+our $VERSION = "0.94";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -21,7 +21,6 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Compiler;
 # TODO
 eval {
-    require HTML::Entities;
     require URI::Escape;
 };
 eval {
@@ -257,6 +256,9 @@ sub new_scalar_ref {
     $self->set_scalar( $args{scalarref} );
     my $text = $self->get_scalar;
     my $md5  = md5($$text);
+    if ($args{cache} and !$md5) {
+        croak "For caching scalarrefs you need Digest::MD5";
+    }
     $self->set_filename($md5);
     D && $self->log("md5: $md5");
     my $md5path = md5_hex(@{ $args{path} || [] });
@@ -1552,7 +1554,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.93_002"
+$VERSION = "0.94"
 
 =cut
 

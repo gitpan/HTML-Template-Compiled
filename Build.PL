@@ -16,7 +16,6 @@ my $build = Module::Build->new(
         Carp             => 0,
     },
     recommends         => {
-        'HTML::Entities' => 0,
         'URI::Escape' => 0,
     },
     create_readme      => 0,

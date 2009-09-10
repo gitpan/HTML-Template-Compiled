@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t 1091 2009-07-11 15:33:39Z tinita $
+# $Id: 01_HTML-Template-Compiled.t 1102 2009-08-21 13:56:24Z tinita $
 
 use Test::More tests => 6;
 use Data::Dumper;
@@ -73,12 +73,10 @@ my $htc = $subclass->new(%args);
 ok($htc, "template created");
 $htc->param(%$hash);
 
-eval { require HTML::Entities };
-my $entities = $@ ? 0 : 1;
 eval { require URI::Escape };
 my $uri = $@ ? 0 : 1;
 SKIP: {
-	skip "no HTML::Entities and URI::Escape installed", 3, unless ($entities && $uri);
+	skip "no URI::Escape installed", 3, unless ($uri);
 	my $out = $htc->output;
 	my $dump = <<'EOM';
 $DUMP = {

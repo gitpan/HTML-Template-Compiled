@@ -1,6 +1,6 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm 973 2007-09-20 12:40:50Z tinita $
-$VERSION = "0.05";
+# $Id: Utils.pm 1102 2009-08-21 13:56:24Z tinita $
+$VERSION = "0.06";
 use strict;
 use warnings;
 use Data::Dumper qw(Dumper);
@@ -164,6 +164,7 @@ sub escape_html_all {
     return $_[0] unless defined $_[0];
     # hopefully encode_entities() works correct
     # and doesn't change its arg when called in scalar context
+    require HTML::Entities;
     return HTML::Entities::encode_entities($_[0]);
 }
 

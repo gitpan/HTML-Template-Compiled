@@ -1,5 +1,5 @@
 
-# $Id: 33_plugins.t 987 2007-11-05 22:00:58Z tinita $
+# $Id: 33_plugins.t 1104 2009-08-31 08:46:36Z tinita $
 use warnings;
 use strict;
 use blib;
@@ -32,8 +32,6 @@ for (0..1) {
 EOM
         plugin => [$plug],
         debug    => 0,
-        file_cache => 1,
-        file_cache_dir => $cache,
         cache => 0,
     );
     my $string = 'string';
@@ -100,8 +98,6 @@ EOM
 EOM
         plugin => [$plug],
         debug    => 0,
-        file_cache => 0,
-        file_cache_dir => $cache,
         cache => 0,
     );
     my $string = 'string';

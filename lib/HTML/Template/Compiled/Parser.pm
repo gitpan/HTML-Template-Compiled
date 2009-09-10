@@ -1,11 +1,11 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm 1101 2009-08-21 12:48:00Z tinita $
+# $Id: Parser.pm 1102 2009-08-21 13:56:24Z tinita $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
 use base qw(Exporter);
 use HTML::Template::Compiled::Token qw(:tagtypes);
-our $VERSION = 0.10;
+our $VERSION = 0.11;
 my @vars;
 BEGIN {
 @vars = qw(
@@ -281,7 +281,7 @@ sub find_attributes {
     my $callbacks_found_text;
     my $encode_tag = sub {
         my ( $p, $arg ) = @_;
-        HTML::Entities::encode_entities($arg->{token});
+        $arg->{token} = HTML::Template::Compiled::Utils::escape_html($arg->{token});
         $callbacks_found_text->[0]->($p, $arg);
         $arg->{token} = "";
     };

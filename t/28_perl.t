@@ -1,4 +1,4 @@
-# $Id: 28_perl.t 952 2007-07-30 20:42:25Z tinita $
+# $Id: 28_perl.t 1104 2009-08-31 08:46:36Z tinita $
 use warnings;
 use strict;
 use blib;
@@ -26,8 +26,6 @@ EOM
         debug    => 0,
         tagstyle => [qw(-classic -comment +asp +tt)],
         cache => 0,
-        file_cache_dir => $cache,
-        file_cache => 1,
         search_path_on_include => 1,
     );
     $htc->param(

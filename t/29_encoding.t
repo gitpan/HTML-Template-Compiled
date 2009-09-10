@@ -1,4 +1,4 @@
-# $Id: 29_encoding.t 1000 2008-01-24 20:27:44Z tinita $
+# $Id: 29_encoding.t 1102 2009-08-21 13:56:24Z tinita $
 use warnings;
 use strict;
 use blib;
@@ -9,14 +9,12 @@ use HTC_Utils qw($cache $tdir &cdir);
 
 eval { require URI::Escape };
 my $uri = $@ ? 0 : 1;
-eval { require HTML::Entities };
-my $he = $@ ? 0 : 1;
 eval { require Encode };
 my $encode = $@ ? 0 : 1;
 my $template = File::Spec->catfile(qw/ t templates utf8.htc /);
 #use Devel::Peek;
 SKIP: {
-	skip "no URI::Escape, HTML::Entities and Encode installed", 1 unless $uri && $he && $encode;
+	skip "no URI::Escape, Encode installed", 1 unless $uri && $encode;
     open my $fh, '>:utf8', $template;
     my $string = <<"EOM";
 test utf8: \x{f6}
