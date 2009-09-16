@@ -1,5 +1,9 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.94_001 Wed Sep 16 19:41:01 CEST 2009
+- Fix memory leak when compiling
+  Thanks to Henrik Tougaard
+
 0.94 Thu Sep 10 19:55:04 CEST 2009
 - Fix test
 

@@ -1,11 +1,12 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm 1102 2009-08-21 13:56:24Z tinita $
+# $Id: Parser.pm 1106 2009-09-16 17:44:06Z tinita $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
 use base qw(Exporter);
 use HTML::Template::Compiled::Token qw(:tagtypes);
-our $VERSION = 0.11;
+my $scalar_util = eval "require Scalar::Util; 1";
+our $VERSION = 0.12;
 my @vars;
 BEGIN {
 @vars = qw(
@@ -534,6 +535,7 @@ sub find_attributes {
             }
 
         }
+        Scalar::Util::weaken($callback_found_tag) if $scalar_util;
         $self->checkstack({
                 %$arg, name => T_END, open_or_close => CLOSING_TAG
             } );
