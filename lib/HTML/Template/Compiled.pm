@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1106 2009-09-16 17:44:06Z tinita $
+# $Id: Compiled.pm 1108 2010-08-19 21:49:04Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.94_001";
+our $VERSION = "0.94_002";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -568,6 +568,16 @@ sub add_file_cache {
                 mtime => $times{mtime},
                 checked => $times{checked},
             },
+        };
+        # TODO Storable cannot store qr//
+        # but as we don't need those serialized anyway
+        # we let Storable just store a dummy entry
+        local $Storable::forgive_me = 1;
+        local $SIG{__WARN__} = sub {
+            my ($w) = @_;
+            unless ($w =~ m/Can't store item REGEXP/) {
+                warn $w;
+            }
         };
         Storable::store($to_cache, "$cachefile.storable");
     }
@@ -1554,7 +1564,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.94_001"
+$VERSION = "0.94_002"
 
 =cut
 
@@ -2991,7 +3001,7 @@ Special Thanks to Sascha Kiefer - he finds all the bugs!
 Ronnie Neumann, Martin Fabiani, Kai Sengpiel, Jan Willamowius, Justin Day,
 Steffen Winkler, Henrik Tougaard for ideas, beta-testing and patches
 
-perlmonks.org and perl-community.de for everyday learning
+L<http://www.perlmonks.org/> and http://www.perl-community.de/> for everyday learning
 
 Corion, Limbic~Region, tye, runrig and others from perlmonks.org 
 
