@@ -6,6 +6,15 @@ use Module::Build;
 my $build = Module::Build->new(
     create_makefile_pl => 'traditional',
     license            => 'perl',
+    resources => {
+        repository => {
+            url => 'https://htcompiled.svn.sourceforge.net/svnroot/htcompiled',
+            type => 'svn',
+        },
+    },
+    configure_requires => {
+        'Module::Build' => 0,
+    },
     module_name        => 'HTML::Template::Compiled',
     dist_author        => 'Tina Mueller',
     requires => {

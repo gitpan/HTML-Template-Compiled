@@ -99,3 +99,4 @@ t/templates/subdir/file_debug.html
 t/templates/loop_included.tmpl
 t/templates/user_template.html
 META.yml                                 Module meta-data (added by MakeMaker)
+META.json

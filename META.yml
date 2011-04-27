@@ -2,9 +2,11 @@
 abstract: 'Template System Compiles HTML::Template files to Perl code'
 author:
   - 'Tina Mueller'
+build_requires: {}
 configure_requires:
-  Module::Build: 0.36
-generated_by: 'Module::Build version 0.3607'
+  Module::Build: 0
+dynamic_config: 1
+generated_by: 'Module::Build version 0.38, CPAN::Meta::Converter version 2.110930'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -13,7 +15,7 @@ name: HTML-Template-Compiled
 provides:
   HTML::Template::Compiled:
     file: lib/HTML/Template/Compiled.pm
-    version: 0.94_002
+    version: 0.95
   HTML::Template::Compiled::Classic:
     file: lib/HTML/Template/Compiled/Classic.pm
     version: 0.05
@@ -34,28 +36,40 @@ provides:
     version: 0.02
   HTML::Template::Compiled::Expression::Conditional:
     file: lib/HTML/Template/Compiled/Expression.pm
+    version: 0
   HTML::Template::Compiled::Expression::Defined:
     file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+    version: 0
   HTML::Template::Compiled::Expression::Else:
     file: lib/HTML/Template/Compiled/Expression.pm
+    version: 0
   HTML::Template::Compiled::Expression::Elsif:
     file: lib/HTML/Template/Compiled/Expression.pm
+    version: 0
   HTML::Template::Compiled::Expression::Expressions:
     file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+    version: 0
   HTML::Template::Compiled::Expression::Function:
     file: lib/HTML/Template/Compiled/Expression.pm
+    version: 0
   HTML::Template::Compiled::Expression::If:
     file: lib/HTML/Template/Compiled/Expression.pm
+    version: 0
   HTML::Template::Compiled::Expression::Literal:
     file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+    version: 0
   HTML::Template::Compiled::Expression::Method:
     file: lib/HTML/Template/Compiled/Expression.pm
+    version: 0
   HTML::Template::Compiled::Expression::String:
     file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+    version: 0
   HTML::Template::Compiled::Expression::Ternary:
     file: lib/HTML/Template/Compiled/Expression/Expressions.pm
+    version: 0
   HTML::Template::Compiled::Expression::Unless:
     file: lib/HTML/Template/Compiled/Expression.pm
+    version: 0
   HTML::Template::Compiled::Filter:
     file: lib/HTML/Template/Compiled/Filter.pm
     version: 0.03
@@ -79,12 +93,16 @@ provides:
     version: 0.02
   HTML::Template::Compiled::Token::Text:
     file: lib/HTML/Template/Compiled/Token.pm
+    version: 0
   HTML::Template::Compiled::Token::close:
     file: lib/HTML/Template/Compiled/Token.pm
+    version: 0
   HTML::Template::Compiled::Token::open:
     file: lib/HTML/Template/Compiled/Token.pm
+    version: 0
   HTML::Template::Compiled::Token::single:
     file: lib/HTML/Template/Compiled/Token.pm
+    version: 0
   HTML::Template::Compiled::Utils:
     file: lib/HTML/Template/Compiled/Utils.pm
     version: 0.06
@@ -98,4 +116,4 @@ requires:
   perl: v5.6.1
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.94_002
+version: 0.95

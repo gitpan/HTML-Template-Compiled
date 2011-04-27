@@ -1,5 +1,8 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.95 Wed Apr 27 20:48:13 CEST 2011
+- Just moving developer release to regular release
+
 0.94_002 Thu Aug 19 23:43:41 CEST 2010
 - Fix for 5.12: ignore Storable fatal error abour regexp items.
   thanks to Daniel Tašov for the hint. just a workaround for now

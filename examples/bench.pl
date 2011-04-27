@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl 1085 2009-07-03 16:40:28Z tinita $
+# $Id: bench.pl 1112 2011-04-27 18:48:13Z tinita $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -31,10 +31,12 @@ my %use = (
 	'HTML::Template::Compiled::Classic' => 0,
 #	'HTML::Template::JIT'      => 0,
 	'Template'                 => 0,
+    'Template::HTML'           => 0,
     'Template::Like'           => 0,
 	'CGI::Ex::Template'        => 0,
 	# not yet
 	'Text::ScriptTemplate'     => 0,
+    'Text::Xslate'             => 0,
 );
 for my $key (sort keys %use) {
 	eval "require $key";
@@ -69,6 +71,7 @@ mem-cache:      $MEM_CACHE
 loop-context:   $LOOP_CONTEXT
 global-vars:    $GLOBAL_VARS
 case-sensitive: $CASE_SENSITIVE
+default-escape: $default_escape
 ";
 
 sub new_htc {
@@ -234,6 +237,36 @@ sub new_tt {
 	return $tt;
 }
 
+sub new_tth {
+	my $tt= Template::HTML->new(
+        $FILE_CACHE
+            ? (
+                COMPILE_EXT => '.ttc',
+                COMPILE_DIR => 'cache/tt',
+            )
+            : (),
+        $MEM_CACHE
+            ? ()
+            : (CACHE_SIZE => 0),
+		INCLUDE_PATH => 'examples',
+	);
+	#my $size = total_size($tt);
+	#print "size tt  = $size\n";
+	return $tt;
+}
+
+sub new_xslate {
+	my $t = Text::Xslate->new(
+        cache_dir => ($FILE_CACHE ? "cache/xslate" : undef),
+        cache => $MEM_CACHE,
+		path => 'examples',
+        syntax => 'TTerse',
+	);
+	#my $size = total_size($tt);
+	#print "size tt  = $size\n";
+	return $t;
+}
+
 sub new_cet {
 	my $tt= CGI::Ex::Template->new(
         $FILE_CACHE
@@ -326,8 +359,22 @@ sub output_tt {
 	#my $size = total_size($t);
 	#print "size $t = $size\n";
 	#print $t->{code} if exists $t->{code};
-	#my $out = $t->output;
-	#print "\nOUT: $out";
+    #my $out = $t->output;
+    #print "\nOUT: $out";
+}
+
+sub output_xslate {
+	my $t = shift;
+	return unless defined $t;
+	my $filett = $tt_file;
+	#$t->process($filett, \%params, \*OUT);
+#	$t->process($filett, \%params, \*OUT) or die $t->error();
+	#my $size = total_size($t);
+	#print "size $t = $size\n";
+	#print $t->{code} if exists $t->{code};
+    my $out = $t->render('test.xslate', \%params);
+    #my $out = $t->output;
+    #print "\nOUT: $out";
 }
 
 my $global_htc = $use{'HTML::Template::Compiled'} ? new_htc : undef;
@@ -337,6 +384,8 @@ my $global_htp = $use{'HTML::Template::Pro'} ? new_htp : undef;
 my $global_htpl = $use{'HTML::Template::Pluggable'} ? new_htpl : undef;
 my $global_htj = $use{'HTML::Template::JIT'} ? new_htj : undef;
 my $global_tt = $use{'Template'} ? new_tt : undef;
+my $global_tth = $use{'Template::HTML'} ? new_tth : undef;
+my $global_xslate = $use{'Text::Xslate'} ? new_xslate : undef;
 my $global_tl = $use{'Template::Like'} ? new_tl : undef;
 my $global_cet = $use{'CGI::Ex::Template'} ? new_cet : undef;
 my $global_tst = $use{'Text::ScriptTemplate'} ? new_tst : undef;
@@ -391,6 +440,22 @@ if(1) {
             $MEM_CACHE
                 ? ()
                 : (all_tt_new_object => sub {my $t = new_tt();output_tt($t)}),
+        ): (),
+        $use{'Template::HTML'} ? (
+            #new_tt => sub {my $t = new_tt();},
+            #output_tt => sub {output_tt($global_tt)},
+            process_tth => sub {output_tt($global_tth)},
+            $MEM_CACHE
+                ? ()
+                : (all_tth_new_object => sub {my $t = new_tth();output_tt($t)}),
+        ): (),
+        $use{'Text::Xslate'} ? (
+            #new_tt => sub {my $t = new_tt();},
+            #output_tt => sub {output_tt($global_tt)},
+            process_xslate => sub {output_xslate($global_xslate)},
+            $MEM_CACHE
+                ? ()
+                : (all_xslate_new_object => sub {my $t = new_xslate();output_xslate($t)}),
         ): (),
         $use{'Template::Like'} ? (
             process_tl => sub {output_tl($global_tl)},
