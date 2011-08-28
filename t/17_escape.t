@@ -1,9 +1,9 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 17_escape.t 1102 2009-08-21 13:56:24Z tinita $
+# $Id: 17_escape.t 1118 2011-08-28 16:51:46Z tinita $
 
 use lib 'blib/lib';
-use Test::More tests => 4;
+use Test::More tests => 5;
 use Data::Dumper;
 use File::Spec;
 use strict;
@@ -38,6 +38,23 @@ EOM
 }
 
 {
+
+    my $htc = HTML::Template::Compiled->new(
+        scalarref => \<<"EOM",
+<script>
+var test = '<%= foo escape=JS %>';
+</script>
+EOM
+        debug => 0,
+    );
+    my $foo = "test \\'foo";
+    $htc->param(foo => $foo);
+    my $out = $htc->output;
+    $out =~ tr/\n\r//d;
+    $out =~ s/^\s*//;
+    #print $out, $/;
+    cmp_ok($out, 'eq', q{<script>var test = 'test \\\\\\'foo';</script>}, "Plugin XMLEscape");
+}{
 
     my $htc = HTML::Template::Compiled->new(
         scalarref => \<<"EOM",

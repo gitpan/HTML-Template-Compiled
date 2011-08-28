@@ -1,5 +1,9 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.95_001 Sun Aug 28 19:02:00 CEST 2011
+- Bugfix: escape=js escapes backslash now (RT 66463)
+- Bugfix: H::T::C::Classic ignored case_sensitive (RT 70412)
+
 0.95 Wed Apr 27 20:48:13 CEST 2011
 - Just moving developer release to regular release
 

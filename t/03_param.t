@@ -1,7 +1,7 @@
-# $Id: 03_param.t 429 2006-07-02 17:32:45Z tinita $
+# $Id: 03_param.t 1119 2011-08-28 17:01:39Z tinita $
 
 use lib 'blib/lib';
-use Test::More tests => 11;
+use Test::More tests => 12;
 BEGIN {
     use_ok('HTML::Template::Compiled');
     use_ok('HTML::Template::Compiled::Classic');
@@ -52,7 +52,7 @@ literal_dot_is_ok: {
         scalarref => \'<tmpl_var foo.bar>',
     );
     $htc->param('foo.bar', 'WORKS');
-    like($htc->output, qr/WORKS/, "literal dot is OK");
+    like($htc->output, qr/WORKS/, "HTC::Classic literal dot is OK");
 }
 
 subref_variables: {
@@ -66,7 +66,21 @@ subref_variables: {
     );
     my $out = $htc->output;
     #print "($out)\n";
-    cmp_ok($out, 'eq', "bar23bar", "subref variables");
+    cmp_ok($out, 'eq', "bar23bar", "HTC::Classic subref variables");
+}
+
+case_sensitive: {
+    my $htc = HTML::Template::Compiled::Classic->new(
+        scalarref => \"<TMPL_VAR foo> & <TMPL_VAR BAR>",
+        case_sensitive => 0,
+    );
+    $htc->param(
+        foo => 'Harold',
+        bar => 'Maude',
+    );
+    my $out = $htc->output;
+    #print "($out)\n";
+    cmp_ok($out, 'eq', "Harold & Maude", "HTC::Classic case_sensitive");
 }
 
 

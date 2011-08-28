@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl 1112 2011-04-27 18:48:13Z tinita $
+# $Id: bench.pl 1117 2011-08-28 16:44:08Z tinita $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -32,6 +32,7 @@ my %use = (
 #	'HTML::Template::JIT'      => 0,
 	'Template'                 => 0,
     'Template::HTML'           => 0,
+    'Template::AutoFilter'     => 0,
     'Template::Like'           => 0,
 	'CGI::Ex::Template'        => 0,
 	# not yet
@@ -237,6 +238,24 @@ sub new_tt {
 	return $tt;
 }
 
+sub new_ttaf {
+	my $tt= Template::AutoFilter->new(
+        $FILE_CACHE
+            ? (
+                COMPILE_EXT => '.ttc',
+                COMPILE_DIR => 'cache/tt',
+            )
+            : (),
+        $MEM_CACHE
+            ? ()
+            : (CACHE_SIZE => 0),
+		INCLUDE_PATH => 'examples',
+	);
+	#my $size = total_size($tt);
+	#print "size tt  = $size\n";
+	return $tt;
+}
+
 sub new_tth {
 	my $tt= Template::HTML->new(
         $FILE_CACHE
@@ -363,6 +382,19 @@ sub output_tt {
     #print "\nOUT: $out";
 }
 
+sub output_ttaf {
+	my $t = shift;
+	return unless defined $t;
+	my $filett = $tt_file;
+	#$t->process($filett, \%params, \*OUT);
+	$t->process($filett, \%params, \*OUT) or die $t->error();
+	#my $size = total_size($t);
+	#print "size $t = $size\n";
+	#print $t->{code} if exists $t->{code};
+    #my $out = $t->output;
+    #print "\nOUT: $out";
+}
+
 sub output_xslate {
 	my $t = shift;
 	return unless defined $t;
@@ -384,6 +416,7 @@ my $global_htp = $use{'HTML::Template::Pro'} ? new_htp : undef;
 my $global_htpl = $use{'HTML::Template::Pluggable'} ? new_htpl : undef;
 my $global_htj = $use{'HTML::Template::JIT'} ? new_htj : undef;
 my $global_tt = $use{'Template'} ? new_tt : undef;
+my $global_ttaf = $use{'Template::AutoFilter'} ? new_ttaf : undef;
 my $global_tth = $use{'Template::HTML'} ? new_tth : undef;
 my $global_xslate = $use{'Text::Xslate'} ? new_xslate : undef;
 my $global_tl = $use{'Template::Like'} ? new_tl : undef;
@@ -440,6 +473,14 @@ if(1) {
             $MEM_CACHE
                 ? ()
                 : (all_tt_new_object => sub {my $t = new_tt();output_tt($t)}),
+        ): (),
+        $use{'Template::AutoFilter'} ? (
+            #new_ttaf => sub {my $t = new_ttaf();},
+            #output_ttaf => sub {output_tt($global_ttaf)},
+            process_ttaf => sub {output_tt($global_ttaf)},
+            $MEM_CACHE
+                ? ()
+                : (all_ttaf_new_object => sub {my $t = new_ttaf();output_ttaf($t)}),
         ): (),
         $use{'Template::HTML'} ? (
             #new_tt => sub {my $t = new_tt();},

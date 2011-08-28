@@ -1,9 +1,10 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm 1102 2009-08-21 13:56:24Z tinita $
+# $Id: Utils.pm 1118 2011-08-28 16:51:46Z tinita $
 $VERSION = "0.06";
 use strict;
 use warnings;
 use Data::Dumper qw(Dumper);
+use Digest::MD5;
 
 use base 'Exporter';
 use vars qw/@EXPORT_OK %EXPORT_TAGS/;
@@ -28,13 +29,6 @@ use constant PATH_DEREF => 2;
 use constant PATH_FORMATTER => 3;
 use constant PATH_ARRAY => 4;
 
-my $digest_md5 = 0;
-eval {
-    require Digest::MD5;
-};
-unless ($@) {
-    $digest_md5 = 1;
-}
 
 =pod
 
@@ -76,11 +70,8 @@ eval { require Encode };
 my $encode = $@ ? 0 : 1;
 sub md5 {
     my ($text) = @_;
-    if ($digest_md5) {
-        $encode and Encode::_utf8_off($text);
-        return Digest::MD5::md5_base64($text);
-    }
-    return '';
+    $encode and Encode::_utf8_off($text);
+    return Digest::MD5::md5_base64($text);
 }
 
 sub stack {
@@ -195,7 +186,7 @@ JavaScript-escapes the input string and returns it;
 sub escape_js {
     my ($var) = @_;
     return $var unless defined $var;
-    $var =~ s/(["'])/\\$1/g;
+    $var =~ s/(["'\\])/\\$1/g;
     $var =~ s/\r/\\r/g;
     $var =~ s/\n/\\n/g;
     return $var;

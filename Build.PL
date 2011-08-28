@@ -23,6 +23,7 @@ my $build = Module::Build->new(
         'File::Spec'     => 0,
         'File::Basename' => 0,
         Carp             => 0,
+        'Digest::MD5'    => 0,
     },
     recommends         => {
         'URI::Escape' => 0,

@@ -1,7 +1,9 @@
 package HTML::Template::Compiled::Expression::Expressions;
-# $Id: Expressions.pm 1093 2009-07-11 15:41:37Z tinita $
+# $Id: Expressions.pm 1115 2011-08-28 16:41:52Z tinita $
 use strict;
 use warnings;
+
+our $VERSION = 0.01;
 
 package HTML::Template::Compiled::Expression::Defined;
 use base qw(HTML::Template::Compiled::Expression);

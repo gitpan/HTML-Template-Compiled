@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1113 2011-04-27 18:49:59Z tinita $
+# $Id: Compiled.pm 1118 2011-08-28 16:51:46Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.95";
+our $VERSION = "0.95_001";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -1564,7 +1564,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.95"
+$VERSION = "0.95_001"
 
 =cut
 

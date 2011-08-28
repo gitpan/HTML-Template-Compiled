@@ -7,6 +7,7 @@ WriteMakefile
           'VERSION_FROM' => 'lib/HTML/Template/Compiled.pm',
           'PREREQ_PM' => {
                            'Carp' => 0,
+                           'Digest::MD5' => 0,
                            'File::Basename' => 0,
                            'File::Spec' => 0,
                            'Test::More' => 0
