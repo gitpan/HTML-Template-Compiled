@@ -1,8 +1,8 @@
 package HTML::Template::Compiled::Compiler::Classic;
-# $Id: Classic.pm 1121 2011-08-28 17:03:20Z tinita $
+# $Id: Classic.pm 1128 2011-10-31 19:59:56Z tinita $
 use strict;
 use warnings;
-our $VERSION = "0.03";
+our $VERSION = "0.04";
 
 use base 'HTML::Template::Compiled::Compiler';
 
@@ -31,7 +31,7 @@ sub parse_var {
         my $lc = $loop_context{ lc $args{var} };
         return $lc;
     }
-    my $var = $t->get_case_sensitive ? $args{var} : uc $args{var};
+    my $var = $t->get_case_sensitive ? $args{var} : lc $args{var};
     if ($t->get_global_vars & 1) {
         my $varstr =
             "\$t->_get_var_global_sub(" . '$P,$$C,0,'."[undef,'$var'])";

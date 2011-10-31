@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1101 2009-08-21 12:48:00Z tinita $
+# $Id: Compiler.pm 1128 2011-10-31 19:59:56Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.16';
+our $VERSION = '0.17';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -315,7 +315,7 @@ sub parse_var {
             }
         }
 
-        my $path = $t->get_case_sensitive ? $p : uc $p;
+        my $path = $t->get_case_sensitive ? $p : lc $p;
         my $code;
         if ( defined $array_index ) {
             # array index

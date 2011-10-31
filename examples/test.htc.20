@@ -15,7 +15,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -34,7 +34,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -53,7 +53,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -72,7 +72,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -91,7 +91,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -110,7 +110,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -129,7 +129,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -148,7 +148,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -167,7 +167,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -186,7 +186,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -205,7 +205,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -224,7 +224,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -243,7 +243,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -262,7 +262,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -281,7 +281,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -300,7 +300,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -319,7 +319,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -338,7 +338,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -357,7 +357,7 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================
 ===test.html 1==========================================
 name: <TMPL_VAR NAME=name> look ma: ~
@@ -376,5 +376,5 @@ loop c
 <TMPL_LOOP NAME=d>*<TMPL_IF __first__>first</TMPL_IF><TMPL_IF __last__>last </TMPL_IF><TMPL_IF __inner__>inner</TMPL_IF> item: <TMPL_VAR NAME=F><TMPL_IF __odd__>odd</TMPL_IF>
 </TMPL_LOOP></TMPL_LOOP>
 ---------------------
-<TMPL_IF if2>if.if2!</TMPL_IF if2> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF if3> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
+<TMPL_IF if2>if.if2!</TMPL_IF> <TMPL_IF if3>if.if3!  <TMPL_ELSE>no if.if3!</TMPL_IF> <TMPL_UNLESS if3>no if.if3!!</TMPL_UNLESS>
 ===test.html ende==========================================

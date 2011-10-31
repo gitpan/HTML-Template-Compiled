@@ -1,6 +1,5 @@
-# $Id: 03_param.t 1119 2011-08-28 17:01:39Z tinita $
+# $Id: 03_param.t 1128 2011-10-31 19:59:56Z tinita $
 
-use lib 'blib/lib';
 use Test::More tests => 12;
 BEGIN {
     use_ok('HTML::Template::Compiled');
@@ -36,10 +35,10 @@ ok($test->{is}->[3] eq 'param', "param('var')");
 
 param_accumulates: {
     $htc->clear_params;
-    $htc->param({ foo => 'FOO VALUE' });
-    like($htc->output, qr/FOO VALUE/);
-    $htc->param({ bar => 'BAR VALUE' });
-    like($htc->output, qr/FOO VALUE/);
+    $htc->param({ foo => 'foo value' });
+    like($htc->output, qr/foo value/);
+    $htc->param({ bar => 'bar value' });
+    like($htc->output, qr/foo value/);
 }
 
 literal_dot_is_ok: {

@@ -28,7 +28,7 @@ my $build = Module::Build->new(
     recommends         => {
         'URI::Escape' => 0,
     },
-    create_readme      => 0,
+    create_readme      => 1,
     sign               => 0,
 );
 $build->create_build_script;

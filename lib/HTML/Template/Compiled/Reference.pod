@@ -14,6 +14,21 @@ Optional tagstyle 'tt':
 
     [%if var %][%= foo %][%/if var %]
 
+=head1 ACCESSING VARIABLES
+
+    <%= _.foo %>
+    outputs foo in the cuurent position of the stash and is the same as
+    <%= foo %>
+
+    <%= .config.url %>
+    goes to root of parameter stash; like $params->{config}->{url}
+
+    <%= ..foo %>
+    goes one level up in stash
+
+    <%= list[3].keyname.method %>
+    acts like: $stash->[3]->{keyname}->method
+
 =head1 TAGS
 
 =over 4
@@ -33,7 +48,11 @@ for-loop and while-loop like in Perl.
     <%loop cds%><%= __counter__%>. Title: <%= _.title%><%/loop cds%>
     <%loop cds join=", " %><%= _.title%><%/loop cds%>
     <%while resultset.next%><%= __counter__%>. <%= _.foo %><%/while %>
-    <%each hashref%><%= __key__ %>=<%= __value__ %><%/each %>
+    <%each hashref%><%= __key__ %>=<%= __value__ %><%/each %> (sorted alphanumeric)
+    <%each hashref sort=alpha %><%= __key__ %>=<%= __value__ %><%/each %> (sorted alphanumeric)
+    <%each hashref sort=num %><%= __key__ %>=<%= __value__ %><%/each %> (sorted numeric)
+    <%each hashref sort=0 %><%= __key__ %>=<%= __value__ %><%/each %> (not sorted)
+
 
 =item WITH
 

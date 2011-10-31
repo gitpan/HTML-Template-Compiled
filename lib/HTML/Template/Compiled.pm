@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1118 2011-08-28 16:51:46Z tinita $
+# $Id: Compiled.pm 1128 2011-10-31 19:59:56Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.95_001";
+our $VERSION = "0.95_002";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -1270,8 +1270,8 @@ sub param {
     }
 
     if ( !$self->get_case_sensitive ) {
-        my $uc = $self->uchash( {%p} );
-        %p = %$uc;
+        my $lc = $self->lchash( {%p} );
+        %p = %$lc;
     }
     $self->[PARAM]->{$_} = $p{$_} for keys %p;
 }
@@ -1349,9 +1349,9 @@ sub query {
     return;
 }
 
-# =head2 uchash
+# =head2 lchash
 # 
-#   my $capped_href = $self->uchash(\%href);
+#   my $capped_href = $self->lchash(\%href);
 # 
 # Input:
 #     - hashref or arrayref of hashrefs
@@ -1361,26 +1361,26 @@ sub query {
 # 
 # =cut
 
-sub uchash {
+sub lchash {
     my ( $self, $data ) = @_;
-    my $uc;
+    my $lc;
     if ( ref $data eq 'HASH' ) {
         for my $key ( keys %$data ) {
-            my $uc_key = uc $key;
-            my $val    = $self->uchash( $data->{$key} );
-            $uc->{$uc_key} = $val;
+            my $uc_key = lc $key;
+            my $val    = $self->lchash( $data->{$key} );
+            $lc->{$uc_key} = $val;
         }
     }
     elsif ( ref $data eq 'ARRAY' ) {
         for my $item (@$data) {
-            my $new = $self->uchash($item);
-            push @$uc, $new;
+            my $new = $self->lchash($item);
+            push @$lc, $new;
         }
     }
     else {
-        $uc = $data;
+        $lc = $data;
     }
-    return $uc;
+    return $lc;
 }
 
 sub output {
@@ -1564,7 +1564,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.95_001"
+$VERSION = "0.95_002"
 
 =cut
 
@@ -1606,9 +1606,11 @@ __END__
 =head1 DESCRIPTION
 
 For a quick reference, see L<HTML::Template::Compiled::Reference>.
+HTML::Template::Compiled is a templating module which can be used
+for creating HTML but also plaintext or other output.
 
 As the basic features work like in L<HTML::Template>, please get familiar
-with this documentation before.
+with its documentation before.
 
 HTML::Template::Compiled (HTC) does not implement all features of
 L<HTML::Template>, and
@@ -1620,17 +1622,10 @@ template syntax as HTML::Template and the same perl API (see L<"COMPATIBILITY">
 for what you need to know if you want (almost) the same behaviour). Internally
 it works different, because it turns the template into perl code,
 and once that is done, generating the output is much faster than with
-HTML::Template (3-7 times at the moment, depending on the options you use (see
-L<"BENCHMARKS"> for some examples), when both are run with loop_context_vars 0.
-It also can generate perl files so that
-the next time the template is loaded it doesn't have to be parsed again. The best
-performance gain is probably reached in applications running under mod_perl, for example.
-
-If you don't use any caching HTC will be very slow, slower than TT. Also
-with file caching but without memory caching it's the slowest templating
-module I know. With memory caching, though, it is one of the fastest,
-even faster sometimes (depending on options and template size) than
-C modules.
+HTML::Template (please see L<"BENCHMARKS"> for some examples, because a
+comparison depends on so much parameters).
+But you should run in a persistent environment like mod_perl oder FastCGI,
+otherwise it might be even slower.
 
 You might want to use L<HTML::Template::Compiled::Lazy> for CGI environments
 as it doesn't parse the template before calling output. But note that HTC::Lazy
@@ -1642,7 +1637,7 @@ If you are on mod_perl, and have a lot of templates, you should preload them at 
 startup to be sure that it is in shared memory. At the moment HTC is not fully tested for
 keeping all data in shared memory (e.g. when a copy-on-write occurs),
 but it seems like it's behaving well.
-For preloading you can now use
+For preloading you can use
   HTML::Template::Compiled->preload($dir).
 
 Generating code, writing it on disk and later eval() it can open security holes, for example
@@ -1753,7 +1748,7 @@ see L<"TMPL_SWITCH">
 
 =item C<TMPL_PERL>
 
-Include perl code in your template. See L<"TMPL_PERL">
+Include perl code in your template. See L<"RUNNING PERL WITH TMPL_PERL">
 
 =item Chomp
 
@@ -2058,12 +2053,14 @@ It's recommended to just use the default . value for methods and dereferencing.
 I might stop supporting that you can set the values for method calls by setting
 an option. Ideally I would like to have that behaviour changed only by inheriting.
 
-=head2 TMPL_PERL
+=head2 RUNNING PERL WITH TMPL_PERL
 
 Yes, templating systems are for separating code and templates. But
 as it turned out to be implemented much easier than expressions i
-decided to implement it. Yes, I still want to implement expressions.
-If you have templates that can be edited by untrustworthy persons then
+decided to implement it. But expressions are also available with the option
+C<use_expressions>.
+
+Note: If you have templates that can be edited by untrustworthy persons then
 you don't want them to include perl code.
 
 So, how do you use the perl-tag? First, you have to set the option
@@ -2938,10 +2935,81 @@ on speed.
 Setting case_sensitive to 1, loop_context_vars to 0 and global_vars to 0 saves time.
 
 On the other hand, compared to HTML::Template, you have a large speed gain under mod_perl
-(you save ca. 87%), if you use case_sensitive = 1, loop_context_vars = 0,
-global_vars = 1. With CGI HTC is slower (about 1 1/2 times).
+if you use case_sensitive = 1, loop_context_vars = 0,
+With CGI HTC is slower.
 
 See the C<examples/bench.pl> contained in this distribution.
+
+Here are some examples from the benchmark script. I'm showing only Template::AutoFilter,
+Template::HTML, HTML::Template and HTC. These four modules allow to set
+automatic HTML escaping ('filter') for all variables.
+
+ loop_context_vars 1
+ global_vars 0
+ case_sensitive 1
+ default_escape HTML (respectively Template::AutoFilter and Template::HTML)
+
+ ht: HTML::Template 2.10
+ htc: HTML::Template::Compiled 0.95
+ ttaf: Template::AutoFilter 0.112350 with Template 2.22
+ tth: Template::HTML 0.02 with Template 2.22
+
+First test is with the test.(htc|tt) from the examples directory, about 900 bytes.
+
+
+Test without file cache and without memory cache.
+
+              all_ht:  1 wallclock secs ( 0.40 usr +  0.00 sys =  0.40 CPU) @ 250.00/s (n=100)
+             all_htc:  1 wallclock secs ( 1.74 usr +  0.01 sys =  1.75 CPU) @ 57.14/s (n=100)
+ all_ttaf_new_object:  1 wallclock secs ( 1.69 usr +  0.01 sys =  1.70 CPU) @ 58.82/s (n=100)
+  all_tth_new_object:  1 wallclock secs ( 1.44 usr +  0.00 sys =  1.44 CPU) @ 69.44/s (n=100)
+
+With file cache:
+
+              all_ht:  1 wallclock secs ( 1.03 usr +  0.01 sys =  1.04 CPU) @ 379.81/s (n=395)
+             all_htc:  1 wallclock secs ( 1.07 usr +  0.00 sys =  1.07 CPU) @ 260.75/s (n=279)
+ all_ttaf_new_object:  1 wallclock secs ( 1.07 usr +  0.04 sys =  1.11 CPU) @ 251.35/s (n=279)
+  all_tth_new_object:  1 wallclock secs ( 1.01 usr +  0.04 sys =  1.05 CPU) @ 227.62/s (n=239)
+
+With memory cache:
+
+       all_ht:  1 wallclock secs ( 1.04 usr +  0.00 sys =  1.04 CPU) @ 461.54/s (n=480)
+      all_htc:  1 wallclock secs ( 1.05 usr +  0.01 sys =  1.06 CPU) @ 3168.87/s (n=3359)
+ process_ttaf:  1 wallclock secs ( 1.04 usr +  0.00 sys =  1.04 CPU) @ 679.81/s (n=707)
+  process_tth:  1 wallclock secs ( 1.05 usr +  0.00 sys =  1.05 CPU) @ 609.52/s (n=640)
+
+
+Now I'm using a template with about 18Kb by multiplying the example template
+20 times. You can see that everything is running slower but some run more
+slower than others.
+
+Test without file cache and without memory cache.
+
+
+              all_ht:  8 wallclock secs ( 7.57 usr +  0.04 sys =  7.61 CPU) @ 13.14/s (n=100)
+             all_htc: 32 wallclock secs (32.08 usr +  0.06 sys = 32.14 CPU) @  3.11/s (n=100)
+ all_ttaf_new_object: 36 wallclock secs (36.21 usr +  0.04 sys = 36.25 CPU) @  2.76/s (n=100)
+  all_tth_new_object: 29 wallclock secs (28.92 usr +  0.05 sys = 28.97 CPU) @  3.45/s (n=100)
+
+With file cache:
+
+              all_ht:  8 wallclock secs ( 7.22 usr +  0.00 sys =  7.22 CPU) @ 13.85/s (n=100)
+             all_htc:  5 wallclock secs ( 5.32 usr +  0.00 sys =  5.32 CPU) @ 18.80/s (n=100)
+ all_ttaf_new_object:  8 wallclock secs ( 7.59 usr +  0.15 sys =  7.74 CPU) @ 12.92/s (n=100)
+  all_tth_new_object:  9 wallclock secs ( 8.74 usr +  0.19 sys =  8.93 CPU) @ 11.20/s (n=100)
+
+With memory cache:
+
+       all_ht:  1 wallclock secs ( 1.04 usr +  0.01 sys =  1.05 CPU) @ 15.24/s (n=16)
+      all_htc:  1 wallclock secs ( 1.12 usr +  0.00 sys =  1.12 CPU) @ 272.32/s (n=305)
+ process_ttaf:  1 wallclock secs ( 1.07 usr +  0.00 sys =  1.07 CPU) @ 39.25/s (n=42)
+  process_tth:  1 wallclock secs ( 1.05 usr +  0.00 sys =  1.05 CPU) @ 34.29/s (n=36)
+
+So the performance difference highly depends on the size of the template and on the
+various options.
+You can see that using the 900byte template HTC is slower with file cache than
+HTML::Template, but with the 18Kb template it's faster.
+
 
 =head1 EXAMPLES
 

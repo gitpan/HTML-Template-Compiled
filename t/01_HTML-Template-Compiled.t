@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t 1102 2009-08-21 13:56:24Z tinita $
+# $Id: 01_HTML-Template-Compiled.t 1128 2011-10-31 19:59:56Z tinita $
 
 use Test::More tests => 6;
 use Data::Dumper;
@@ -80,8 +80,8 @@ SKIP: {
 	my $out = $htc->output;
 	my $dump = <<'EOM';
 $DUMP = {
-'BIOGRAPHY' => undef,
-'LINK' => 'http://...'
+'biography' => undef,
+'link' => 'http://...'
 };
 EOM
     $dump = HTML::Template::Compiled::Utils::escape_html($dump);

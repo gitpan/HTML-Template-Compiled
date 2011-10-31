@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: bench.pl 1117 2011-08-28 16:44:08Z tinita $
+# $Id: bench.pl 1126 2011-10-31 19:56:35Z tinita $
 use strict;
 use warnings;
 use lib qw(blib/lib ../blib/lib);
@@ -476,8 +476,8 @@ if(1) {
         ): (),
         $use{'Template::AutoFilter'} ? (
             #new_ttaf => sub {my $t = new_ttaf();},
-            #output_ttaf => sub {output_tt($global_ttaf)},
-            process_ttaf => sub {output_tt($global_ttaf)},
+            #output_ttaf => sub {output_ttaf($global_ttaf)},
+            process_ttaf => sub {output_ttaf($global_ttaf)},
             $MEM_CACHE
                 ? ()
                 : (all_ttaf_new_object => sub {my $t = new_ttaf();output_ttaf($t)}),
