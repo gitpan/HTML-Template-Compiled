@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1128 2011-10-31 19:59:56Z tinita $
+# $Id: Compiler.pm 1132 2011-11-12 14:26:03Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -115,6 +115,11 @@ sub _escape_expression {
         elsif ( $_ eq 'JS' ) {
             $exp =
                 _expr_function( 'HTML::Template::Compiled::Utils::escape_js',
+                $exp, );
+        }
+        elsif ( $_ eq 'IJSON' ) {
+            $exp =
+                _expr_function( 'HTML::Template::Compiled::Utils::escape_ijson',
                 $exp, );
         }
         elsif ( $_ eq 'DUMP' ) {

@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1128 2011-10-31 19:59:56Z tinita $
+# $Id: Compiled.pm 1132 2011-11-12 14:26:03Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.95_002";
+our $VERSION = "0.95_003";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -280,9 +280,10 @@ sub init_includes {
     for my $fullpath (keys %$includes) {
         my ($path, $filename, $htc) = @{ $includes->{$fullpath} };
         D && $self->log("checking $fullpath ($filename) $htc?");
+        # TODO check $cache
         $cache .= '-' . $self->get_md5_path;
-        if (HTML::Template::Compiled::needs_new_check(
-                $cache||'',$filename)
+        #warn __PACKAGE__.':'.__LINE__.": init_includes() $filename\n";
+        if (not $htc or HTML::Template::Compiled::needs_new_check($cache||'',$filename)
         ) {
             $htc = $self->new_from_object($path,$filename,$fullpath,$cache);
         }
@@ -1194,6 +1195,11 @@ sub prepare_for_cache {
         }
     }
     $self->set_plugins(\@plugs);
+    my $includes = $self->get_includes;
+    for my $fullpath (keys %$includes) {
+        my ($path, $filename, $htc) = @{ $includes->{$fullpath} };
+        $includes->{$fullpath} = [$path, $filename];
+    }
 }
 
 sub preload {
@@ -1412,17 +1418,20 @@ sub output {
 sub import {
     my ( $class, %args ) = @_;
     if ( $args{compatible} ) {
+        carp "Usage of use option 'compatible' is deprecated";
         $class->CaseSensitive(0);
         $class->SearchPathOnInclude(0);
         $class->UseQuery(1);
     }
     elsif ( $args{speed} ) {
+        carp "Usage of use option 'speed' is deprecated";
         # default at the moment
         $class->CaseSensitive(1);
         $class->SearchPathOnInclude(1);
         $class->UseQuery(0);
     }
     if (exists $args{short}) {
+        carp "Usage of use option 'short' is deprecated";
         __PACKAGE__->export_to_level(1, scalar caller(), 'HTC');
     }
 }
@@ -1564,7 +1573,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.95_002"
+$VERSION = "0.95_003"
 
 =cut
 
@@ -1583,10 +1592,25 @@ __END__
 
 =head1 SYNOPSIS
 
-  use HTML::Template::Compiled speed => 1;
-  # or for compatibility with HTML::Template
+  use HTML::Template::Compiled;
+  # recommended options:
+  # case_sensitive => 1
+  # search_path_on_include => 1
+  # use_query => 0
+  # note that the following
+  # use HTML::Template::Compiled speed => 1
+  # is deprecated (can be problematic under persistant environments)
+
+  # or for the biggest compatibility with HTML::Template
+  # case_sensitive => 0
+  # search_path_on_include => 0
+  # use_query => 1
+  # note that the following
   # use HTML::Template::Compiled compatible => 1;
+  # is deprecated (can be problematic under persistant environments)
+
   # or use HTML::Template::Compiled::Classic
+
   my $htc = HTML::Template::Compiled->new(filename => 'test.tmpl');
   $htc->param(
     BAND => $name,
@@ -1899,15 +1923,17 @@ In the previous version, it was '<:utf8'. This is deprecated.
 
 =back
 
-To be compatible in all of the above options all use:
+Note: the following is deprecated:
 
-  use HTML::Template::Compiled compatible => 1;
+    To be compatible in all of the above options all use:
+ 
+      use HTML::Template::Compiled compatible => 1;
+ 
+    If you don't care about these options you should use
+ 
+      use HTML::Template::Compiled speed => 1;
 
-If you don't care about these options you should use
-
-  use HTML::Template::Compiled speed => 1;
-
-which is the default but depending on user wishes that might change.
+ which is the default but depending on user wishes that might change.
 
 =head3 Different behaviour from HTML::Template
 
@@ -1958,6 +1984,9 @@ C<ESCAPE=HTML_ALL>.
 Additionally you have C<ESCAPE=DUMP>, which by default will generate a Data::Dumper output.
 
 You can also chain different escapings, like C<ESCAPE=DUMP|HTML>.
+
+Additionally to ESCAPE=JS you have ESCAPE=IJSON which does not escape the
+single quote.
 
 =head2 INCLUDE
 

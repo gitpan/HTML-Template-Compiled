@@ -1,5 +1,11 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.95_003 Sat Nov 12 15:12:02 CET 2011
+- Bugfix: Reload includes of includes (required change of caching mechanism -
+  please report any issues if you have problems with caching)
+- New Escape: 'IJSON'
+- Deprecated the use options 'speed', 'compatible' and 'short'
+
 0.95_002 Mon Oct 31 21:00:51 CET 2011
 - HTML::Template Compatibility: lowercase instead of uppercase
   parameters when case_sensitive 0

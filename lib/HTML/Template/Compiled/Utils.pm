@@ -1,6 +1,6 @@
 package HTML::Template::Compiled::Utils;
-# $Id: Utils.pm 1118 2011-08-28 16:51:46Z tinita $
-$VERSION = "0.06";
+# $Id: Utils.pm 1132 2011-11-12 14:26:03Z tinita $
+$VERSION = "0.07";
 use strict;
 use warnings;
 use Data::Dumper qw(Dumper);
@@ -187,6 +187,24 @@ sub escape_js {
     my ($var) = @_;
     return $var unless defined $var;
     $var =~ s/(["'\\])/\\$1/g;
+    $var =~ s/\r/\\r/g;
+    $var =~ s/\n/\\n/g;
+    return $var;
+}
+
+=head2 escape_ijson
+
+  my $escaped_js = escape_ijson($raw_js);
+
+JavaScript-escapes the input string except for the apostrophe and returns it,
+so it can be used within a JSON element.
+
+=cut
+
+sub escape_ijson {
+    my ($var) = @_;
+    return $var unless defined $var;
+    $var =~ s/([\\"])/\\$1/g;
     $var =~ s/\r/\\r/g;
     $var =~ s/\n/\\n/g;
     return $var;

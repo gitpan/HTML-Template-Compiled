@@ -3,13 +3,28 @@ NAME
     to Perl code
 
 VERSION
-    $VERSION = "0.95_002"
+    $VERSION = "0.95_003"
 
 SYNOPSIS
-      use HTML::Template::Compiled speed => 1;
-      # or for compatibility with HTML::Template
+      use HTML::Template::Compiled;
+      # recommended options:
+      # case_sensitive => 1
+      # search_path_on_include => 1
+      # use_query => 0
+      # note that the following
+      # use HTML::Template::Compiled speed => 1
+      # is deprecated (can be problematic under persistant environments)
+
+      # or for the biggest compatibility with HTML::Template
+      # case_sensitive => 0
+      # search_path_on_include => 0
+      # use_query => 1
+      # note that the following
       # use HTML::Template::Compiled compatible => 1;
+      # is deprecated (can be problematic under persistant environments)
+
       # or use HTML::Template::Compiled::Classic
+
       my $htc = HTML::Template::Compiled->new(filename => 'test.tmpl');
       $htc->param(
         BAND => $name,
@@ -261,15 +276,17 @@ DESCRIPTION
 
         In the previous version, it was '<:utf8'. This is deprecated.
 
-    To be compatible in all of the above options all use:
+    Note: the following is deprecated:
 
-      use HTML::Template::Compiled compatible => 1;
+        To be compatible in all of the above options all use:
+ 
+          use HTML::Template::Compiled compatible => 1;
+ 
+        If you don't care about these options you should use
+ 
+          use HTML::Template::Compiled speed => 1;
 
-    If you don't care about these options you should use
-
-      use HTML::Template::Compiled speed => 1;
-
-    which is the default but depending on user wishes that might change.
+     which is the default but depending on user wishes that might change.
 
     Different behaviour from HTML::Template
     Arrayrefs
@@ -313,6 +330,9 @@ DESCRIPTION
     by default will generate a Data::Dumper output.
 
     You can also chain different escapings, like `ESCAPE=DUMP|HTML'.
+
+    Additionally to ESCAPE=JS you have ESCAPE=IJSON which does not escape
+    the single quote.
 
   INCLUDE
     Additionally to
