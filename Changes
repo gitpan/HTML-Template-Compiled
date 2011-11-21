@@ -1,5 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.96 Mon Nov 21 20:37:22 CET 2011
+- fixed 05_filter.t
+- fixed t/01_HTML-Template-Compiled.t (problems when test takes longer then
+  cache expiration)
+
 0.95_003 Sat Nov 12 15:12:02 CET 2011
 - Bugfix: Reload includes of includes (required change of caching mechanism -
   please report any issues if you have problems with caching)

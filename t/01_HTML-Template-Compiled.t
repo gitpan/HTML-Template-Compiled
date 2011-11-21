@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 01_HTML-Template-Compiled.t 1128 2011-10-31 19:59:56Z tinita $
+# $Id: 01_HTML-Template-Compiled.t 1136 2011-11-21 19:35:19Z tinita $
 
 use Test::More tests => 6;
 use Data::Dumper;
@@ -55,7 +55,7 @@ my %args = (
 	filename => 'songs.html',
 #	method_call => '/',
 #	deref => '.',
-	debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
+#	debug => $ENV{HARNESS_ACTIVE} ? 0 : 1,
 	# for testing without cache comment out
 	file_cache_dir => $cache,
     file_cache => 1,
@@ -71,6 +71,7 @@ HTML::Template::Compiled->clear_filecache($cache);
 
 my $htc = $subclass->new(%args);
 ok($htc, "template created");
+my $time_before = time;
 $htc->param(%$hash);
 
 eval { require URI::Escape };
@@ -118,9 +119,16 @@ EOM
 	my $htc = $subclass->new(%args);
 	$htc->param(%$hash);
 	$out = $htc->output;
-	$out =~ s/^\s+//mg; $out =~ tr/\n\r//d;
-	cmp_ok($out, "eq", $exp, "output after update ok");
-	$exp =~ s/INCLUDED/INCLUDED_NEW/;
+    my $time_after = time;
+    if ($time_after - $time_before >= 2) {
+        # took too long, cache expired, just return ok
+        ok(1, "output after update skipped");
+    }
+    else {
+        $out =~ s/^\s+//mg; $out =~ tr/\n\r//d;
+        cmp_ok($out, "eq", $exp, "output after update ok");
+    }
+    $exp =~ s/INCLUDED/INCLUDED_NEW/;
 
 	sleep 2;
 	$htc = $subclass->new(%args);

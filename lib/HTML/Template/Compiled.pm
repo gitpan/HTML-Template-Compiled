@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1132 2011-11-12 14:26:03Z tinita $
+# $Id: Compiled.pm 1137 2011-11-21 19:36:03Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.95_003";
+our $VERSION = "0.96";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -1573,7 +1573,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.95_003"
+$VERSION = "0.96"
 
 =cut
 
@@ -1597,6 +1597,8 @@ __END__
   # case_sensitive => 1
   # search_path_on_include => 1
   # use_query => 0
+  # default_escape => 'HTML' # <-- HIGHLY RECOMMENDED
+
   # note that the following
   # use HTML::Template::Compiled speed => 1
   # is deprecated (can be problematic under persistant environments)
@@ -1611,15 +1613,19 @@ __END__
 
   # or use HTML::Template::Compiled::Classic
 
-  my $htc = HTML::Template::Compiled->new(filename => 'test.tmpl');
-  $htc->param(
-    BAND => $name,
-    ALBUMS => [
-      { TITLE => $t1, YEAR => $y1 },
-      { TITLE => $t2, YEAR => $y2 },
-    ],
-  );
-  print $htc->output;
+    my $htc = HTML::Template::Compiled->new(
+        filename            => 'test.tmpl',
+        case_sensitive      => 1,
+        default_escape      => 'HTML',
+    );
+    $htc->param(
+        BAND => $name,
+        ALBUMS => [
+            { TITLE => $t1, YEAR => $y1 },
+            { TITLE => $t2, YEAR => $y2 },
+        ],
+    );
+    print $htc->output;
 
   test.tmpl:
   Band: <TMPL_VAR BAND>
@@ -1706,7 +1712,7 @@ use option case_sensitive => 0 to use this feature (slow down)
 
 =item filters
 
-=item vars that are subrefs
+=item vars that are subrefs - not implemented, only in HTML::Template::Compiled::Classic
 
 =item scalarref, arrayref, filehandle
 
@@ -1802,7 +1808,7 @@ See L<"IMPLEMENTATION">
 
 =item better variable access
 
-dot-notation for accessing hash values. See L<"VARIABLE ACCESS">
+dot-notation for accessing hash values. See L<"EXTENDED VARIABLE ACCESS">
 
 =item rendering objcets
 
@@ -2856,11 +2862,11 @@ None.
 You create a template almost like in HTML::Template:
 
   my $t = HTML::Template::Compiled->new(
-    path => 'templates',
-    loop_context_vars => 1,
-    filename => 'test.html',
+    path                => 'templates',
+    loop_context_vars   => 1,
+    filename            => 'test.html',
     # for testing without cache comment out
-    cache_dir => "cache",
+    cache_dir           => "cache",
   );
 
 The next time you start your application and create a new template, HTC will read all generated

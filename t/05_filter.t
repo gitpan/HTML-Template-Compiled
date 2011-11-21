@@ -1,4 +1,4 @@
-# $Id: 05_filter.t 1045 2008-05-16 21:39:40Z tinita $
+# $Id: 05_filter.t 1135 2011-11-21 19:25:16Z tinita $
 use lib 'blib/lib';
 use Test::More tests => 5;
 BEGIN { use_ok('HTML::Template::Compiled') };
@@ -71,6 +71,7 @@ EOM
 	$htc->clear_cache() if $i < 3;
     #print "\n($out)\n($exp)\n";
     delete $INC{'HTML/Template/Compiled/Filter.pm'};
+    no strict 'refs';
     undef *{ 'HTML::Template::Compiled::Filter::filter' };
 }
 
