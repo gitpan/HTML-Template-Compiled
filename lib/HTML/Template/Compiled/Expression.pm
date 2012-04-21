@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Expression;
-# $Id: Expression.pm 1071 2008-07-26 11:14:25Z tinita $
+# $Id: Expression.pm 1140 2011-11-28 00:25:38Z tinita $
 use strict;
 use warnings;
 
@@ -154,7 +154,7 @@ __END__
 
 =head1 NAME
 
-HTML::Template::Compiled::Expression
+HTML::Template::Compiled::Expression - a compiled HTML template expression
 
 =head1 DESCRIPTION
 

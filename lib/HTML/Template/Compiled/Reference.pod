@@ -2,7 +2,7 @@
 
 =head1 NAME
 
-HTML::Template::Compiled::Reference
+HTML::Template::Compiled::Reference - A quick reference for HTML::Template::Compiled syntax
 
 =head1 TAGSTYLES
 

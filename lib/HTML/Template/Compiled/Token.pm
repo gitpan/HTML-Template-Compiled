@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Token;
-# $Id: Token.pm 777 2006-10-20 19:46:59Z tinita $
+# $Id: Token.pm 1140 2011-11-28 00:25:38Z tinita $
 use strict;
 use warnings;
 use Carp qw(croak carp);
@@ -85,7 +85,7 @@ __END__
 
 =head1 NAME
 
-HTML::Template::Compiled::Token
+HTML::Template::Compiled::Token - a compiled HTML template token
 
 =cut
 

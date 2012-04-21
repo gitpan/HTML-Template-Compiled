@@ -1,7 +1,7 @@
-# $Id: 23_tagstyles.t 435 2006-07-02 21:53:13Z tinita $
+# $Id: 23_tagstyles.t 1144 2012-04-21 18:59:13Z tinita $
 use warnings;
 use strict;
-use lib qw(blib/lib t);
+use lib qw(t);
 use Test::More tests => 4;
 use_ok('HTML::Template::Compiled');
 use HTC_Utils qw($cache $tdir &cdir);

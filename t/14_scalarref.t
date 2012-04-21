@@ -1,8 +1,7 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
-# $Id: 14_scalarref.t 974 2007-09-20 12:52:20Z tinita $
+# $Id: 14_scalarref.t 1144 2012-04-21 18:59:13Z tinita $
 
-use lib 'blib/lib';
 use Test::More tests => 6;
 use Data::Dumper;
 use File::Spec;
@@ -51,7 +50,9 @@ SKIP: {
 eval { require Encode };
 my $encode = $@ ? 0 : 1;
 SKIP: {
-    skip "no Encode.pm installed", 1 unless $INC{'Encode.pm'};
+    skip "no Encode.pm installed", 1 unless $encode;
+    skip "bug in prove on *BSD", 1 if $] =~ /^5\.010/ and $^O =~ /^(free|open)bsd$/;
+
     #use Devel::Peek;
     my $string = "\x{263A} <%= foo %>";
     #Dump $string;
@@ -60,8 +61,8 @@ SKIP: {
     );
     $htc->param(foo => "\x{263A}");
     my $out = $htc->output;
-    binmode STDOUT, ':utf8';
-    binmode STDERR, ':utf8';
+    binmode STDOUT, ':encoding(utf-8)';
+    binmode STDERR, ':encoding(utf-8)';
     #Dump $out;
     #print $out, $/;
     cmp_ok($out, 'eq', "\x{263A} \x{263A}", "scalarref with utf8");

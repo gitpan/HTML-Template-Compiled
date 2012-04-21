@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1132 2011-11-12 14:26:03Z tinita $
+# $Id: Compiler.pm 1145 2012-04-21 19:51:39Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -251,6 +251,7 @@ sub parse_var {
     my $use_objects = $t->get_objects;
     my $strict = $use_objects eq 'strict' ? 1 : 0;
     my $method_args = '';
+    my $hash_key = $args{hash_key};
     my $varstr = '';
     @split = map {
         s#\\#\\\\#g;
@@ -362,6 +363,9 @@ sub parse_var {
         }
 
         $count++;
+    }
+    if (defined $hash_key) {
+        $varstr = "($varstr\->{$hash_key})";
     }
     #my $final = $context->get_name eq 'VAR' ? 1 : 0;
     if (0 or @split > 1) {

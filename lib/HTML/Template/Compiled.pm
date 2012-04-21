@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1137 2011-11-21 19:36:03Z tinita $
+# $Id: Compiled.pm 1150 2012-04-21 21:21:50Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.96";
+our $VERSION = "0.96_001";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -1040,7 +1040,7 @@ sub quote_file {
 # hash.key (found inside <tmpl_var name="hash.key">) will be converted to
 # '$t->get_var($P, $$C, 1, [PATH_DEREF, 'key'])'
 # the get_var method walks the paths given through the data structure.
-# $P is the paramater hash of the template, $C is a reference to the current
+# $P is the parameter hash of the template, $C is a reference to the current
 # parameter hash. the third argument to get_var is 'final'.
 # <tmpl_var foo> is a 'final' path, and <tmpl_with foo> is not.
 # so final means it's in 'print-context'.
@@ -1573,7 +1573,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.96"
+$VERSION = "0.96_001"
 
 =cut
 
@@ -1581,7 +1581,7 @@ sub __test_version {
     my $v = __PACKAGE__->VERSION;
     my ($v_test) = $version_pod =~ m/VERSION\s*=\s*"(.+)"/m;
     no warnings;
-    return $v == $v_test ? 1 : 0;
+    return $v eq $v_test ? 1 : 0;
 }
 
 1;
@@ -1601,7 +1601,7 @@ __END__
 
   # note that the following
   # use HTML::Template::Compiled speed => 1
-  # is deprecated (can be problematic under persistant environments)
+  # is deprecated (can be problematic under persistent environments)
 
   # or for the biggest compatibility with HTML::Template
   # case_sensitive => 0
@@ -1609,7 +1609,7 @@ __END__
   # use_query => 1
   # note that the following
   # use HTML::Template::Compiled compatible => 1;
-  # is deprecated (can be problematic under persistant environments)
+  # is deprecated (can be problematic under persistent environments)
 
   # or use HTML::Template::Compiled::Classic
 
@@ -1633,29 +1633,37 @@ __END__
   Title: <TMPL_VAR TITLE> (<TMPL_VAR YEAR>)
   </TMPL_LOOP>
 
+  Or use different tag styles:
+  Band: <%= BAND %>
+  <%loop ALBUMS %>
+  Title: <%= TITLE %> (<%= YEAR %>)
+  <%/loop %>
+  Band: [%= BAND %]
+  [%loop ALBUMS %]
+  Title: [%= TITLE %] ([%= YEAR %])
+  [%/loop %]
+
 =head1 DESCRIPTION
 
+HTML::Template::Compiled is a template system which can be used for
+L<HTML::Template> templates with the same API. It
+offers more flexible template delimiters, additional tags and features,
+and by compiling the template into perl code it can run significantly faster
+in persistent environments such as FastCGI or mod_perl.
+
 For a quick reference, see L<HTML::Template::Compiled::Reference>.
-HTML::Template::Compiled is a templating module which can be used
-for creating HTML but also plaintext or other output.
 
 As the basic features work like in L<HTML::Template>, please get familiar
 with its documentation before.
 
 HTML::Template::Compiled (HTC) does not implement all features of
-L<HTML::Template>, and
+L<HTML::Template> (see L<"COMPATIBILITY">), and
 it has got some additional features which are explained below:
 L<"ADDITIONAL FEATURES">
 
-HTML::Template::Compiled (HTC) is a template system which uses the same
-template syntax as HTML::Template and the same perl API (see L<"COMPATIBILITY">
-for what you need to know if you want (almost) the same behaviour). Internally
-it works different, because it turns the template into perl code,
-and once that is done, generating the output is much faster than with
-HTML::Template (please see L<"BENCHMARKS"> for some examples, because a
-comparison depends on so much parameters).
-But you should run in a persistent environment like mod_perl oder FastCGI,
-otherwise it might be even slower.
+See L<"BENCHMARKS"> for some examples on the performance. Since it depends
+highly on the options used and on the template size there can be no general
+statement on its performance.
 
 You might want to use L<HTML::Template::Compiled::Lazy> for CGI environments
 as it doesn't parse the template before calling output. But note that HTC::Lazy
@@ -1731,23 +1739,23 @@ What can HTC do for you additionally to HTML::Template?
 
 =over 4
 
-=item TMPL_ELSIF
+=item tag TMPL_ELSIF
 
 No need to have cascading "if-else-if-else"s
 
-=item TMPL_EACH
+=item tag TMPL_EACH
 
 Iterate over a hash. See L<"TMPL_EACH">
 
-=item TMPL_WITH
+=item tag TMPL_WITH
 
 see L<"TMPL_WITH">
 
-=item TMPL_WHILE
+=item tag TMPL_WHILE
 
 see L<"TMPL_WHILE">
 
-=item TMPL_COMMENT, TMPL_NOPARSE, TMPL_VERBATIM
+=item tags TMPL_COMMENT, TMPL_NOPARSE, TMPL_VERBATIM
 
 see L<"TMPL_COMMENT">, L<"TMPL_NOPARSE">, L<"TMPL_VERBATIM">
 
@@ -1772,7 +1780,7 @@ will turn out as:
 
 See also option debug_file in L<"OPTIONS"> for adding the filename globally.
 
-=item TMPL_SWITCH, TMPL_CASE
+=item tags TMPL_SWITCH, TMPL_CASE
 
 see L<"TMPL_SWITCH">
 
@@ -1822,7 +1830,7 @@ See L<"OPTIONS">
 
 C<INCLUDE_VAR>, C<INCLUDE_STRING>. See L<"INCLUDE">
 
-=item TMPL_IF_DEFINED
+=item tag TMPL_IF_DEFINED
 
 Check for definedness instead of truth:
   <TMPL_IF_DEFINED NAME="var">
@@ -1894,10 +1902,10 @@ tags are different:
     <tmpl_var fOO> prints the value of hash key 'fOO'
 
 With case_sensitive set to 0, all your parameters passed to C<param()>
-are converted to uppercase, and the following tags are the same:
+are converted to lowercase, and the following tags are the same:
 
-    <tmpl_var Foo> prints the value of hash key 'FOO'
-    <tmpl_var fOO> prints the value of hash key 'FOO'
+    <tmpl_var Foo> prints the value of hash key 'foo'
+    <tmpl_var fOO> prints the value of hash key 'foo'
 
 
 =item subref variables
@@ -1921,11 +1929,9 @@ default is 0 (off). Set it via
 
 If you want to have your templates read in utf-8, use
 
-    open_mode => ':utf8',
+    open_mode => ':encoding(utf-8)',
 
 as an option.
-
-In the previous version, it was '<:utf8'. This is deprecated.
 
 =back
 
@@ -2064,7 +2070,7 @@ or C<ALBUMS[0].SONGS[0].NAME> (the latter has changed since version 0.79)
 
 This is still in development, so I might change the API here.
 
-Additionally to feeding a simple hash do HTC, you can feed it objects.
+Additionally to feeding a simple hash to HTC, you can feed it objects.
 To do method calls you can also use '.' in the template.
 
   my $htc = HTML::Template::Compiled->new(
@@ -2233,7 +2239,7 @@ Inside TMPL_WITH you can't reference parent nodes unless you're using global_var
 
 =head2 TMPL_LOOP
 
-The special name C<_> gives you the current paramater. In loops you can use it like this:
+The special name C<_> gives you the current parameter. In loops you can use it like this:
 
  <tmpl_loop foo>
   Current item: <tmpl_var _ >
@@ -2709,8 +2715,10 @@ with expressions you can give it parameters:
 
     <%= expr="object.create_link('navi')" %>
 
-Inside function and method calls you also can use template
-vars.
+Inside function and method calls, hash keys you also can use template
+vars (hash keys sind 0.96_001).
+
+    <%= expr=".path.to.hash{var}" %>
 
 It is only minimally tested yet, so use with care and please report any
 bugs you find.

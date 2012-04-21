@@ -109,6 +109,7 @@ paren         : '(' binary_op ')'     { $item[2] }
 
 subexpression : function_call
             | method_call
+            | hash_key
             | var
             | literal
             | <error>
@@ -121,7 +122,6 @@ op            : />=?|<=?|!=|==/      { [ 'BIN_OP',  $item[1] ] }
             | /\|\||or|&&|and/     { [ 'BIN_OP',  $item[1] ] }
             | /[-+*\/%.]/           { [ 'BIN_OP',  $item[1] ] }
 
-
 method_call : var '(' args ')' { [ 'METHOD_CALL', $item[1], $item[3] ] }
 
 function_call : function_name '(' args ')'  
@@ -132,6 +132,10 @@ function_call : function_name '(' args ')'
             { [ 'FUNCTION_CALL', $item[1] ] }
 
 function_name : /[A-Za-z_][A-Za-z0-9_]*/
+
+hash_key: var '{' var '}'       { [ 'HASH_KEY', $item[1], $item[3] ] }
+              | var '{' paren '}' { [ 'HASH_KEY', $item[1], $item[3] ] }
+              | var '{' literal '}' { [ 'HASH_KEY', $item[1], $item[3] ] }
 
 args          : <leftop: paren ',' paren>
 
@@ -183,6 +187,30 @@ sub parse_expr {
 
 }
 
+sub bin_op {
+    my ($class, $op, $args, $compiler, $htc, %args) = @_;
+    unless (@$args) {
+        return '';
+    }
+    my $right = pop @$args;
+    my $right_expr = $class->sub_expression($right, $compiler, $htc, %args);
+    my $left_expr = '';
+    if (@$args > 1) {
+        my $new_op = pop @$args;
+        my $sub = $class->bin_op($new_op->[1], $args, $compiler, $htc, %args);
+        $left_expr = $sub;
+    }
+    else {
+        $left_expr = $class->sub_expression($args->[0], $compiler, $htc, %args);
+    }
+    my $expr = ' ( ' . $left_expr
+        . ' ' . $op . ' '
+        . $right_expr
+        . ' ) ';
+#    warn __PACKAGE__.':'.__LINE__.": !!! $expr\n";
+    return $expr;
+}
+
 sub sub_expression {
     my ($class, $tree, $compiler, $htc, %args) = @_;
     my ($type, @args) = @$tree;
@@ -194,11 +222,7 @@ sub sub_expression {
         #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\@args], ['args']);
         my $expr = '';
         if ($op->[0] eq 'BIN_OP') {
-            $expr .= ' ( ';
-            $expr .= $class->sub_expression($args[0], $compiler, $htc, %args);
-            $expr .= ' ' . $op->[1] . ' ';
-            $expr .= $class->sub_expression($args[1], $compiler, $htc, %args);
-            $expr .= ' ) ';
+            $expr = $class->bin_op($op->[1], [@args], $compiler, $htc, %args);
         }
         #warn __PACKAGE__.':'.__LINE__.": $expr\n";
         return $expr;
@@ -232,6 +256,17 @@ sub sub_expression {
             var => $var->[1],
             method_args => $method_args,
         );
+    }
+    elsif ($type eq 'HASH_KEY') {
+        #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\@args], ['args']);
+        my ($var, $key) = @args[0,1];
+        my $hash_key = $class->sub_expression($key, $compiler, $htc, %args);
+        my $expr = $compiler->parse_var($htc,
+            %args,
+            var => $var->[1],
+            hash_key => $hash_key,
+        );
+        return $expr;
     }
     elsif ($type eq 'FUNCTION_CALL') {
         my $name = shift @args;

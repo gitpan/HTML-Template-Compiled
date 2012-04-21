@@ -3,7 +3,7 @@ NAME
     to Perl code
 
 VERSION
-    $VERSION = "0.96"
+    $VERSION = "0.96_001"
 
 SYNOPSIS
       use HTML::Template::Compiled;
@@ -15,7 +15,7 @@ SYNOPSIS
 
       # note that the following
       # use HTML::Template::Compiled speed => 1
-      # is deprecated (can be problematic under persistant environments)
+      # is deprecated (can be problematic under persistent environments)
 
       # or for the biggest compatibility with HTML::Template
       # case_sensitive => 0
@@ -23,7 +23,7 @@ SYNOPSIS
       # use_query => 1
       # note that the following
       # use HTML::Template::Compiled compatible => 1;
-      # is deprecated (can be problematic under persistant environments)
+      # is deprecated (can be problematic under persistent environments)
 
       # or use HTML::Template::Compiled::Classic
 
@@ -47,27 +47,35 @@ SYNOPSIS
       Title: <TMPL_VAR TITLE> (<TMPL_VAR YEAR>)
       </TMPL_LOOP>
 
+      Or use different tag styles:
+      Band: <%= BAND %>
+      <%loop ALBUMS %>
+      Title: <%= TITLE %> (<%= YEAR %>)
+      <%/loop %>
+      Band: [%= BAND %]
+      [%loop ALBUMS %]
+      Title: [%= TITLE %] ([%= YEAR %])
+      [%/loop %]
+
 DESCRIPTION
+    HTML::Template::Compiled is a template system which can be used for
+    HTML::Template templates with the same API. It offers more flexible
+    template delimiters, additional tags and features, and by compiling the
+    template into perl code it can run significantly faster in persistent
+    environments such as FastCGI or mod_perl.
+
     For a quick reference, see HTML::Template::Compiled::Reference.
-    HTML::Template::Compiled is a templating module which can be used for
-    creating HTML but also plaintext or other output.
 
     As the basic features work like in HTML::Template, please get familiar
     with its documentation before.
 
     HTML::Template::Compiled (HTC) does not implement all features of
-    HTML::Template, and it has got some additional features which are
-    explained below: "ADDITIONAL FEATURES"
+    HTML::Template (see "COMPATIBILITY"), and it has got some additional
+    features which are explained below: "ADDITIONAL FEATURES"
 
-    HTML::Template::Compiled (HTC) is a template system which uses the same
-    template syntax as HTML::Template and the same perl API (see
-    "COMPATIBILITY" for what you need to know if you want (almost) the same
-    behaviour). Internally it works different, because it turns the template
-    into perl code, and once that is done, generating the output is much
-    faster than with HTML::Template (please see "BENCHMARKS" for some
-    examples, because a comparison depends on so much parameters). But you
-    should run in a persistent environment like mod_perl oder FastCGI,
-    otherwise it might be even slower.
+    See "BENCHMARKS" for some examples on the performance. Since it depends
+    highly on the options used and on the template size there can be no
+    general statement on its performance.
 
     You might want to use HTML::Template::Compiled::Lazy for CGI
     environments as it doesn't parse the template before calling output. But
@@ -107,7 +115,7 @@ DESCRIPTION
     HTML_TEMPLATE_ROOT
     ESCAPE=(HTML|URL|JS|0)
     DEFAULT=...
-    `__first__', `__last__', `__inner__', `__odd__', `__counter__'
+    "__first__", "__last__", "__inner__", "__odd__", "__counter__"
     <!-- TMPL_VAR NAME=PARAM1 -->
     case insensitive var names
         use option case_sensitive => 0 to use this feature (slow down)
@@ -116,36 +124,36 @@ DESCRIPTION
     vars that are subrefs - not implemented, only in
     HTML::Template::Compiled::Classic
     scalarref, arrayref, filehandle
-    `global_vars'
-    `query'
+    "global_vars"
+    "query"
         Has a bug (doesn't return parameters in included files of included
         files). I'm working on that.
 
   ADDITIONAL FEATURES
     What can HTC do for you additionally to HTML::Template?
 
-    TMPL_ELSIF
+    tag TMPL_ELSIF
         No need to have cascading "if-else-if-else"s
 
-    TMPL_EACH
+    tag TMPL_EACH
         Iterate over a hash. See "TMPL_EACH"
 
-    TMPL_WITH
+    tag TMPL_WITH
         see "TMPL_WITH"
 
-    TMPL_WHILE
+    tag TMPL_WHILE
         see "TMPL_WHILE"
 
-    TMPL_COMMENT, TMPL_NOPARSE, TMPL_VERBATIM
+    tags TMPL_COMMENT, TMPL_NOPARSE, TMPL_VERBATIM
         see "TMPL_COMMENT", "TMPL_NOPARSE", "TMPL_VERBATIM"
 
-    `__index__'
-        Additional loop variable (`__counter__ -1')
+    "__index__"
+        Additional loop variable ("__counter__ -1")
 
-    `__break__'
+    "__break__"
         Additional loop variable (see "TMPL_LOOP")
 
-    `__filename__', `__filenameshort__' (since 0.91_001)
+    "__filename__", "__filenameshort__" (since 0.91_001)
         Insert the template filename for debugging:
 
             <%= __filename__ %>
@@ -156,10 +164,10 @@ DESCRIPTION
         See also option debug_file in "OPTIONS" for adding the filename
         globally.
 
-    TMPL_SWITCH, TMPL_CASE
+    tags TMPL_SWITCH, TMPL_CASE
         see "TMPL_SWITCH"
 
-    `TMPL_PERL'
+    "TMPL_PERL"
         Include perl code in your template. See "RUNNING PERL WITH
         TMPL_PERL"
 
@@ -180,8 +188,8 @@ DESCRIPTION
             is the same as
             <%= foo %>bar<%= baz %>
 
-        So `+-' means, leave the newline in front alone, but chomp after it,
-        `-+' is the opposite, `--' chomps both and `++' is just a no-op and
+        So "+-" means, leave the newline in front alone, but chomp after it,
+        "-+" is the opposite, "--" chomps both and "++" is just a no-op and
         behaves like a normal tag.
 
     Generating perl code
@@ -198,9 +206,9 @@ DESCRIPTION
         See "OPTIONS"
 
     Dynamic includes
-        `INCLUDE_VAR', `INCLUDE_STRING'. See "INCLUDE"
+        "INCLUDE_VAR", "INCLUDE_STRING". See "INCLUDE"
 
-    TMPL_IF_DEFINED
+    tag TMPL_IF_DEFINED
         Check for definedness instead of truth: <TMPL_IF_DEFINED NAME="var">
 
     ALIAS
@@ -214,8 +222,8 @@ DESCRIPTION
            <tmpl_var current>
          </tmpl_loop foo>
 
-        This works only with `TMPL_LOOP' at the moment. I probably will
-        implement this for `TMPL_WITH', `TMPL_WHILE' too.
+        This works only with "TMPL_LOOP" at the moment. I probably will
+        implement this for "TMPL_WITH", "TMPL_WHILE" too.
 
     Chained escaping
         See "ESCAPING"
@@ -234,11 +242,11 @@ DESCRIPTION
     There are some features of H::T that are missing. I'll try to list them
     here.
 
-    `die_on_bad_params'
+    "die_on_bad_params"
         I don't think I'll implement that.
 
   COMPATIBILITY
-    Same behaviour as HTML::Template
+   Same behaviour as HTML::Template
     At the moment there are four defaults that differ from HTML::Template:
 
     case_sensitive
@@ -247,7 +255,7 @@ DESCRIPTION
 
         Note (again): this will slow down templating a lot (50%).
 
-        Explanation: This has nothing to do with `TMPL_IF' or `tmpl_if'.
+        Explanation: This has nothing to do with "TMPL_IF" or "tmpl_if".
         It's about the variable names. With case_sensitive set to 1, the
         following tags are different:
 
@@ -255,11 +263,11 @@ DESCRIPTION
             <tmpl_var fOO> prints the value of hash key 'fOO'
 
         With case_sensitive set to 0, all your parameters passed to
-        `param()' are converted to uppercase, and the following tags are the
+        "param()" are converted to lowercase, and the following tags are the
         same:
 
-            <tmpl_var Foo> prints the value of hash key 'FOO'
-            <tmpl_var fOO> prints the value of hash key 'FOO'
+            <tmpl_var Foo> prints the value of hash key 'foo'
+            <tmpl_var fOO> prints the value of hash key 'foo'
 
     subref variables
         As of version 0.69, subref variables are not supported any more with
@@ -278,11 +286,9 @@ DESCRIPTION
     open_mode
         If you want to have your templates read in utf-8, use
 
-            open_mode => ':utf8',
+            open_mode => ':encoding(utf-8)',
 
         as an option.
-
-        In the previous version, it was '<:utf8'. This is deprecated.
 
     Note: the following is deprecated:
 
@@ -296,7 +302,7 @@ DESCRIPTION
 
      which is the default but depending on user wishes that might change.
 
-    Different behaviour from HTML::Template
+   Different behaviour from HTML::Template
     Arrayrefs
         At the moment this snippet
 
@@ -332,12 +338,12 @@ DESCRIPTION
         =)
 
   ESCAPING
-    Like in HTML::Template, you have `ESCAPE=HTML', `ESCAPE=URL' and
-    `ESCAPE_JS'. `ESCAPE=HTML' will only escape '"&<>. If you want to escape
-    more, use `ESCAPE=HTML_ALL'. Additionally you have `ESCAPE=DUMP', which
+    Like in HTML::Template, you have "ESCAPE=HTML", "ESCAPE=URL" and
+    "ESCAPE_JS". "ESCAPE=HTML" will only escape '"&<>. If you want to escape
+    more, use "ESCAPE=HTML_ALL". Additionally you have "ESCAPE=DUMP", which
     by default will generate a Data::Dumper output.
 
-    You can also chain different escapings, like `ESCAPE=DUMP|HTML'.
+    You can also chain different escapings, like "ESCAPE=DUMP|HTML".
 
     Additionally to ESCAPE=JS you have ESCAPE=IJSON which does not escape
     the single quote.
@@ -352,7 +358,7 @@ DESCRIPTION
       <TMPL_INCLUDE_VAR NAME="file_include_var">
       $htc->param(file_include_var => "file.htc");
 
-    Using `INCLUDE VAR="..."' is deprecated.
+    Using "INCLUDE VAR="..."" is deprecated.
 
     You can also include strings:
 
@@ -392,23 +398,23 @@ DESCRIPTION
         NAME => "Cool script",
       );
 
-    Now in the TMPL_LOOP `ALBUMS' you would like to access the path to your
+    Now in the TMPL_LOOP "ALBUMS" you would like to access the path to your
     script, stored in $hash{SELF}. in HTML::Template you have to set the
-    option `global_vars', so you can access `$hash{SELF}' from everywhere.
-    Unfortunately, now `NAME' is also global, which might not a problem in
+    option "global_vars", so you can access $hash{SELF} from everywhere.
+    Unfortunately, now "NAME" is also global, which might not a problem in
     this simple example, but in a more complicated template this is
-    impossible. With HTC, you wouldn't use `global_vars' here, but you can
+    impossible. With HTC, you wouldn't use "global_vars" here, but you can
     say:
 
       <TMPL_VAR .SELF>
 
-    to access the root element, and you could even say `.INFO.BIOGRAPHY' or
-    `ALBUMS[0].SONGS[0].NAME' (the latter has changed since version 0.79)
+    to access the root element, and you could even say ".INFO.BIOGRAPHY" or
+    "ALBUMS[0].SONGS[0].NAME" (the latter has changed since version 0.79)
 
   RENDERING OBJECTS
     This is still in development, so I might change the API here.
 
-    Additionally to feeding a simple hash do HTC, you can feed it objects.
+    Additionally to feeding a simple hash to HTC, you can feed it objects.
     To do method calls you can also use '.' in the template.
 
       my $htc = HTML::Template::Compiled->new(
@@ -425,7 +431,7 @@ DESCRIPTION
       Name: <TMPL_VAR fullname>
       </TMPL_WITH>
 
-    `fullname' will call the fullname method of your Your::Class object.
+    "fullname" will call the fullname method of your Your::Class object.
 
     It's recommended to just use the default . value for methods and
     dereferencing.
@@ -438,15 +444,15 @@ DESCRIPTION
     Yes, templating systems are for separating code and templates. But as it
     turned out to be implemented much easier than expressions i decided to
     implement it. But expressions are also available with the option
-    `use_expressions'.
+    "use_expressions".
 
     Note: If you have templates that can be edited by untrustworthy persons
     then you don't want them to include perl code.
 
     So, how do you use the perl-tag? First, you have to set the option
-    `use_perl' to `1' when creating a template object.
+    "use_perl" to 1 when creating a template object.
 
-    Important note: don't use `print' in the included code. Usually the
+    Important note: don't use "print" in the included code. Usually the
     template code is concatenated and returned to your perl script. To
     'print' something out use
 
@@ -482,7 +488,7 @@ DESCRIPTION
     List of special keywords inside a perl-tag:
 
     __OUT__
-        Is turned into `$OUT .=' or `print $fh'
+        Is turned into "$OUT .=" or "print $fh"
 
     __HTC__
         Is turned into the variable containing the current template object.
@@ -503,12 +509,12 @@ DESCRIPTION
     names might change in the near future. I'll try to fix the API and
     document which methods you can inherit.
 
-    METHODS TO INHERIT
+   METHODS TO INHERIT
     method_call
-        Default is `sub method_call { '.' }'
+        Default is "sub method_call { '.' }"
 
     deref
-        Default is `sub deref { '.' }'
+        Default is "sub deref { '.' }"
 
     formatter_path
         Deprecated, see HTML::Template::Compiled::Formatter please.
@@ -518,10 +524,10 @@ DESCRIPTION
         compile time of the including template or later when it is really
         used.
 
-        Default is `sub compile_early { 1 }'
+        Default is "sub compile_early { 1 }"
 
     parser_class
-        Default is `sub parser_class { 'HTML::Template::Compiled::Parser' }'
+        Default is "sub parser_class { 'HTML::Template::Compiled::Parser' }"
 
         You can write your own parser class (which must inherit from
         HTML::Template::Compiled::Parser) and use this.
@@ -535,10 +541,10 @@ DESCRIPTION
       Dump: <TMPL_VAR _ ESCAPE=DUMP|HTML>
       </TMPL_LOOP>
 
-    The special name `_' gives you the current parameter and `ESCAPE=DUMP'
+    The special name "_" gives you the current parameter and "ESCAPE=DUMP"
     will by default generate a Data::Dumper output of the current variable,
     in this case it will dump out the contents of every album in a loop. To
-    correctly display that in html `|HTML' will escape html entities.
+    correctly display that in html "|HTML" will escape html entities.
 
   TMPL_WITH
     If you have a deep leveled hash you might not want to always write
@@ -555,7 +561,7 @@ DESCRIPTION
     global_vars.
 
   TMPL_LOOP
-    The special name `_' gives you the current paramater. In loops you can
+    The special name "_" gives you the current parameter. In loops you can
     use it like this:
 
      <tmpl_loop foo>
@@ -563,8 +569,8 @@ DESCRIPTION
      </tmpl_loop>
 
     Also you can give the current item an alias. See "ALIAS". I also would
-    like to add a loop_context variable `__current__', if that makes sense.
-    Seems more readable to non perlers than `_'.
+    like to add a loop_context variable "__current__", if that makes sense.
+    Seems more readable to non perlers than "_".
 
     The LOOP tag allows you to define a JOIN attribute:
 
@@ -572,7 +578,7 @@ DESCRIPTION
       <tmpl_var _ >
      </tmpl_loop>
 
-    This will output something like `blue, pink, yellow'. This is easier
+    This will output something like "blue, pink, yellow". This is easier
     than doing:
 
      <tmpl_loop favourite_colors>
@@ -580,7 +586,7 @@ DESCRIPTION
       <tmpl_var _ >
      </tmpl_loop>
 
-    The `LOOP', `WHILE' and `EACH' tags allow you to define a BREAK
+    The "LOOP", "WHILE" and "EACH" tags allow you to define a BREAK
     attribute:
 
      <tmpl_loop bingo break="3"> <tmpl_var _ ><if __break__>\n</if></tmpl_loop>
@@ -597,7 +603,7 @@ DESCRIPTION
 
     TMPL_LOOP expects an array reference, also if it is a method call. If
     you want to iterate with TMPL_LOOP over a list from a method call, set
-    the attribute `context=list':
+    the attribute "context=list":
 
         <tmpl_loop object.list_method context=list>
             <tmpl_var _ >
@@ -640,12 +646,12 @@ DESCRIPTION
                 <tmpl_var __key__ >:<tmpl_var __value__>
             </tmpl_each letters >
 
-    You have to set the option `loop_context_vars' to true to use the
-    special vars `__key__' and `__value__'.
+    You have to set the option "loop_context_vars" to true to use the
+    special vars "__key__" and "__value__".
 
     If you want to iterate over a hash instead of a hashref (some methods
     might return plain hashes instead of references and TMPL_EACH expects a
-    ref), then you can set `context=list':
+    ref), then you can set "context=list":
 
         <tmpl_each object.hash_method context=list>
         <tmpl_var __key__ >
@@ -724,7 +730,7 @@ DESCRIPTION
         Path to template files
 
     search_path_on_include
-        Search the list of paths specified with `path' when including a
+        Search the list of paths specified with "path" when including a
         template. Default is 0
 
     file_cache
@@ -768,10 +774,10 @@ DESCRIPTION
         not cache templates created like this.
 
     loop_context_vars (fixed)
-        Vars like `__first__', `__last__', `__inner__', `__odd__',
-        `__counter__', `__index__'
+        Vars like "__first__", "__last__", "__inner__", "__odd__",
+        "__counter__", "__index__"
 
-        The variable `__index__' works just like `__counter__', only that it
+        The variable "__index__" works just like "__counter__", only that it
         starts at 0 instead of 1.
 
     global_vars (fixed)
@@ -786,7 +792,7 @@ DESCRIPTION
         This will get you up 2 levels (remember: one dot means root in HTC)
         and access the 'key' element.
 
-        If set to 3 (`3 == 1|2') you have both, global vars and explicitly
+        If set to 3 ("3 == 1|2") you have both, global vars and explicitly
         going up the stack.
 
         So setting global_vars to 2 can save you from global vars but still
@@ -799,7 +805,7 @@ DESCRIPTION
           );
 
         Now everything will be escaped for HTML unless you explicitly
-        specify `ESCAPE=0' (no escaping) or `ESCAPE=URL'.
+        specify "ESCAPE=0" (no escaping) or "ESCAPE=URL".
 
     no_includes (since 0.92)
         Default is 0. If set to 1, the tags INCLUDE, INCLUDE_VAR and
@@ -837,7 +843,7 @@ DESCRIPTION
         Deprecated. Please inherit and overwrite method 'deref'. See
         "INHERITANCE"
 
-        Define the string you want to use for dereferencing, default is `.'
+        Define the string you want to use for dereferencing, default is "."
         at the moment:
 
          <TMPL_VAR hash.key>
@@ -870,9 +876,9 @@ DESCRIPTION
         Is needed if you have an unqualified tmpl_var that should be
         resolved as a call to your formatter, for example. Otherwise you
         have to call it fully qualified. If your formatter_path is '/',
-        you'd say tmpl_var `_/method'. With the option default_path you can
-        make that the default, so you don't need the `_/': `tmpl_var
-        method'. If you don't use formatters, don't care about this option.
+        you'd say tmpl_var "_/method". With the option default_path you can
+        make that the default, so you don't need the "_/": "tmpl_var
+        method". If you don't use formatters, don't care about this option.
 
     line_numbers
         NOTE: This option does not exist any more; line numbers will alway
@@ -897,11 +903,11 @@ DESCRIPTION
           );
           ---
           <TMPL_VAR var ESCAPE=DUMP>
- 
-        This will call `my_cool_dumper()' on `var'.
+
+        This will call "my_cool_dumper()" on "var".
 
         Alternatively you can use the DHTML plugin which is using
-        `Data::TreeDumper' and `Data::TreeDumper::Renderer::DHTML'. You'll
+        "Data::TreeDumper" and "Data::TreeDumper::Renderer::DHTML". You'll
         get a dumper like output which you can collapse and expand, for
         example. See Data::TreeDumper and Data::TreeDumper::Renderer::DHTML
         for more information. Example:
@@ -910,8 +916,8 @@ DESCRIPTION
             ...
             dumper = 'DHTML',
           );
- 
-        For an example see `examples/dhtml.html'.
+
+        For an example see "examples/dhtml.html".
 
     out_fh (fixed)
           my $t = HTML::Template::Compiled->new(
@@ -921,9 +927,9 @@ DESCRIPTION
           ...
           $t->output($fh); # or output(\*STDOUT) or even output()
 
-        This option is fixed, so if you create a template with `out_fh',
+        This option is fixed, so if you create a template with "out_fh",
         every output of this template will print to a specified (or default
-        `STDOUT') filehandle.
+        "STDOUT") filehandle.
 
     filter
         Filter template code before parsing.
@@ -965,7 +971,7 @@ DESCRIPTION
         +stylename.
 
         Define your own tagstyle by specifying for regexes. For example you
-        want to use {`{if foo}}{{var bar}}{{/if foo}}', then your definition
+        want to use {"{if foo}}{{var bar}}{{/if foo}}", then your definition
         should be:
 
             [
@@ -976,10 +982,10 @@ DESCRIPTION
             ]
 
         NOTE: do not specify capturing parentheses in you regexes. If you
-        need parentheses, use `(?:foo|bar)' instead of `(foo|bar)'.
+        need parentheses, use "(?:foo|bar)" instead of "(foo|bar)".
 
         Say you want to deactivate asp-style, comment-style, activate php-
-        and tt-style and your own `{{}} ' style, then say:
+        and tt-style and your own "{{}} " style, then say:
 
             my $htc = HTML::Template::Compiled->new(
                 ...
@@ -1005,7 +1011,10 @@ DESCRIPTION
 
             <%= expr="object.create_link('navi')" %>
 
-        Inside function and method calls you also can use template vars.
+        Inside function and method calls, hash keys you also can use
+        template vars (hash keys sind 0.96_001).
+
+            <%= expr=".path.to.hash{var}" %>
 
         It is only minimally tested yet, so use with care and please report
         any bugs you find.
@@ -1103,7 +1112,7 @@ DESCRIPTION
 
     debug_code (since 0.91_003)
         If you get an error from the generated template, you might want to
-        debug the executed code. You can now call `debug_code' to get the
+        debug the executed code. You can now call "debug_code" to get the
         compiled code and the line the error occurred. Note that the
         reported line might not be the exact line where the error occurred,
         also look around the line. The template filename reported does
@@ -1152,13 +1161,13 @@ CACHING
 
     You can set the expire time of a template by
     HTML::Template::Compiled->ExpireTime($seconds);
-    (`$HTML::Template::Compiled::NEW_CHECK' is deprecated). So
+    ($HTML::Template::Compiled::NEW_CHECK is deprecated). So
     HTML::Template::Compiled->ExpireTime(60 * 10); will check after 10
     minutes if the tmpl file was modified. Set it to a very high value will
     then ignore any changes, until you delete the generated code.
 
 PLUGINS
-    At the moment you can use and write plugins for the `ESCAPE' attribute.
+    At the moment you can use and write plugins for the "ESCAPE" attribute.
     See HTML::Template::Compiled::Plugin::XMLEscape for an example how to
     use it; and have a look at the source code if you want to know how to
     write a plugin yourself.
@@ -1176,7 +1185,7 @@ LAZY LOADING
     Let's say you're in a CGI environment and have a lot of includes in your
     template, but only few of them are actually used.
     HTML::Template::Compiled will (as HTML::Template does) parse all of your
-    includes at once. Just like the `use' function does in perl. To get a
+    includes at once. Just like the "use" function does in perl. To get a
     behaviour like require, use HTML::Template::Compiled::Lazy.
 
 TODO
@@ -1186,7 +1195,7 @@ IMPLEMENTATION
     HTC generates a perl subroutine out of every template. Each included
     template is a subroutine for itself. You can look at the generated code
     by activating file caching and looking into the cache directory. When
-    you call `output()', the subroutine is called. The subroutine either
+    you call "output()", the subroutine is called. The subroutine either
     creates a string and adds each template text or the results of the tags
     to the string, or it prints it directly to a filehandle. Because of the
     implementation you have to know at creation time of the module if you
@@ -1195,7 +1204,7 @@ IMPLEMENTATION
 SECURITY
     HTML::Template::Compiled uses basically the same file caching model as,
     for example, Template- Toolkit does: The compiled Perl code is written
-    to disk and later reread via `do' or by reading the file and `eval' the
+    to disk and later reread via "do" or by reading the file and "eval" the
     content.
 
     If you are sharing a read/write environment with untrusted users (for
@@ -1206,12 +1215,12 @@ SECURITY
 
     In this case it is the safest option to generate your compiled templates
     on a local machine and just put the compiled templates onto the server,
-    with no write access for the http server. Set the `ExpireTime' variable
+    with no write access for the http server. Set the "ExpireTime" variable
     to a high value so that HTC never attempts to check the template
     timestamp to force a regenerating of the code.
 
     If you are alone on the machine, but you are running under taint mode
-    (see perlsec) then you have to explicitly set the `$UNTAINT' variable to
+    (see perlsec) then you have to explicitly set the $UNTAINT variable to
     1. HTC will then untaint the code for you and treat it as if it were
     safe (it hopefully is =).
 
@@ -1232,7 +1241,7 @@ PRECOMPILE
     because templates have changed).
 
 BENCHMARKS
-    The options `case_sensitive', `loop_context_vars' and `global_vars' can
+    The options "case_sensitive", "loop_context_vars" and "global_vars" can
     have the biggest influence on speed.
 
     Setting case_sensitive to 1, loop_context_vars to 0 and global_vars to 0
@@ -1242,7 +1251,7 @@ BENCHMARKS
     gain under mod_perl if you use case_sensitive = 1, loop_context_vars =
     0, With CGI HTC is slower.
 
-    See the `examples/bench.pl' contained in this distribution.
+    See the "examples/bench.pl" contained in this distribution.
 
     Here are some examples from the benchmark script. I'm showing only
     Template::AutoFilter, Template::HTML, HTML::Template and HTC. These four
@@ -1314,8 +1323,8 @@ BENCHMARKS
     template it's faster.
 
 EXAMPLES
-    See examples (and `examples/objects.pl') for an example how to feed
-    objects to HTC.
+    See "objects.html" in examples (and "examples/objects.pl") for an
+    example how to feed objects to HTC.
 
 BUGS
     Probably many bugs I don't know yet =)
@@ -1367,7 +1376,7 @@ CREDITS
     Day, Steffen Winkler, Henrik Tougaard for ideas, beta-testing and
     patches
 
-    http://www.perlmonks.org/ and http://www.perl-community.de/> for
+    <http://www.perlmonks.org/> and http://www.perl-community.de/> for
     everyday learning
 
     Corion, Limbic~Region, tye, runrig and others from perlmonks.org
