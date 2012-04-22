@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Parser;
-# $Id: Parser.pm 1106 2009-09-16 17:44:06Z tinita $
+# $Id: Parser.pm 1154 2012-04-22 17:21:53Z tinita $
 use Carp qw(croak carp confess);
 use strict;
 use warnings;
@@ -37,6 +37,7 @@ use constant ATTR_TAGSTYLE   => 0;
 use constant ATTR_TAGNAMES   => 1;
 use constant ATTR_PERL       => 2;
 use constant ATTR_EXPRESSION => 3;
+use constant ATTR_CHOMP      => 4;
 
 use constant T_VAR         => 'VAR';
 use constant T_IF          => 'IF';
@@ -53,6 +54,10 @@ use constant T_LOOP        => 'LOOP';
 use constant T_WHILE       => 'WHILE';
 use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
 
+use constant CHOMP_NONE     => 0;
+use constant CHOMP_ONE      => 1;
+use constant CHOMP_COLLAPSE => 2;
+use constant CHOMP_GREEDY   => 3;
 
 # under construction (sic!)
 sub new {
@@ -76,6 +81,9 @@ sub get_perl   { $_[0]->[ATTR_PERL] }
 sub set_expressions { $_[0]->[ATTR_EXPRESSION] = $_[1] }
 sub get_expressions { $_[0]->[ATTR_EXPRESSION] }
 
+sub set_chomp { $_[0]->[ATTR_CHOMP] = $_[1] }
+sub get_chomp { $_[0]->[ATTR_CHOMP] }
+
 sub add_tagnames {
     my ($self, $hash) = @_;
     my $open = $hash->{OPENING_TAG()};
@@ -94,19 +102,14 @@ sub remove_tags {
 
 my $_default_tags = {
     classic => ['<TMPL_'      ,'>',     '</TMPL_',      '>',  ],
-    classic_chomp => ['<[+-][+-]TMPL_'      ,'>',     '<[+-][+-]/TMPL_',      '>',    1],
 
     comment => ['<!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->',],
-    comment_chomp => ['<[+-][+-]!--\s*TMPL_','\s*-->','<!--\s*/TMPL_','\s*-->',1],
 
     asp     => ['<%'          ,'%>',    '<%/',          '%>',   ],
-    asp_chomp  => ['<[+-][+-]%'          ,'%>',    '<[+-][+-]%/',          '%>', 1],
 
     php     => ['<\?'         ,'\?>',    '<\?/',          '\?>', ],
-    php_chomp  => ['<[+-][+-]\?'         ,'\?>',    '<[+-][+-]\?/',          '\?>', 1],
 
     tt      => ['\[%'         ,'%\]',   '\[%/',         '%\]'  , ],
-    tt_chomp   => ['\[[+-][+-]%'         ,'%\]',   '\[[+-][+-]%/',         '%\]'  ,1 ],
 };
 sub default_tags {
     return $_default_tags;
@@ -140,6 +143,8 @@ my %allowed_tagnames = (
         INCLUDE_VAR => [$default_validation, qw(NAME EXPR)],
         INCLUDE_STRING => [$default_validation, qw(NAME EXPR)],
         INCLUDE     => [$default_validation, qw(NAME)],
+        USE_VARS    => [$default_validation, qw(NAME)],
+        SET_VAR     => [$default_validation, qw(NAME VALUE EXPR)],
     },
     CLOSING_TAG() => {
         IF_DEFINED  => [undef, qw(NAME)],
@@ -221,17 +226,6 @@ sub find_start_of_tag {
                 my $val = $open_close_map{$key};
                 $arg->{close_match} = $val->[1];
                 $arg->{open_or_close} = $val->[0];
-                $arg->{chomp_find} = $arg->{chomp_map}->{$key};
-                if ($arg->{chomp_find}) {
-                    if (my ($c1, $c2) = $arg->{open} =~ m/([+-])([+-])/) {
-                        if ($c1 eq '-') {
-                            $arg->{chomp} |= 1;
-                        }
-                        if ($c2 eq '-') {
-                            $arg->{chomp} |= 2;
-                        }
-                    }
-                }
                 #print STDERR "=== tag type $key, searching for $arg->{close_match}\n";
                 last TYPES;
             }
@@ -247,7 +241,7 @@ sub find_start_of_tag {
 sub find_attributes {
     my ($self, $arg) = @_;
     #warn Data::Dumper->Dump([\%args], ['args']);
-    my $allowed = $arg->{allowed_names};
+    my $allowed = [@{ $arg->{allowed_names} }, 'PRE_CHOMP', 'POST_CHOMP'];
     my $attr    = $arg->{attr};
     my $fname   = $arg->{fname};
     my $line    = $arg->{line};
@@ -262,10 +256,16 @@ sub find_attributes {
         my ($name, $val, $orig) = $self->find_attribute( $arg, $re );
         last unless defined $name;
         my $key = uc $name;
+        if ($key =~ m/^(?:PRE|POST)_CHOMP\z/ and $val !~ m/^(?:0|1|2|3)\z/) {
+            $self->_error_wrong_tag_syntax(
+                $arg,
+                $orig.$arg->{template}, '(PRE|POST)_CHOMP=(0|1|2|3)',
+            );
+        }
         if (exists $attr->{$key}) {
             $self->_error_wrong_tag_syntax(
                 $arg,
-                $orig.$arg->{template}
+                $orig.$arg->{template}, 'duplicate attribute',
             );
         }
         $attr->{$key} = $val;
@@ -363,10 +363,6 @@ sub find_attributes {
                 ],
             ),
         } @$tagstyle;
-        my %chomp = map {
-            $_->[0] => $_->[4],
-            $_->[2] => $_->[4],
-        } @$tagstyle;
 
         my $comment_info;
         my $callback_found_tag = [ $default_callback_tag ];
@@ -454,20 +450,13 @@ sub find_attributes {
             tags      => [],
             close     => undef,
             stack     => [T_END],
-            chomp     => 0,
-            chomp_map => \%chomp,
-            chomp_find => undef,
         };
-        my $next_chomp = 0;
         while (length $arg->{template}) {
-            my $chomp_now = $next_chomp;
-            $next_chomp = 0;
             #warn Data::Dumper->Dump([\@tags], ['tags']);
             #print STDERR "TEXT: $template ($start_close_re)\n";
             #print STDERR "TOKEN: '$arg->{token}'\n";
             my $found_tag = 0;
             $arg->{attr} = {};
-            $arg->{chomp} = 0;
             MATCH_TAGS: {
                 last MATCH_TAGS unless $self->find_start_of_tag($arg);
                 # at this point we have a start of a tag. everything
@@ -506,13 +495,34 @@ sub find_attributes {
                 $found_tag = 1;
             }
             if ($found_tag) {
-                if ($arg->{chomp}&1 and @{$arg->{tags}} > 0) {
+                my $pre_chomp = $self->get_chomp->[0];
+                my $attr = $arg->{attr};
+                $pre_chomp = $attr->{PRE_CHOMP} if exists $attr->{PRE_CHOMP};
+                my $post_chomp = $self->get_chomp->[1];
+                $post_chomp = $attr->{POST_CHOMP} if exists $attr->{POST_CHOMP};
+                if (@{$arg->{tags}} > 0 and $pre_chomp) {
                     my $text = $arg->{tags}->[-1]->get_text;
-                    $text =~ s/\s+\z//;
+                    if ($pre_chomp == CHOMP_ONE) {
+                        $text =~ s/ +\z//;
+                    }
+                    elsif ($pre_chomp == CHOMP_COLLAPSE) {
+                        $text =~ s/\s+\z/ /;
+                    }
+                    elsif ($pre_chomp == CHOMP_GREEDY) {
+                        $text =~ s/\s+\z//;
+                    }
                     $arg->{tags}->[-1]->set_text($text);
                 }
-                if ($arg->{chomp}&2) {
-                    $next_chomp = 1;
+                if (length $arg->{template} and $post_chomp) {
+                    if ($post_chomp == CHOMP_ONE) {
+                        $arg->{template} =~ s/^ +//;
+                    }
+                    elsif ($post_chomp == CHOMP_COLLAPSE) {
+                        $arg->{template} =~ s/^\s+/ /;
+                    }
+                    elsif ($post_chomp == CHOMP_GREEDY) {
+                        $arg->{template} =~ s/^\s+//;
+                    }
                 }
                 #print STDERR "found tag $arg->{name}\n";
                 #my $test = $callback_found_tag->[-1];
@@ -526,7 +536,6 @@ sub find_attributes {
             }
             elsif ($arg->{template} =~ s/^(.+?)(?=($start_close_re|\Z))//s) {
                 $arg->{token} .= $1;
-                $arg->{token} =~ s/\s+\z// if $chomp_now;
                 ($callbacks_found_text->[-1] || sub {} )->(
                     $self,
                     $arg,
@@ -545,11 +554,12 @@ sub find_attributes {
 
 use HTML::Template::Compiled::Exception;
 sub _error_wrong_tag_syntax {
-    my ($self, $arg, $text) = @_;
+    my ($self, $arg, $text, $add_info) = @_;
     my ($substr) = $text =~ m/^(.{0,10})/s;
     my $class = ref $self || $self;
     my $info = "$class : Syntax error in <TMPL_*> tag at $arg->{fname} :"
         . "$arg->{line} near '$arg->{token}$substr...'";
+    $info .= " $add_info" if defined $add_info;
     my $ex = HTML::Template::Compiled::Exception->new(
         text => $info,
         parser => $self,

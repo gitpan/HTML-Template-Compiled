@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1150 2012-04-21 21:21:50Z tinita $
+# $Id: Compiled.pm 1154 2012-04-22 17:21:53Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.96_001";
+our $VERSION = "0.96_002";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -59,7 +59,7 @@ BEGIN {
           debug debug_file objects perl out_fh default_escape
           filter formatter
           globalstack use_query parse_tree parser compiler includes
-          plugins open_mode
+          plugins open_mode chomp
         )
           #use_expressions
     );
@@ -878,6 +878,8 @@ sub init {
         use_perl               => 0,
         open_mode              => '',
         no_includes            => 0,
+        pre_chomp              => 0,
+        post_chomp             => 0,
         %args,
     );
     $self->set_loop_context(1) if $args{loop_context_vars};
@@ -885,6 +887,7 @@ sub init {
     $self->set_default_escape( $defaults{default_escape} );
     $self->set_default_path( $defaults{default_path} );
     $self->set_use_query( $defaults{use_query} );
+    $self->set_chomp([$args{pre_chomp}, $args{post_chomp}]);
     #$self->set_use_expressions( $defaults{use_expressions} );
     if ($defaults{use_expressions}) {
         require HTML::Template::Compiled::Expr;
@@ -927,6 +930,7 @@ sub init {
         $parser->set_perl($defaults{use_perl});
         $parser->set_expressions($defaults{use_expressions});
     }
+    $parser->set_chomp([$args{pre_chomp}, $args{post_chomp}]);
     if ($defaults{use_perl}) {
         $parser->add_tagnames({
             HTML::Template::Compiled::Token::OPENING_TAG() => {
@@ -1573,7 +1577,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.96_001"
+$VERSION = "0.96_002"
 
 =cut
 
@@ -1755,6 +1759,14 @@ see L<"TMPL_WITH">
 
 see L<"TMPL_WHILE">
 
+=item tag TMPL_SET_VAR
+
+see L<"SET_VAR">
+
+=item tag TMPL_USE_VARS
+
+see L<"USE_VARS">
+
 =item tags TMPL_COMMENT, TMPL_NOPARSE, TMPL_VERBATIM
 
 see L<"TMPL_COMMENT">, L<"TMPL_NOPARSE">, L<"TMPL_VERBATIM">
@@ -1788,27 +1800,30 @@ see L<"TMPL_SWITCH">
 
 Include perl code in your template. See L<"RUNNING PERL WITH TMPL_PERL">
 
-=item Chomp
+=item CHOMP
 
-Experimental feature, added in version 0.89. By using special tags the
-newlines before and/or after the tags will be deleted.
-I'm not sure about the syntax, so this might change. I'd be very glad about
-comments. Example:
+New in version 0.96_001, please report any bugs and send me suggestions.
+
+You can set global chomp options in the constructor. These work like in
+Template-Toolkit:
 
     my $htc = HTML::Template::Compiled->new(
-        ...
-        tagstyle => [qw/+asp_chomp/], # classic_chomp tt_chomp comment_chomp
+        PRE_CHOMP  => 0, # 0, 1, 2, 3, default 0
+        POST_CHOMP => 1, # 0, 1, 2, 3, default 0
     );
-    template:
-    <+-%= foo %>
-    bar
-    <-+%= baz %>
-    is the same as
-    <%= foo %>bar<%= baz %>
 
-So C<+-> means, leave the newline in front alone, but chomp after it,
-C<-+> is the opposite, C<--> chomps both and C<++> is just a no-op and
-behaves like a normal tag.
+Meaning of the values:
+0: Don't chomp
+1: remove only spaces in the line before or after the tag
+2: remove all whitespaces before or after the tag, and replace with one space
+3: remove all whitespaces before or after the tag
+
+In the template you can change that feature by using PRE_CHOMP and POST_CHOMP
+attributes:
+
+    <%= foo PRE_CHOMP=3 POST_CHOMP=1 %>
+
+The experimental tags +..._chomp have been removed.
 
 =item Generating perl code
 
@@ -1863,6 +1878,10 @@ can use E<lt>% %E<gt> tags and the E<lt>%= tag instead of E<lt>%VAR (which will 
 
 Define your own tagstyles and/or deactivate predefined ones.
 See L<"OPTIONS"> tagstyle.
+
+=item pre_chomp, post_chomp
+
+See L<"CHOMP">
 
 =back
 
@@ -2336,6 +2355,37 @@ TMPL_EACH expects a ref), then you can set C<context=list>:
     <tmpl_each object.hash_method context=list>
     <tmpl_var __key__ >
     </tmpl_each>
+
+=head2 SET_VAR
+
+Since 0.96_002
+
+Sets a local variable to the value given in C<value> or C<expr>
+
+    <tmpl_set foo value=23>
+    <tmpl_set name=bar value=23>
+    <tmpl_set boo value=var.boo>
+    <tmpl_set oof expr="21*2">
+    <tmpl_var foo>
+    <tmpl_var bar>
+    ...
+
+Note that you cannot use those vars by default in includes.
+If you set a var with SET_VAR and want to use it in an include, use must
+use the L<"USE_VARS"> tag.
+
+=head2 USE_VARS
+
+Necessary if you want vars like SET_VAR and loop aliases from outside
+in includes.
+Before the first use in the include, add:
+
+    <tmpl_use_vars foo,bar,boo >
+
+so that the compiler recognizes them as user defined vars and not parameters
+from the stash.
+This statement is valid until the end of the template so you cannot
+"overwrite" parameters of the stash locally.
 
 =head2 TMPL_COMMENT
 

@@ -1,7 +1,6 @@
-# $Id: 27_chomp.t 977 2007-10-09 18:24:59Z tinita $
+# $Id: 27_chomp.t 1153 2012-04-22 15:28:28Z tinita $
 use warnings;
 use strict;
-use blib;
 use lib 't';
 use Test::More tests => 3;
 use_ok('HTML::Template::Compiled');
@@ -10,12 +9,12 @@ use HTC_Utils qw($cache $tdir &cdir);
 {
     my $htc = HTML::Template::Compiled->new(
         scalarref => \<<'EOM',
-<+-tmpl_var foo  >
+<tmpl_var foo POST_CHOMP=3 >
 <tmpl_var  foo >
-<-+!-- tmpl_var foo  -->
-<--%var foo %>
+<!--tmpl_var foo PRE_CHOMP=3 -->
+<%var foo PRE_CHOMP=3 POST_CHOMP=3 %>
 EOM
-        tagstyle => [qw(+classic +classic_chomp +asp +asp_chomp +comment +comment_chomp)],
+        tagstyle => [qw(+classic +asp +comment )],
         debug => 0,
     );
     $htc->param(foo => 23);
@@ -29,10 +28,9 @@ EOM
         scalarref => \<<'EOM',
 <%loop foo %>
 * <%= _ %>
-<--%/loop %>
-
+<%/loop PRE_CHOMP=3 POST_CHOMP=3 %>
 EOM
-        tagstyle => [qw(+asp_chomp)],
+        tagstyle => [qw(+asp)],
         debug => 0,
     );
     my $exp = <<'EOM';
@@ -42,6 +40,7 @@ EOM
 * 4
 EOM
     $htc->param(foo => [2..4]);
+    chomp($exp);
     my $out = $htc->output;
     #print "out: $out\n";
     cmp_ok($out, 'eq', $exp, "chomp loop");

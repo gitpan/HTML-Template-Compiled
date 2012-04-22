@@ -3,7 +3,7 @@ NAME
     to Perl code
 
 VERSION
-    $VERSION = "0.96_001"
+    $VERSION = "0.96_002"
 
 SYNOPSIS
       use HTML::Template::Compiled;
@@ -144,6 +144,12 @@ DESCRIPTION
     tag TMPL_WHILE
         see "TMPL_WHILE"
 
+    tag TMPL_SET_VAR
+        see "SET_VAR"
+
+    tag TMPL_USE_VARS
+        see "USE_VARS"
+
     tags TMPL_COMMENT, TMPL_NOPARSE, TMPL_VERBATIM
         see "TMPL_COMMENT", "TMPL_NOPARSE", "TMPL_VERBATIM"
 
@@ -171,26 +177,29 @@ DESCRIPTION
         Include perl code in your template. See "RUNNING PERL WITH
         TMPL_PERL"
 
-    Chomp
-        Experimental feature, added in version 0.89. By using special tags
-        the newlines before and/or after the tags will be deleted. I'm not
-        sure about the syntax, so this might change. I'd be very glad about
-        comments. Example:
+    CHOMP
+        New in version 0.96_001, please report any bugs and send me
+        suggestions.
+
+        You can set global chomp options in the constructor. These work like
+        in Template-Toolkit:
 
             my $htc = HTML::Template::Compiled->new(
-                ...
-                tagstyle => [qw/+asp_chomp/], # classic_chomp tt_chomp comment_chomp
+                PRE_CHOMP  => 0, # 0, 1, 2, 3, default 0
+                POST_CHOMP => 1, # 0, 1, 2, 3, default 0
             );
-            template:
-            <+-%= foo %>
-            bar
-            <-+%= baz %>
-            is the same as
-            <%= foo %>bar<%= baz %>
 
-        So "+-" means, leave the newline in front alone, but chomp after it,
-        "-+" is the opposite, "--" chomps both and "++" is just a no-op and
-        behaves like a normal tag.
+        Meaning of the values: 0: Don't chomp 1: remove only spaces in the
+        line before or after the tag 2: remove all whitespaces before or
+        after the tag, and replace with one space 3: remove all whitespaces
+        before or after the tag
+
+        In the template you can change that feature by using PRE_CHOMP and
+        POST_CHOMP attributes:
+
+            <%= foo PRE_CHOMP=3 POST_CHOMP=1 %>
+
+        The experimental tags +..._chomp have been removed.
 
     Generating perl code
         See "IMPLEMENTATION"
@@ -237,6 +246,9 @@ DESCRIPTION
 
         Define your own tagstyles and/or deactivate predefined ones. See
         "OPTIONS" tagstyle.
+
+    pre_chomp, post_chomp
+        See "CHOMP"
 
   MISSING FEATURES
     There are some features of H::T that are missing. I'll try to list them
@@ -656,6 +668,33 @@ DESCRIPTION
         <tmpl_each object.hash_method context=list>
         <tmpl_var __key__ >
         </tmpl_each>
+
+  SET_VAR
+    Since 0.96_002
+
+    Sets a local variable to the value given in "value" or "expr"
+
+        <tmpl_set foo value=23>
+        <tmpl_set name=bar value=23>
+        <tmpl_set boo value=var.boo>
+        <tmpl_set oof expr="21*2">
+        <tmpl_var foo>
+        <tmpl_var bar>
+        ...
+
+    Note that you cannot use those vars by default in includes. If you set a
+    var with SET_VAR and want to use it in an include, use must use the
+    "USE_VARS" tag.
+
+  USE_VARS
+    Necessary if you want vars like SET_VAR and loop aliases from outside in
+    includes. Before the first use in the include, add:
+
+        <tmpl_use_vars foo,bar,boo >
+
+    so that the compiler recognizes them as user defined vars and not
+    parameters from the stash. This statement is valid until the end of the
+    template so you cannot "overwrite" parameters of the stash locally.
 
   TMPL_COMMENT
     For debugging purposes you can temporarily comment out regions:

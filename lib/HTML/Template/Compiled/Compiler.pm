@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1145 2012-04-21 19:51:39Z tinita $
+# $Id: Compiler.pm 1154 2012-04-22 17:21:53Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -29,6 +29,8 @@ use constant T_WHILE       => 'WHILE';
 use constant T_EACH        => 'EACH';
 use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
 use constant T_INCLUDE_STRING => 'INCLUDE_STRING';
+use constant T_USE_VARS    => 'USE_VARS';
+use constant T_SET_VAR     => 'SET_VAR';
 
 use constant INDENT        => '    ';
 
@@ -189,7 +191,7 @@ sub parse_var {
         );
     }
     if ( grep { defined $_ && $args{var} eq $_ } @$lexicals ) {
-        return "\$$args{var}";
+        return "\$lexi_$args{var}";
     }
     my $lexi = join '|', grep defined, @$lexicals;
     my $varname = '$var';
@@ -205,7 +207,7 @@ sub parse_var {
         }
     }
     if ($lexi and $args{var} =~ s/^($lexi)($re)/$2/) {
-        $initial_var = "\$$1";
+        $initial_var = "\$lexi_$1";
     }
     elsif ( $args{var} =~ m/^_/ && $args{var} !~ m/^__(\w+)__$/ ) {
         $args{var} =~ s/^_//;
@@ -453,7 +455,9 @@ EOM
         formatter_path => $format,
         lexicals       => \@lexicals,
     );
+    my %use_vars;
     for my $token (@p) {
+        @use_vars{ @lexicals } = () if @lexicals;
         my ($text, $line, $open_close, $tname, $attr, $f, $nlevel) = @$token;
         #print STDERR "tags: ($text, $line, $open_close, $tname, $attr)\n";
         #print STDERR "p: '$text'\n";
@@ -539,6 +543,37 @@ ${indent}    if (defined \$\$C) {
 EOM
         }
 
+        elsif ( $tname eq T_USE_VARS ) {
+            my $var     = $attr->{NAME};
+            my @l = split /,/, $var;
+            push @lexicals, @l;
+        }
+        elsif ( $tname eq T_SET_VAR ) {
+            my $var     = $attr->{NAME};
+            my $value;
+            my $expr;
+            if (exists $attr->{VALUE}) {
+                $value = $attr->{VALUE};
+            }
+            elsif (exists $attr->{EXPR}) {
+                $expr = $attr->{EXPR};
+            }
+            else {
+# error
+            }
+
+            unshift @lexicals, $var;
+            my $varstr = $class->parse_var($self,
+                %var_args,
+                var         => $value,
+                context     => $token,
+                compiler    => $class,
+                expr        => $expr,
+            );
+            $code .= <<"EOM";
+${indent}local \$lexi_$var = $varstr;
+EOM
+        }
         # --------- TMPL_LOOP TMPL_WHILE TMPL_EACH
         elsif ( ($tname eq T_LOOP || $tname eq T_WHILE || $tname eq T_EACH) ) {
             my $var     = $attr->{NAME};
@@ -588,7 +623,7 @@ EOM
             }
             my $global = '';
             my $lexi =
-              defined $lexical ? "${indent}my \$$lexical = \$\$C;\n" : "";
+              defined $lexical ? "${indent}local \$lexi_$lexical = \$\$C;\n" : "";
             if ($self->get_global_vars) {
                 my $pop_global = _expr_method(
                     'pushGlobalstack',
@@ -949,6 +984,10 @@ EOM
     }
     if ($self->get_use_query) {
         $self->set_parse_tree($info);
+    }
+    my @use_vars = grep length, keys %use_vars;
+    if (@use_vars) {
+        $header .= qq#use vars qw/ @{[ map { '$lexi_'.$_ } @use_vars ]} /;\n#;
     }
     #warn Data::Dumper->Dump([\$info], ['info']);
     $code .= qq#return \$OUT;\n#;

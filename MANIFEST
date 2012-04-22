@@ -72,6 +72,7 @@ t/34_loop_context_vars.t
 t/35_debug.t
 t/36_default.t
 t/37_with.t
+t/38_vars.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html
@@ -98,5 +99,6 @@ t/templates/file_debug.html
 t/templates/subdir/file_debug.html
 t/templates/loop_included.tmpl
 t/templates/user_template.html
+t/templates/var_include.html
 META.yml                                 Module meta-data (added by MakeMaker)
 META.json
