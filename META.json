@@ -36,7 +36,7 @@
    "provides" : {
       "HTML::Template::Compiled" : {
          "file" : "lib/HTML/Template/Compiled.pm",
-         "version" : "0.96_002"
+         "version" : "0.96_003"
       },
       "HTML::Template::Compiled::Classic" : {
          "file" : "lib/HTML/Template/Compiled/Classic.pm",
@@ -165,5 +165,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.96_002"
+   "version" : "0.96_003"
 }

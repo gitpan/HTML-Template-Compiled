@@ -1,5 +1,8 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.96_003 Fri May  4 17:09:19 CEST 2012
+- Improved Feature: expressions like .path.to.hash{var}
+
 0.96_002 Sun Apr 22 19:23:33 CEST 2012
 - Changed/New feature: chomp whitespaces globally or in tags
 - New feature: SET_VAR (and USE_VARS)

@@ -109,7 +109,7 @@ paren         : '(' binary_op ')'     { $item[2] }
 
 subexpression : function_call
             | method_call
-            | hash_key
+            | var_deref
             | var
             | literal
             | <error>
@@ -133,13 +133,26 @@ function_call : function_name '(' args ')'
 
 function_name : /[A-Za-z_][A-Za-z0-9_]*/
 
-hash_key: var '{' var '}'       { [ 'HASH_KEY', $item[1], $item[3] ] }
-              | var '{' paren '}' { [ 'HASH_KEY', $item[1], $item[3] ] }
-              | var '{' literal '}' { [ 'HASH_KEY', $item[1], $item[3] ] }
-
 args          : <leftop: paren ',' paren>
 
-var           : /[.\/A-Za-z_][.\/\[\]A-Za-z0-9_]*/ { [ 'VAR', $item[1] ] }
+var           : /[.\/A-Za-z_][.\/A-Za-z0-9_]*/ { [ 'VAR', $item[1] ] }
+
+var_deref     : var deref(s)  { [ 'VAR_DEREF', $item[1], $item[2] ] }
+              | var deref(s)  { [ 'VAR_DEREF', $item[1], $item[2] ] }
+
+deref         : deref_hash | deref_array
+
+deref_hash      : '{' hash_key '}' { [ 'DEREF_HASH', $item[2] ] }
+                | '{' hash_key '}' { [ 'DEREF_HASH', $item[2] ] }
+                | '{' hash_key '}' { [ 'DEREF_HASH', $item[2] ] }
+
+deref_array : '[' array_index ']' { [ 'DEREF_ARRAY', $item[2] ] }
+            | '[' array_index ']' { [ 'DEREF_ARRAY', $item[2] ] }
+            | '[' array_index ']' { [ 'DEREF_ARRAY', $item[2] ] }
+
+hash_key      : literal | paren | var
+
+array_index   : /-?\d+/ | paren | var
 
 literal       : /-?\d*\.\d+/             { [ 'LITERAL', $item[1] ] }
             | /-?\d+/                  { [ 'LITERAL', $item[1] ] }
@@ -257,17 +270,37 @@ sub sub_expression {
             method_args => $method_args,
         );
     }
-    elsif ($type eq 'HASH_KEY') {
-        #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\@args], ['args']);
-        my ($var, $key) = @args[0,1];
-        my $hash_key = $class->sub_expression($key, $compiler, $htc, %args);
-        my $expr = $compiler->parse_var($htc,
-            %args,
-            var => $var->[1],
-            hash_key => $hash_key,
-        );
-        return $expr;
+    elsif ($type eq 'VAR_DEREF') {
+        my ($var, $deref) = @args;
+        my $str = $class->sub_expression($var, $compiler, $htc, %args);
+        for my $d (@$deref) {
+            my $deref_str = $class->sub_expression($d, $compiler, $htc, %args);
+            $str .= $deref_str;
+        }
+        return $str;
     }
+    elsif ($type eq 'DEREF_HASH') {
+        my ($key) = @args;
+        my $str = $class->sub_expression($args[0], $compiler, $htc, %args);
+        $str = '->{' . $str . '}';
+        return $str;
+    }
+    elsif ($type eq 'DEREF_ARRAY') {
+        my ($index) = @args;
+        my $str;
+        if (ref $index) {
+            $str = $class->sub_expression($index, $compiler, $htc, %args);
+        }
+        elsif ($index !~ m/-?[0-9]+/) {
+            die "invalid array index $index";
+        }
+        else {
+            $str = $index;
+        }
+        $str = '->[' . $str . ']';
+        return $str;
+    }
+
     elsif ($type eq 'FUNCTION_CALL') {
         my $name = shift @args;
         @args = @{ $args[0] || [] };

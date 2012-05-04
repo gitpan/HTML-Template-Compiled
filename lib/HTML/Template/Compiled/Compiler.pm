@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1154 2012-04-22 17:21:53Z tinita $
+# $Id: Compiler.pm 1157 2012-05-04 15:17:31Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -191,7 +191,8 @@ sub parse_var {
         );
     }
     if ( grep { defined $_ && $args{var} eq $_ } @$lexicals ) {
-        return "\$lexi_$args{var}";
+        my $varstr = "\$lexi_$args{var}";
+        return $varstr;
     }
     my $lexi = join '|', grep defined, @$lexicals;
     my $varname = '$var';
@@ -253,7 +254,6 @@ sub parse_var {
     my $use_objects = $t->get_objects;
     my $strict = $use_objects eq 'strict' ? 1 : 0;
     my $method_args = '';
-    my $hash_key = $args{hash_key};
     my $varstr = '';
     @split = map {
         s#\\#\\\\#g;
@@ -365,9 +365,6 @@ sub parse_var {
         }
 
         $count++;
-    }
-    if (defined $hash_key) {
-        $varstr = "($varstr\->{$hash_key})";
     }
     #my $final = $context->get_name eq 'VAR' ? 1 : 0;
     if (0 or @split > 1) {
@@ -543,36 +540,56 @@ ${indent}    if (defined \$\$C) {
 EOM
         }
 
-        elsif ( $tname eq T_USE_VARS ) {
+        elsif ( $tname eq T_USE_VARS or $tname eq T_SET_VAR ) {
             my $var     = $attr->{NAME};
-            my @l = split /,/, $var;
-            push @lexicals, @l;
-        }
-        elsif ( $tname eq T_SET_VAR ) {
-            my $var     = $attr->{NAME};
-            my $value;
-            my $expr;
-            if (exists $attr->{VALUE}) {
-                $value = $attr->{VALUE};
+            if ($var =~ tr/a-zA-Z0-9_//c) {
+                $self->get_parser->_error_wrong_tag_syntax(
+                    {
+                        fname => $token->get_file,
+                        line  => $token->get_line,
+                        token => "",
+                    },
+                    $var,
+                    'invalid SET_VAR/USE_VARS var name',
+                );
             }
-            elsif (exists $attr->{EXPR}) {
-                $expr = $attr->{EXPR};
+            if ( $tname eq T_USE_VARS ) {
+                my @l = split /,/, $var;
+                push @lexicals, @l;
             }
-            else {
-# error
-            }
+            elsif ( $tname eq T_SET_VAR ) {
+                my $value;
+                my $expr;
+                if (exists $attr->{VALUE}) {
+                    $value = $attr->{VALUE};
+                }
+                elsif (exists $attr->{EXPR}) {
+                    $expr = $attr->{EXPR};
+                }
+                else {
+                    $self->get_parser->_error_wrong_tag_syntax(
+                        {
+                            fname => $token->get_file,
+                            line  => $token->get_line,
+                            token => "",
+                        },
+                        $var,
+                        'missing VALUE or EXPR',
+                    );
+                }
 
-            unshift @lexicals, $var;
-            my $varstr = $class->parse_var($self,
-                %var_args,
-                var         => $value,
-                context     => $token,
-                compiler    => $class,
-                expr        => $expr,
-            );
-            $code .= <<"EOM";
+                unshift @lexicals, $var;
+                my $varstr = $class->parse_var($self,
+                    %var_args,
+                    var         => $value,
+                    context     => $token,
+                    compiler    => $class,
+                    expr        => $expr,
+                );
+                $code .= <<"EOM";
 ${indent}local \$lexi_$var = $varstr;
 EOM
+            }
         }
         # --------- TMPL_LOOP TMPL_WHILE TMPL_EACH
         elsif ( ($tname eq T_LOOP || $tname eq T_WHILE || $tname eq T_EACH) ) {

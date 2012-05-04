@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1154 2012-04-22 17:21:53Z tinita $
+# $Id: Compiled.pm 1157 2012-05-04 15:17:31Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.96_002";
+our $VERSION = "0.96_003";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -1577,7 +1577,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.96_002"
+$VERSION = "0.96_003"
 
 =cut
 
@@ -1808,8 +1808,8 @@ You can set global chomp options in the constructor. These work like in
 Template-Toolkit:
 
     my $htc = HTML::Template::Compiled->new(
-        PRE_CHOMP  => 0, # 0, 1, 2, 3, default 0
-        POST_CHOMP => 1, # 0, 1, 2, 3, default 0
+        pre_chomp  => 0, # 0, 1, 2, 3, default 0
+        post_chomp => 1, # 0, 1, 2, 3, default 0
     );
 
 Meaning of the values:
@@ -2362,13 +2362,16 @@ Since 0.96_002
 
 Sets a local variable to the value given in C<value> or C<expr>
 
-    <tmpl_set foo value=23>
-    <tmpl_set name=bar value=23>
+    <tmpl_set foo expr=23>
+    <tmpl_set name=bar expr=23>
     <tmpl_set boo value=var.boo>
     <tmpl_set oof expr="21*2">
     <tmpl_var foo>
     <tmpl_var bar>
     ...
+
+C<value=..> behaves like a variable name from the parameter stash.
+The variable name to set must match /[0-9a-z_]+/i
 
 Note that you cannot use those vars by default in includes.
 If you set a var with SET_VAR and want to use it in an include, use must
@@ -2766,9 +2769,10 @@ with expressions you can give it parameters:
     <%= expr="object.create_link('navi')" %>
 
 Inside function and method calls, hash keys you also can use template
-vars (hash keys sind 0.96_001).
+vars (array indices and hash keys since 0.96_003).
 
     <%= expr=".path.to.hash{var}" %>
+    <%= expr=".path.to.hash{.another.var[123]}{'literal key'}" %>
 
 It is only minimally tested yet, so use with care and please report any
 bugs you find.

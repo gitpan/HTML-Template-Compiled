@@ -1,9 +1,9 @@
-# $Id: 26_expr.t 1148 2012-04-21 20:56:11Z tinita $
+# $Id: 26_expr.t 1157 2012-05-04 15:17:31Z tinita $
 use warnings;
 use strict;
 use lib 't';
 
-use Test::More tests => 20;
+use Test::More tests => 28;
 eval { require Parse::RecDescent; };
 my $prd = $@ ? 0 : 1;
 use_ok('HTML::Template::Compiled');
@@ -40,16 +40,30 @@ EOM
         [ q#[%each expr="list_object.each" context="list" %]k:[%= __key__ %] [%/each %]#, 'k:a k:b '],
         [ q#[%= expr=".foo{.name}" %]#, '3'],
         [ q#[%= expr=".foo{'count'}" %]#, '3'],
+        [ q#[%= expr=".columns[.numbers[1]]" %]#, 'founded'],
+        [ q#[%= expr=".a{'b'}{'c'}" %]#, 'd'],
+        [ q#[%= expr=".bands[.numbers[1]]{'name'}" %]#, 'deine lakaien'],
         [ q#[%with name %][%= expr=".foo{_}" %][%/with %]#, '3'],
         [ q#[%= expr="'foo'.(2+5)" %]#, 'foo7'],
         [ q#[%= expr=".foo{('count'.2)}" %]#, '22'],
         [ q#[%= expr="3 * 4 / 2 + 7" %]#, '13'],
         [ q#[%= expr="('2' . '5' ) / 5" %]#, '5'],
         [ q#[%= expr="('2' . '4' ) % 20" %]#, '4'],
+        [ q#[%loop list %][%= expr=".foo{_}" %] [%/loop %]#, 'foo a foo b foo c foo d '],
+        [ q#[%loop list alias=item %][%= expr=".foo{item}" %] [%/loop %]#, 'foo a foo b foo c foo d '],
+        [ q#[%loop bands alias=band %][%= expr="band{'name'}" %] [%/loop %]#, 'bauhaus deine lakaien '],
+        [ q#[%loop bands %][%= expr="_{'name'}" %] [%/loop %]#, 'bauhaus deine lakaien '],
+        [ q#[%loop bands alias=band %]
+[%= __counter__ %]. 
+[%loop .columns alias=column %]
+[%= column %]: [%= expr="band{column}" %] 
+[%/loop %]
+[%/loop %]#, '1. name: bauhaus founded: 1978 2. name: deine lakaien founded: 1985 '],
     );
     for my $i (0 .. $#tests) {
         my $test = $tests[$i];
         my ($tmpl, $exp) = @$test;
+        $tmpl =~ tr/\r\n//d;
         my $htc = HTML::Template::Compiled->new(
             scalarref => \$tmpl,
             use_expressions => 1,
@@ -64,15 +78,27 @@ EOM
                 count1 => '21',
                 count2 => '22',
                 count3 => '23',
+                a => 'foo a',
+                b => 'foo b',
+                c => 'foo c',
+                d => 'foo d',
             },
             object => bless ({ foo => 42 }, 'HTC::DUMMY'),
             string => 'ABC',
             list_object => $list_object,
             name => 'count',
+            list => [qw/ a b c d /],
+            bands => [
+                { name => 'bauhaus', founded => 1978 },
+                { name => 'deine lakaien', founded => 1985 },
+            ],
+            columns => [qw/ name founded /],
+            numbers => [0,1],
+            a => { b => { c => 'd' } },
         );
         my $out = $htc->output;
         #print "out: $out\n";
-        cmp_ok($out, 'eq', $exp, "Expressions $i");
+        cmp_ok($out, 'eq', $exp, "Expressions $i $tmpl");
     }
 }
 
