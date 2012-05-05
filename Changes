@@ -1,5 +1,10 @@
 Revision history for Perl extension HTML::Template::Compiled.
 
+0.96_004 Sat May  5 15:56:27 CEST 2012
+- Minor bugfix USE_VARS, module version numbers
+- Bugfix caching: under certain circumstances some template includes
+  were not added to memory cache and reloaded from file cache very time
+
 0.96_003 Fri May  4 17:09:19 CEST 2012
 - Improved Feature: expressions like .path.to.hash{var}
 

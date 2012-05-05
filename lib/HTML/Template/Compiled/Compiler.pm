@@ -1,5 +1,5 @@
 package HTML::Template::Compiled::Compiler;
-# $Id: Compiler.pm 1157 2012-05-04 15:17:31Z tinita $
+# $Id: Compiler.pm 1161 2012-05-05 14:00:22Z tinita $
 use strict;
 use warnings;
 use Data::Dumper;
@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.17';
+our $VERSION = '0.18';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -540,7 +540,25 @@ ${indent}    if (defined \$\$C) {
 EOM
         }
 
-        elsif ( $tname eq T_USE_VARS or $tname eq T_SET_VAR ) {
+        if ( $tname eq T_USE_VARS ) {
+            my $vars     = $attr->{NAME};
+            my @l = grep length, split /\s*,\s*/, $vars;
+            for my $var (@l) {
+                if ($var =~ tr/a-zA-Z0-9_//c) {
+                    $self->get_parser->_error_wrong_tag_syntax(
+                        {
+                            fname => $token->get_file,
+                            line  => $token->get_line,
+                            token => "",
+                        },
+                        $var,
+                        'invalid SET_VAR/USE_VARS var name',
+                    );
+                }
+            }
+            push @lexicals, @l;
+        }
+        elsif ( $tname eq T_SET_VAR ) {
             my $var     = $attr->{NAME};
             if ($var =~ tr/a-zA-Z0-9_//c) {
                 $self->get_parser->_error_wrong_tag_syntax(
@@ -553,43 +571,37 @@ EOM
                     'invalid SET_VAR/USE_VARS var name',
                 );
             }
-            if ( $tname eq T_USE_VARS ) {
-                my @l = split /,/, $var;
-                push @lexicals, @l;
+            my $value;
+            my $expr;
+            if (exists $attr->{VALUE}) {
+                $value = $attr->{VALUE};
             }
-            elsif ( $tname eq T_SET_VAR ) {
-                my $value;
-                my $expr;
-                if (exists $attr->{VALUE}) {
-                    $value = $attr->{VALUE};
-                }
-                elsif (exists $attr->{EXPR}) {
-                    $expr = $attr->{EXPR};
-                }
-                else {
-                    $self->get_parser->_error_wrong_tag_syntax(
-                        {
-                            fname => $token->get_file,
-                            line  => $token->get_line,
-                            token => "",
-                        },
-                        $var,
-                        'missing VALUE or EXPR',
-                    );
-                }
-
-                unshift @lexicals, $var;
-                my $varstr = $class->parse_var($self,
-                    %var_args,
-                    var         => $value,
-                    context     => $token,
-                    compiler    => $class,
-                    expr        => $expr,
+            elsif (exists $attr->{EXPR}) {
+                $expr = $attr->{EXPR};
+            }
+            else {
+                $self->get_parser->_error_wrong_tag_syntax(
+                    {
+                        fname => $token->get_file,
+                        line  => $token->get_line,
+                        token => "",
+                    },
+                    $var,
+                    'missing VALUE or EXPR',
                 );
-                $code .= <<"EOM";
+            }
+
+            unshift @lexicals, $var;
+            my $varstr = $class->parse_var($self,
+                %var_args,
+                var         => $value,
+                context     => $token,
+                compiler    => $class,
+                expr        => $expr,
+            );
+            $code .= <<"EOM";
 ${indent}local \$lexi_$var = $varstr;
 EOM
-            }
         }
         # --------- TMPL_LOOP TMPL_WHILE TMPL_EACH
         elsif ( ($tname eq T_LOOP || $tname eq T_WHILE || $tname eq T_EACH) ) {
@@ -849,13 +861,15 @@ EOM
                     $info_stack->[-1]->{lc $filename}->{type} = $tname;
                 }
                 $varstr   = $self->quote_file($filename);
+                my $cwd;
 				unless ($self->get_scalar) {
 					$dir      = dirname($fname);
 					if ($self->get_search_path) {
 						if ( defined $dir and !grep { $dir eq $_ } @$path ) {
+                            $cwd = $dir;
 							# add the current directory to top of paths
 							# create new $path, don't alter original ref
-							$path = [ $dir, @$path ] ;
+#							$path = [ $dir, @$path ] ;
 						}
 					}
 					else {
@@ -868,7 +882,7 @@ EOM
                     #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\$self->get_file], ['file']);
                     #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\$path], ['path']);
                     #$fullpath = $self->createFilename( [@$path, \$self->get_file], $filename );
-                    $fullpath = $self->createFilename( [@$path], $filename );
+                    $fullpath = $self->createFilename( [@$path], $filename, $cwd );
                     my $recursed = ++$HTML::Template::Compiled::COMPILE_STACK{$fullpath};
                     #warn __PACKAGE__." fullpath $fullpath ($recursed)\n";
                     if ($recursed <= 1) {

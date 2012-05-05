@@ -1,8 +1,8 @@
 package HTML::Template::Compiled;
-# $Id: Compiled.pm 1157 2012-05-04 15:17:31Z tinita $
+# $Id: Compiled.pm 1161 2012-05-05 14:00:22Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.96_003";
+our $VERSION = "0.96_004";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -354,6 +354,7 @@ sub from_cache {
             $t->set_plugins($plug) if @$plug;
             return $t;
         }
+#        warn __PACKAGE__.':'.__LINE__.": not in mem cache: $fname\n";
     }
     D && $self->log( "from_cache() 2 filename=" . $self->get_filename );
 
@@ -766,7 +767,7 @@ sub include_file {
 }
 
 sub createFilename {
-    my ( $self, $path, $filename ) = @_;
+    my ( $self, $path, $filename, $cwd ) = @_;
     D && $self->log("createFilename($path,$filename)");
     D && $self->stack(1);
     if ($path) {
@@ -782,7 +783,9 @@ sub createFilename {
     else {
         D && $self->log( "file: " . File::Spec->catfile( $path, $filename ) );
         if ($path && @$path) {
-            for ( @$path ) {
+            my @search = @$path;
+            push @search, $cwd if defined $cwd;
+            for ( @search ) {
                 #if (ref $_) {
                 #    my $foo = basename $$_;
                 #    my ($dir, $f) = (dirname($$_), basename($$_));
@@ -1577,7 +1580,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.96_003"
+$VERSION = "0.96_004"
 
 =cut
 
@@ -2753,13 +2756,16 @@ tt-style and your own C<{{}} > style, then say:
 
 =item use_expressions (since 0.91_003)
 
-Set to 1 if you want to use expressions. They work more or less like
-in L<HTML::Template::Expr> - I took the parsing code from it and
+Set to 1 if you want to use expressions. The basic expressions work more or
+less like in L<HTML::Template::Expr> - I took the parsing code from it and
 used it with some minor changes - thanks to Sam Tregar.
 
     <%if expr="some.var > 3" %>It's grater than 3<%/if %>
 
-Additionally you can use object methods with parameters. While a
+But with expressions you can also use more complex navigation through the
+template stash:
+
+You can use object methods with parameters. While a
 normal method call can only be called without parameters, like
 
     <%= object.name %>
@@ -2776,6 +2782,36 @@ vars (array indices and hash keys since 0.96_003).
 
 It is only minimally tested yet, so use with care and please report any
 bugs you find.
+
+A useful example: Output a number of items with their prices formatted.
+
+    my $nf = Number::Format->new(...);
+    my $htc = HTML::Template::Compiled->new(
+        filename => 'items.html',
+        use_expressions => 1,
+    );
+    $htc->param(
+        items => [
+            { size =>  50 * 1024 * 1024 * 1024, price => 49.95 },
+            { size => 250 * 1024 * 1024 * 1024, price => 110.99 },
+        ],
+        nf => $nf,
+    );
+
+items.html:
+
+    <%loop .items %>
+    Size: <%= expr=".nf.format_bytes(size)" %>
+    Price: <%= expr=".nf.format_price(price)" %>
+    <%/loop %>
+
+Output:
+    Size: 50G
+    Price: 49,95 EUR 
+    
+    Size: 250G
+    Price: 110,99 EUR 
+
 
 =item formatter
 

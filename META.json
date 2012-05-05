@@ -36,7 +36,7 @@
    "provides" : {
       "HTML::Template::Compiled" : {
          "file" : "lib/HTML/Template/Compiled.pm",
-         "version" : "0.96_003"
+         "version" : "0.96_004"
       },
       "HTML::Template::Compiled::Classic" : {
          "file" : "lib/HTML/Template/Compiled/Classic.pm",
@@ -44,7 +44,7 @@
       },
       "HTML::Template::Compiled::Compiler" : {
          "file" : "lib/HTML/Template/Compiled/Compiler.pm",
-         "version" : "0.17"
+         "version" : "0.18"
       },
       "HTML::Template::Compiled::Compiler::Classic" : {
          "file" : "lib/HTML/Template/Compiled/Compiler/Classic.pm",
@@ -56,7 +56,7 @@
       },
       "HTML::Template::Compiled::Expr" : {
          "file" : "lib/HTML/Template/Compiled/Expr.pm",
-         "version" : "0.04"
+         "version" : "0.05"
       },
       "HTML::Template::Compiled::Expression" : {
          "file" : "lib/HTML/Template/Compiled/Expression.pm",
@@ -165,5 +165,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.96_003"
+   "version" : "0.96_004"
 }

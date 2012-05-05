@@ -3,7 +3,7 @@ NAME
     to Perl code
 
 VERSION
-    $VERSION = "0.96_003"
+    $VERSION = "0.96_004"
 
 SYNOPSIS
       use HTML::Template::Compiled;
@@ -1038,14 +1038,17 @@ DESCRIPTION
             );
 
     use_expressions (since 0.91_003)
-        Set to 1 if you want to use expressions. They work more or less like
-        in HTML::Template::Expr - I took the parsing code from it and used
-        it with some minor changes - thanks to Sam Tregar.
+        Set to 1 if you want to use expressions. The basic expressions work
+        more or less like in HTML::Template::Expr - I took the parsing code
+        from it and used it with some minor changes - thanks to Sam Tregar.
 
             <%if expr="some.var > 3" %>It's grater than 3<%/if %>
 
-        Additionally you can use object methods with parameters. While a
-        normal method call can only be called without parameters, like
+        But with expressions you can also use more complex navigation
+        through the template stash:
+
+        You can use object methods with parameters. While a normal method
+        call can only be called without parameters, like
 
             <%= object.name %>
 
@@ -1061,6 +1064,34 @@ DESCRIPTION
 
         It is only minimally tested yet, so use with care and please report
         any bugs you find.
+
+        A useful example: Output a number of items with their prices
+        formatted.
+
+            my $nf = Number::Format->new(...);
+            my $htc = HTML::Template::Compiled->new(
+                filename => 'items.html',
+                use_expressions => 1,
+            );
+            $htc->param(
+                items => [
+                    { size =>  50 * 1024 * 1024 * 1024, price => 49.95 },
+                    { size => 250 * 1024 * 1024 * 1024, price => 110.99 },
+                ],
+                nf => $nf,
+            );
+
+        items.html:
+
+            <%loop .items %>
+            Size: <%= expr=".nf.format_bytes(size)" %>
+            Price: <%= expr=".nf.format_price(price)" %>
+            <%/loop %>
+
+        Output: Size: 50G Price: 49,95 EUR
+
+            Size: 250G
+            Price: 110,99 EUR
 
     formatter
         Deprecated, see HTML::Template::Compiled::Formatter please.

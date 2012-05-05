@@ -6,7 +6,7 @@ use Carp qw(croak carp);
 use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled;
 use Parse::RecDescent;
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 HTML::Template::Compiled->register('HTML::Template::Compiled::Expr');
 
 my $default_validate = sub { exists $_[1]->{NAME} or exists $_[1]->{EXPR} };
@@ -143,12 +143,8 @@ var_deref     : var deref(s)  { [ 'VAR_DEREF', $item[1], $item[2] ] }
 deref         : deref_hash | deref_array
 
 deref_hash      : '{' hash_key '}' { [ 'DEREF_HASH', $item[2] ] }
-                | '{' hash_key '}' { [ 'DEREF_HASH', $item[2] ] }
-                | '{' hash_key '}' { [ 'DEREF_HASH', $item[2] ] }
 
 deref_array : '[' array_index ']' { [ 'DEREF_ARRAY', $item[2] ] }
-            | '[' array_index ']' { [ 'DEREF_ARRAY', $item[2] ] }
-            | '[' array_index ']' { [ 'DEREF_ARRAY', $item[2] ] }
 
 hash_key      : literal | paren | var
 
