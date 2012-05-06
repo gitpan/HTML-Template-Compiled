@@ -73,6 +73,7 @@ t/35_debug.t
 t/36_default.t
 t/37_with.t
 t/38_vars.t
+t/39_number_format.t
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html
