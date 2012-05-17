@@ -2,17 +2,21 @@ package HTML::Template::Compiled::Compiler::Classic;
 # $Id: Classic.pm 1128 2011-10-31 19:59:56Z tinita $
 use strict;
 use warnings;
-our $VERSION = "0.04";
+our $VERSION = "0.05";
 
 use base 'HTML::Template::Compiled::Compiler';
 
 sub parse_var {
     my ( $self, $t, %args ) = @_;
     my $context = $args{context};
-    # only allow '.', '/', '+', '-' and '_'
     if (!$t->validate_var($args{var})) {
         $t->get_parser->_error_wrong_tag_syntax(
-            $context->get_file, $context->get_line, "", $args{var}
+            {
+                fname => $context->get_file,
+                line  => $context->get_line,
+                token => "",
+            },
+            $args{var}
         );
     }
     my %loop_context = (
@@ -21,7 +25,9 @@ sub parse_var {
         __first__   => '$__ix__ == $[',
         __last__    => '$__ix__ == $__size__',
         __odd__     => '!($__ix__ & 1)',
+        __even__    => '($__ix__ & 1)',
         __inner__   => '$__ix__ != $[ && $__ix__ != $__size__',
+        __outer__   => '$__ix__ == $[ || $__ix__ == $__size__',
         __break__   => '$__break__',
         __filename__ => '$t->get_file',
         __filenameshort__ => '$t->get_filename',

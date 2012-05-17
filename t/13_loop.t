@@ -31,7 +31,9 @@ EOM
 	#print "out: $out\n";
 }
 my $text1 = <<'EOM';
-<tmpl_loop array>
+<tmpl_loop array>|
+<tmpl_if __outer__>(outer:<tmpl_var __outer__>)</tmpl_if>
+<tmpl_if __even__>(even:<tmpl_var __even__>)</tmpl_if>
 <tmpl_var __counter__>
 <tmpl_var _.x>
 </tmpl_loop>
@@ -43,18 +45,20 @@ for (0,1) {
         loop_context_vars => $_,
 	);
 	$htc->param(array => [
-        {x=>"a","__counter__"=>"A"},
-        {x=>"b","__counter__"=>"B"},
-        {x=>"c","__counter__"=>"C"},
+        {x=>"a","__counter__"=>"A","__outer__"=>"OUTER"},
+        {x=>"b","__counter__"=>"B","__even__"=>"EVEN"},
+        {x=>"c","__counter__"=>"C",},
+        {x=>"d","__counter__"=>"D",,"__even__"=>"EVEN"},
+        {x=>"e","__counter__"=>"E","__outer__"=>"OUTER"},
     ]);
 	my $out = $htc->output;
 	$out =~ s/\s+//g;
 	my $exp;
 	if ($_ == 1) {
-		$exp = "1a2b3c";
+		$exp = "|(outer:1)1a|(even:1)2b|3c|(even:1)4d|(outer:1)5e";
 	}
 	else {
-		$exp = "AaBbCc";
+		$exp = "|(outer:OUTER)Aa|(even:EVEN)Bb|Cc|(even:EVEN)Dd|(outer:OUTER)Ee";
 	}
 	#print "($out)($exp)\n";
 	cmp_ok($out, "eq", $exp, "loop context");

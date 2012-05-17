@@ -1,12 +1,12 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl HTML-Template-Compiled.t'
 # $Id: 01_HTML-Template-Compiled.t 1136 2011-11-21 19:35:19Z tinita $
-
+use strict;
+use warnings;
 use Test::More tests => 6;
 use Data::Dumper;
 local $Data::Dumper::Indent = 1; local $Data::Dumper::Sortkeys = 1;
 BEGIN { use_ok('HTML::Template::Compiled') };
-$HTML::Template::Compiled::NEW_CHECK = 2;
 use Fcntl qw(:seek);
 use File::Copy qw(copy);
 
@@ -61,6 +61,7 @@ my %args = (
     file_cache => 1,
     #cache => 0,
     #search_path_on_include => 1,
+    expire_time => 2,
 );
 sleep 2;
 @HTML::Template::Compiled::subclass::ISA = qw(HTML::Template::Compiled);

@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.18';
+our $VERSION = '0.19';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -150,7 +150,9 @@ my %loop_context = (
     __first__   => '$__ix__ == $[',
     __last__    => '$__ix__ == $__size__',
     __odd__     => '!($__ix__ & 1)',
+    __even__    => '($__ix__ & 1)',
     __inner__   => '$__ix__ != $[ && $__ix__ != $__size__',
+    __outer__   => '$__ix__ == $[ || $__ix__ == $__size__',
     __key__     => '$__key__',
     __value__   => '$__value__',
     __break__   => '$__break__',
@@ -178,7 +180,6 @@ sub parse_var {
     }
 
 
-    # only allow '.', '/', '+', '-' and '_'
     if (!$t->validate_var($args{var})) {
         $t->get_parser->_error_wrong_tag_syntax(
             {
@@ -919,7 +920,7 @@ ${indent}  if (defined (my \$file = $varstr)) \{
 ${indent}    my \$include = \$t->get_includes()->{$fullpath};
 ${indent}    my \$new = \$include ? \$include->[2] : undef;
 #print STDERR "+++++++got new? \$new\\n";
-${indent}    if (!\$new || HTML::Template::Compiled::needs_new_check($cache||'',\$file)) {
+${indent}    if (!\$new || HTML::Template::Compiled::needs_new_check($cache||'',\$file,\$t->get_expire_time)) {
 ${indent}      \$new = \$t->new_from_object($path,\$file,$fullpath,$cache);
 ${indent}    }
 #print STDERR "got new? \$new\\n";

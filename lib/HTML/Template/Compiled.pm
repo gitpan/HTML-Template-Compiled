@@ -2,7 +2,7 @@ package HTML::Template::Compiled;
 # $Id: Compiled.pm 1161 2012-05-05 14:00:22Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.97";
+our $VERSION = "0.97_001";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -59,7 +59,7 @@ BEGIN {
           debug debug_file objects perl out_fh default_escape
           filter formatter
           globalstack use_query parse_tree parser compiler includes
-          plugins open_mode chomp
+          plugins open_mode chomp expire_time strict
         )
           #use_expressions
     );
@@ -81,6 +81,7 @@ sub HTC { __PACKAGE__->new(@_) }
 sub new {
     my ( $class, %args ) = @_;
     D && $class->log("new()");
+    %args = $class->init_args(%args);
     # handle the "type", "source" parameter format (does anyone use it?)
     if ( exists $args{type} ) {
         exists $args{source} or $class->_error_no_source();
@@ -151,6 +152,7 @@ sub _error_empty_filename {
 
 sub new_from_perl {
     my ($class, %args) = @_;
+    %args = $class->init_args(%args);
     my $self = bless [], $class;
     D && $self->log("new(perl) filename: $args{filename}");
 
@@ -175,6 +177,7 @@ sub new_from_perl {
 
 sub new_file {
     my ($class, $filename, %args) = @_;
+    %args = $class->init_args(%args);
     my $self = bless [], $class;
     $self->_check_deprecated_args(%args);
     $args{path} = $self->build_path($args{path});
@@ -205,6 +208,7 @@ sub new_file {
 
 sub new_filehandle {
     my ($class, $filehandle, %args) = @_;
+    %args = $class->init_args(%args);
     my $self = bless [], $class;
     $self->_check_deprecated_args(%args);
     if (exists $args{scalarref}
@@ -231,6 +235,7 @@ sub new_filehandle {
 
 sub new_array_ref {
     my ($class, $arrayref, %args) = @_;
+    %args = $class->init_args(%args);
     if (exists $args{scalarref}
         || exists $args{filehandle} || exists $args{filename}) {
         $class->_error_template_sources;
@@ -242,6 +247,7 @@ sub new_array_ref {
 
 sub new_scalar_ref {
     my ($class, $scalarref, %args) = @_;
+    %args = $class->init_args(%args);
     my $self = bless [], $class;
     $self->_check_deprecated_args(%args);
     if (exists $args{arrayref}
@@ -283,7 +289,7 @@ sub init_includes {
         # TODO check $cache
         $cache .= '-' . $self->get_md5_path;
         #warn __PACKAGE__.':'.__LINE__.": init_includes() $filename\n";
-        if (not $htc or HTML::Template::Compiled::needs_new_check($cache||'',$filename)
+        if (not $htc or HTML::Template::Compiled::needs_new_check($cache||'',$filename, $self->get_expire_time)
         ) {
             $htc = $self->new_from_object($path,$filename,$fullpath,$cache);
         }
@@ -349,7 +355,7 @@ sub from_cache {
         $dir = '' unless defined $dir;
         $dir .= '-' . $self->get_md5_path;
         my $fname  = $self->get_filename;
-        $t = $self->from_mem_cache($dir,$fname);
+        $t = $self->from_mem_cache($dir,$fname, $args);
         if ($t) {
             $t->set_plugins($plug) if @$plug;
             return $t;
@@ -383,19 +389,19 @@ sub from_cache {
     my $times;
 
     sub needs_new_check {
-        my ($dir, $fname) = @_;
+        my ($dir, $fname, $expire_time) = @_;
         my $times  = $times->{$dir}->{$fname} or return 1;
         my $now = time;
-        return 0 if $now - $times->{checked} < $NEW_CHECK;
+        return 0 if $now - $times->{checked} < $expire_time;
         return 1;
     }
 
     sub from_mem_cache {
-        my ($self, $dir, $fname) = @_;
+        my ($self, $dir, $fname, $args) = @_;
         my $cached = $cache->{$dir}->{$fname};
         my $times  = $times->{$dir}->{$fname};
         D && $self->log("\$cached=$cached \$times=$times \$fname=$fname\n");
-        if ( $cached && $self->uptodate($times) ) {
+        if ( $cached && $self->uptodate($times, $args) ) {
             return $cached->clone;
         }
         D && $self->log("no or old memcache");
@@ -463,8 +469,10 @@ sub from_cache {
     }
 
     sub uptodate {
-        my ( $self, $cached_times ) = @_;
+        my ( $self, $cached_times, $args ) = @_;
         return 1 if $self->get_scalar;
+        my $expire_time = $self->get_expire_time;
+        $expire_time = $args->{expire_time} unless defined $expire_time;
 #         unless ($cached_times) {
 #             my $dir = $self->get_cache_dir;
 #             $dir = '' unless defined $dir;
@@ -474,7 +482,7 @@ sub from_cache {
 #             return unless $cached;
 #         }
         my $now = time;
-        if ( $now - $cached_times->{checked} < $NEW_CHECK ) {
+        if ( $now - $cached_times->{checked} < $expire_time ) {
             return 1;
         }
         else {
@@ -861,11 +869,9 @@ sub init_cache {
     }
 }
 
-sub init {
-    my ( $self, %args ) = @_;
+sub init_args {
+    my ($class, %args) = @_;
     my %defaults = (
-
-        # defaults
         search_path_on_include => $SEARCHPATH,
         loop_context_vars      => 0,
         case_sensitive         => $CASE_SENSITIVE_DEFAULT,
@@ -883,46 +889,56 @@ sub init {
         no_includes            => 0,
         pre_chomp              => 0,
         post_chomp             => 0,
+        expire_time            => $NEW_CHECK,
+        strict                 => 1,
         %args,
     );
+    return %defaults;
+}
+
+sub init {
+    my ( $self, %args ) = @_;
+    $self->set_expire_time($args{expire_time});
     $self->set_loop_context(1) if $args{loop_context_vars};
-    $self->set_case_sensitive( $defaults{case_sensitive} );
-    $self->set_default_escape( $defaults{default_escape} );
-    $self->set_default_path( $defaults{default_path} );
-    $self->set_use_query( $defaults{use_query} );
+    $self->set_case_sensitive( $args{case_sensitive} );
+    $self->set_default_escape( $args{default_escape} );
+    $self->set_default_path( $args{default_path} );
+    $self->set_use_query( $args{use_query} );
     $self->set_chomp([$args{pre_chomp}, $args{post_chomp}]);
-    #$self->set_use_expressions( $defaults{use_expressions} );
-    if ($defaults{use_expressions}) {
+    $self->set_strict( $args{strict} );
+    #$self->set_use_expressions( $args{use_expressions} );
+    if ($args{use_expressions}) {
         require HTML::Template::Compiled::Expr;
     }
-    if ($defaults{open_mode}) {
-        $defaults{open_mode} =~ s/^[<>]//; # <:utf8
+    if ($args{open_mode}) {
+        $args{open_mode} =~ s/^[<>]//; # <:utf8
     }
-    $self->set_open_mode( $defaults{open_mode} );
-    $self->set_search_path( $defaults{search_path_on_include} );
+    $self->set_open_mode( $args{open_mode} );
+    $self->set_search_path( $args{search_path_on_include} );
     $self->set_includes({});
     if ( $args{filter} ) {
         require HTML::Template::Compiled::Filter;
         $self->set_filter(
             HTML::Template::Compiled::Filter->new( $args{filter} ) );
     }
-    $self->set_debug( $defaults{debug} );
-    $self->set_debug_file( $defaults{debug_file} );
-    $self->set_objects( $defaults{objects} );
-    if ($defaults{objects} and $defaults{objects} eq 'nostrict') {
+    $self->set_debug( $args{debug} );
+    $self->set_debug_file( $args{debug_file} );
+    $self->set_objects( $args{objects} );
+    if ($args{objects} and $args{objects} eq 'nostrict') {
         require Scalar::Util;
     }
-    $self->set_out_fh( $defaults{out_fh} );
-    $self->set_global_vars( $defaults{global_vars} );
+    $self->set_out_fh( $args{out_fh} );
+    $self->set_global_vars( $args{global_vars} );
     my $tagstyle = $args{tagstyle};
     my $parser;
     if (ref $tagstyle eq 'ARRAY') {
         # user specified named styles or regexes
         $parser = $self->parser_class->new(
-            tagstyle => $tagstyle,
-            use_expressions => $defaults{use_expressions},
+            tagstyle        => $tagstyle,
+            use_expressions => $args{use_expressions},
+            strict          => $args{strict},
         );
-        $parser->set_perl($defaults{use_perl});
+        $parser->set_perl($args{use_perl});
     }
     $args{parser} = ${$args{parser}} if ref $args{parser} eq 'REF';
     if (UNIVERSAL::isa($args{parser}, 'HTML::Template::Compiled::Parser')) {
@@ -930,25 +946,26 @@ sub init {
     }
     unless ($parser) {
         $parser ||= $self->parser_class->default();
-        $parser->set_perl($defaults{use_perl});
-        $parser->set_expressions($defaults{use_expressions});
+        $parser->set_perl($args{use_perl});
+        $parser->set_expressions($args{use_expressions});
+        $parser->set_strict($args{strict});
     }
     $parser->set_chomp([$args{pre_chomp}, $args{post_chomp}]);
-    if ($defaults{use_perl}) {
+    if ($args{use_perl}) {
         $parser->add_tagnames({
             HTML::Template::Compiled::Token::OPENING_TAG() => {
                 PERL => [sub { 1 }],
             }
         });
     }
-    if ($defaults{no_includes}) {
+    if ($args{no_includes}) {
         $parser->remove_tags(qw/ INCLUDE INCLUDE_VAR INCLUDE_STRING /);
     }
     $self->set_parser($parser);
     my $compiler = $self->compiler_class->new;
     $self->set_compiler($compiler);
-    if ($defaults{plugin}) {
-        my $plugins = ref $defaults{plugin} eq 'ARRAY' ? $defaults{plugin} : [$defaults{plugin}];
+    if ($args{plugin}) {
+        my $plugins = ref $args{plugin} eq 'ARRAY' ? $args{plugin} : [$args{plugin}];
         $self->init_plugins($plugins);
         $self->set_plugins($plugins);
     }
@@ -1115,6 +1132,7 @@ sub try_global {
 # end ugly code, phooey
 
 # returns if the var is valid
+# only allow '.', '/', '+', '-' and '_'
 # fix 2007-07-23: HTML::Template allows every character
 # although the documentation says it doesn't.
 sub validate_var {
@@ -1580,7 +1598,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.97"
+$VERSION = "0.97_001"
 
 =cut
 
@@ -1717,7 +1735,7 @@ current information.
 
 =item DEFAULT=...
 
-=item C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>
+=item C<__first__>, C<__last__>, C<__inner__>, C<__outer__>, C<__odd__>, C<__counter__>, C<__even__>
 
 =item <!-- TMPL_VAR NAME=PARAM1 -->
 
@@ -1888,31 +1906,86 @@ See L<"CHOMP">
 
 =back
 
-=head2 MISSING FEATURES
+=head2 MISSING AND DIFFERENT FEATURES
 
-There are some features of H::T that are missing.
+There are some features of H::T that are missing or behaving different.
 I'll try to list them here.
+
+=head3 MISSING FEATURES
 
 =over 4
 
-=item C<die_on_bad_params>
+=item die_on_bad_params
 
 I don't think I'll implement that.
 
+=item force_untaint
+
+Not planned at the moment
+
+=item vanguard_compatibility_mode
+
+Not planned.
+
+=item shared_cache, double_cache
+
+Not planned at the moment
+
+=item blind_cache
+
+Not sure if I should implement. In HTC you have the possibility to
+set the expire time of the templates (after that time in memory the
+template file is rechecked if it has changed), so setting a very high
+value for expire_time would have the same effect as blind_cache.
+See L<"CACHING"> C<expire_time>
+
+=item double_file_cache
+
+If I understand correctly, in HT, this enables memory and file cache at
+the same time. In HTC, this is not needed. If you use file_cache and cache,
+both are used.
+
+=item file_cache_dir_mode
+
+Not planned. The cache dir must exist, and subdirectories are
+not created at the moment.
+
+=item cache_lazy_vars, cache_lazy_loops
+
+Not planned at the moment (This would be for HTML::Template::Compiled::Classic,
+since it implements code refs).
+
+=item utf8
+
+Might be added in the future, HTC already has C<open_mode>
+
+=item various debug options
+
+Might be implemented in the future
+
+=item associate
+
+Not planned.
+
+=item max_includes
+
+Not planned
+
+=item die_on_missing_include
+
+Maybe
+
 =back
 
-=head2 COMPATIBILITY
-
-=head3 Same behaviour as HTML::Template
-
-At the moment there are four defaults that differ from L<HTML::Template>:
+=head3 DIFFERENT FEATURES
 
 =over 4
 
 =item case_sensitive
 
-default is 1 (on). Set it via
-    HTML::Template::Compiled->CaseSensitive(0);
+default is 1 (on).
+
+Deactivate by passing option expire_time 0.
 
 Note (again): this will slow down templating a lot (50%).
 
@@ -1929,7 +2002,6 @@ are converted to lowercase, and the following tags are the same:
     <tmpl_var Foo> prints the value of hash key 'foo'
     <tmpl_var fOO> prints the value of hash key 'foo'
 
-
 =item subref variables
 
 As of version 0.69, subref variables are not supported any more with
@@ -1939,15 +2011,22 @@ of HTC.
 
 =item search_path_on_include
 
-default is now 0, like in HTML::Template. Set it to 1 by
-    HTML::Template::Compiled->SearchPathOnInclude(1);
+In HTML::Template, if you have a file a/b/c/d/template.html and in
+that template you do an include of include.html, and include.html
+is in /a/b/include.html, HTML::Template will find it. As this
+wasn't so clear to me when reading the docs, I implemented
+this differently. You'd either have to include ../../include.html,
+or you should set search_path_on_include to 1 and include a/b/include.html.
 
-=item use_query
+If you really need this feature, write me. I'm still thinking of how
+I would implement this, and I don't like it much, because it
+seems to me like a global_vars for filenames, and I don't like
+global_vars =)
 
-default is 0 (off). Set it via
-    HTML::Template::Compiled->UseQuery(1);
 
 =item open_mode
+
+In HTC you should leave out the C<<> at the beginning.
 
 If you want to have your templates read in utf-8, use
 
@@ -1955,23 +2034,10 @@ If you want to have your templates read in utf-8, use
 
 as an option.
 
-=back
+=item use_query
 
-Note: the following is deprecated:
-
-    To be compatible in all of the above options all use:
- 
-      use HTML::Template::Compiled compatible => 1;
- 
-    If you don't care about these options you should use
- 
-      use HTML::Template::Compiled speed => 1;
-
- which is the default but depending on user wishes that might change.
-
-=head3 Different behaviour from HTML::Template
-
-=over 4
+default is 0 (off). Set it via the option
+C<use_query>
 
 =item Arrayrefs
 
@@ -1994,21 +2060,23 @@ As of L<HTML::Template::Compiled> 0.85 you can use this syntax:
 
 In L<HTML::Template::Compiled::Classic> 0.04 it works as in HTML::Template.
 
-=item Searching the path
-
-In HTML::Template, if you have a file a/b/c/d/template.html and in
-that template you do an include of include.html, and include.html
-is in /a/b/include.html, HTML::Template will find it. As this
-wasn't so clear to me when reading the docs, I implemented
-this differently. You'd either have to include ../../include.html,
-or you should set search_path_on_include to 1 and include a/b/include.html.
-
-If you really need this feature, write me. I'm still thinking of how
-I would implement this, and I don't like it much, because it
-seems to me like a global_vars for filenames, and I don't like
-global_vars =)
-
 =back
+
+
+
+
+
+Note: the following is deprecated:
+
+    To be compatible in all of the above options all use:
+ 
+      use HTML::Template::Compiled compatible => 1;
+ 
+    If you don't care about these options you should use
+ 
+      use HTML::Template::Compiled speed => 1;
+
+ which is the default but depending on user wishes that might change.
 
 =head2 ESCAPING
 
@@ -2496,6 +2564,10 @@ in future versions.
 Is 1 by default. If set to 0, no memory cacheing is done. Only recommendable if
 you have a dynamic template content (with scalarref, arrayre for example).
 
+=item expire_time
+
+Recheck template files on disk after C<expire_time> seconds. See L<"CACHING">
+
 =item filename
 
 Template to parse
@@ -2526,7 +2598,7 @@ templates created like this.
 =item loop_context_vars (fixed)
 
 Vars like C<__first__>, C<__last__>, C<__inner__>, C<__odd__>, C<__counter__>,
-C<__index__>
+C<__index__>, C<__outer__>, C<__even__>
 
 The variable C<__index__> works just like C<__counter__>, only that it starts
 at 0 instead of 1.
@@ -2557,6 +2629,14 @@ browse through the stack.
 
 Now everything will be escaped for HTML unless you explicitly specify C<ESCAPE=0> (no escaping)
 or C<ESCAPE=URL>.
+
+=item strict
+
+Default: 1
+
+If set to 0 unknown tags will be ignored and output verbatim:
+
+    <TMPL_FOOBAR anything ... <TMPL_VAR valid>
 
 =item no_includes (since 0.92)
 
@@ -2972,14 +3052,25 @@ perl files, and a call to the constructor like above won't parse
 the template, but just use the loaded code. If your template
 file has changed, though, then it will be parsed again.
 
-You can set the expire time of a template by
-  HTML::Template::Compiled->ExpireTime($seconds);
-(C<$HTML::Template::Compiled::NEW_CHECK> is deprecated).
-So
-  HTML::Template::Compiled->ExpireTime(60 * 10);
+You can set the expire time of a template by passing the option
+
+    expire_time => $seconds
+
+Note that
+
+    HTML::Template::Compiled->ExpireTime($seconds);
+    C<$HTML::Template::Compiled::NEW_CHECK>
+
+are deprecated since they change a global variable which is then
+visible in the whole process, so in persistent environments other apps
+might be affected.
+
+So an expire time of 600 seconds (default)
 will check after 10 minutes if the tmpl file was modified. Set it to a
 very high value will then ignore any changes, until you delete the
 generated code.
+For development you should set it to 0, for a pre-production server
+you can set it to 60 seconds, for example. It can make quite a difference.
 
 =head1 PLUGINS
 
