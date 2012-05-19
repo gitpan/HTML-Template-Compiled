@@ -2,7 +2,7 @@ package HTML::Template::Compiled;
 # $Id: Compiled.pm 1161 2012-05-05 14:00:22Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.97_001";
+our $VERSION = "0.97_002";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -578,16 +578,6 @@ sub add_file_cache {
                 mtime => $times{mtime},
                 checked => $times{checked},
             },
-        };
-        # TODO Storable cannot store qr//
-        # but as we don't need those serialized anyway
-        # we let Storable just store a dummy entry
-        local $Storable::forgive_me = 1;
-        local $SIG{__WARN__} = sub {
-            my ($w) = @_;
-            unless ($w =~ m/Can't store item REGEXP/) {
-                warn $w;
-            }
         };
         Storable::store($to_cache, "$cachefile.storable");
     }
@@ -1225,6 +1215,8 @@ sub prepare_for_cache {
         my ($path, $filename, $htc) = @{ $includes->{$fullpath} };
         $includes->{$fullpath} = [$path, $filename];
     }
+    $self->set_parser(undef);
+    $self->set_compiler(undef);
 }
 
 sub preload {
@@ -1598,7 +1590,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.97_001"
+$VERSION = "0.97_002"
 
 =cut
 
@@ -2011,18 +2003,19 @@ of HTC.
 
 =item search_path_on_include
 
-In HTML::Template, if you have a file a/b/c/d/template.html and in
-that template you do an include of include.html, and include.html
-is in /a/b/include.html, HTML::Template will find it. As this
-wasn't so clear to me when reading the docs, I implemented
-this differently. You'd either have to include ../../include.html,
-or you should set search_path_on_include to 1 and include a/b/include.html.
+Default: 0
 
-If you really need this feature, write me. I'm still thinking of how
-I would implement this, and I don't like it much, because it
-seems to me like a global_vars for filenames, and I don't like
-global_vars =)
+In the HTML::Template documentation it says, if search_path_on_include
+is set to 1, the paths of the path option are searched, while the default
+behaviour is to look "only" in the current template directory.
 
+It's not clear if it still searches in the current directory if set
+to 1. I found out that it is not, so you cannot have both.
+
+In HTML::Template::Compiled, search_path_on_include can have three values:
+    0: search current template directory
+    1: search paths specified
+    2: search paths and current template directory.
 
 =item open_mode
 
@@ -2544,6 +2537,8 @@ Path to template files
 
 Search the list of paths specified with C<path> when including a template.
 Default is 0
+
+See L<"DIFFERENT FEATURES"> for the additional possible value 2.
 
 =item file_cache
 
@@ -3279,8 +3274,6 @@ http://www.tinita.de/projects/perl/
 =head1 AUTHOR
 
 Tina Mueller
-
-Co-Author Mark Stosberg
 
 =head1 CREDITS
 
