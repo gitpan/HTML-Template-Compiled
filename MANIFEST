@@ -34,6 +34,7 @@ examples/bench_mem.pl
 examples/test.tt
 examples/test.tst
 examples/dhtml.html
+t/cache/.gitignore
 t/HTC_Utils.pm
 t/HTC_Plugin.pm
 t/01_HTML-Template-Compiled.t
@@ -74,6 +75,7 @@ t/36_default.t
 t/37_with.t
 t/38_vars.t
 t/39_number_format.t
+t/templates/simple.tmpl
 t/templates/songs.html
 t/templates/wrong.html
 t/templates/include.html
@@ -106,5 +108,8 @@ t/templates/subdir/file_debug.html
 t/templates/loop_included.tmpl
 t/templates/user_template.html
 t/templates/var_include.html
+t/templates/wrapped.html
+t/templates/wrapper.html
+t/templates/wrapper2.html
 META.yml                                 Module meta-data (added by MakeMaker)
 META.json

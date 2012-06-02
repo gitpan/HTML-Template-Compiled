@@ -2,7 +2,7 @@ package HTML::Template::Compiled;
 # $Id: Compiled.pm 1161 2012-05-05 14:00:22Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.97_004";
+our $VERSION = "0.97_005";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -43,6 +43,13 @@ use constant CHECKED  => 1;
 use constant LMTIME   => 2;
 use constant LCHECKED => 3;
 
+use constant DEBUG_COMPILED => 0b001;
+
+use constant DEBUG_CACHE_FILE_MISS => 0b0001;
+use constant DEBUG_CACHE_FILE_HIT  => 0b0010;
+use constant DEBUG_CACHE_MEM_MISS  => 0b0100;
+use constant DEBUG_CACHE_MEM_HIT   => 0b1000;
+
 our $DEBUG = 0;
 our $LAST_EXCEPTION;
 
@@ -66,9 +73,9 @@ BEGIN {
 
     for my $i ( 1 .. $#map ) {
         my $method = "_$map[$i]";
-        my $get    = eval qq#sub { return \$_[0]->[$i] }#;
+        my $get    = sub { return $_[0]->[$i] };
         my $set;
-            $set = eval qq#sub { \$_[0]->[$i] = \$_[1] }#;
+            $set = sub { $_[0]->[$i] = $_[1] };
         no strict 'refs';
         *{"get$method"} = $get;
         *{"set$method"} = $set;
@@ -81,7 +88,6 @@ sub HTC { __PACKAGE__->new(@_) }
 sub new {
     my ( $class, %args ) = @_;
     D && $class->log("new()");
-    %args = $class->init_args(%args);
     # handle the "type", "source" parameter format (does anyone use it?)
     if ( exists $args{type} ) {
         exists $args{source} or $class->_error_no_source();
@@ -152,16 +158,14 @@ sub _error_empty_filename {
 
 sub new_from_perl {
     my ($class, %args) = @_;
-    %args = $class->init_args(%args);
+    $class->init_args(\%args);
     my $self = bless [], $class;
     D && $self->log("new(perl) filename: $args{filename}");
 
     $self->init_cache(\%args);
     $self->init(%args);
     $self->set_perl( $args{perl} );
-    $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
     $self->set_filename( $args{filename} );
-    $self->set_cache_dir( $args{cache_dir} );
     my $md5path = md5_hex(@{ $args{path} || [] });
     $self->set_path( $args{path} );
     $self->set_md5_path( $md5path );
@@ -169,7 +173,7 @@ sub new_from_perl {
 
     unless ( $self->get_scalar ) {
         my $file =
-          $self->createFilename( $self->get_path, $self->get_filename );
+          $self->createFilename( $self->get_path, \$self->get_filename );
         $self->set_file($file);
     }
     return $self;
@@ -177,9 +181,8 @@ sub new_from_perl {
 
 sub new_file {
     my ($class, $filename, %args) = @_;
-    %args = $class->init_args(%args);
+    $class->init_args(\%args);
     my $self = bless [], $class;
-    $self->_check_deprecated_args(%args);
     $args{path} = $self->build_path($args{path});
     $self->_error_empty_filename()
         if (!defined $filename or !length $filename);
@@ -189,11 +192,8 @@ sub new_file {
         $self->_error_template_sources;
     }
     $self->set_filename( $filename );
-    $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
     $self->init_cache(\%args);
-    #$self->set_cache_dir( $args{cache_dir} );
     my $md5path = md5_hex(@{ $args{path} || [] });
-    my $test = $args{path};
     $self->set_path( $args{path} );
     $self->set_md5_path( $md5path );
     if (my $t = $self->from_cache(\%args)) {
@@ -208,9 +208,8 @@ sub new_file {
 
 sub new_filehandle {
     my ($class, $filehandle, %args) = @_;
-    %args = $class->init_args(%args);
+    $class->init_args(\%args);
     my $self = bless [], $class;
-    $self->_check_deprecated_args(%args);
     if (exists $args{scalarref}
         || exists $args{arrayref} || exists $args{filename}) {
         $self->_error_template_sources;
@@ -218,9 +217,8 @@ sub new_filehandle {
     $args{filehandle} = $filehandle;
     $args{path} = $self->build_path($args{path});
     $self->set_filehandle( $args{filehandle} );
-    $self->set_cache(0);
+    $args{cache} = 0;
     $self->init_cache(\%args);
-    #$self->set_cache_dir( $args{cache_dir} );
     my $md5path = md5_hex(@{ $args{path} || [] });
     $self->set_path( $args{path} );
     $self->set_md5_path( $md5path );
@@ -235,7 +233,6 @@ sub new_filehandle {
 
 sub new_array_ref {
     my ($class, $arrayref, %args) = @_;
-    %args = $class->init_args(%args);
     if (exists $args{scalarref}
         || exists $args{filehandle} || exists $args{filename}) {
         $class->_error_template_sources;
@@ -247,18 +244,15 @@ sub new_array_ref {
 
 sub new_scalar_ref {
     my ($class, $scalarref, %args) = @_;
-    %args = $class->init_args(%args);
+    $class->init_args(\%args);
     my $self = bless [], $class;
-    $self->_check_deprecated_args(%args);
     if (exists $args{arrayref}
         || exists $args{filehandle} || exists $args{filename}) {
         $self->_error_template_sources;
     }
     $args{scalarref} = $scalarref;
     $args{path} = $self->build_path($args{path});
-    $self->set_cache( exists $args{cache} ? $args{cache} : 1 );
     $self->init_cache(\%args);
-    #$self->set_cache_dir( $args{cache_dir} );
     $self->set_scalar( $args{scalarref} );
     my $text = $self->get_scalar;
     my $md5  = md5($$text);
@@ -311,18 +305,6 @@ sub build_path {
     return $path;
 }
 
-
-sub init_runtime_args {
-    my ($self, %args) = @_;
-    D && $self->log("init_runtime_args()");
-    if ( my $filter = $args{filter} ) {
-        unless ( $self->get_filter ) {
-            $self->set_filter($filter);
-        }
-    }
-    return $self;
-}
-
 sub from_scratch {
     my ($self) = @_;
     D && $self->log("from_scratch filename=".$self->get_filename);
@@ -330,7 +312,7 @@ sub from_scratch {
     if ( defined $fname and !$self->get_scalar and !$self->get_filehandle ) {
 
         #D && $self->log("tried from_cache() filename=".$fname);
-        my $file = $self->createFilename( $self->get_path, $fname );
+        my $file = $self->createFilename( $self->get_path, \$fname );
         D && $self->log("set_file $file ($fname)");
         $self->set_file($file);
     }
@@ -349,6 +331,7 @@ sub from_cache {
 
     $args ||= {};
     my $plug = $args->{plugin} || [];
+    my $debug = $self->get_debug || $args->{debug};
     # try to get memory cache
     if ( $self->get_cache ) {
         my $dir = $self->get_cache_dir;
@@ -361,18 +344,23 @@ sub from_cache {
                 $t->set_plugins($plug);
                 $t->load_plugins($plug);
             }
+            if ($debug->{cache} & DEBUG_CACHE_MEM_HIT) {
+                warn "### HTML::Template::Compiled Cache Debug ### MEM CACHE HIT: $fname\n";
+            }
             return $t;
         }
 #        warn __PACKAGE__.':'.__LINE__.": not in mem cache: $fname\n";
+        if ($debug->{cache} & DEBUG_CACHE_MEM_MISS) {
+            warn "### HTML::Template::Compiled Cache Debug ### MEM CACHE MISS: @{[ $self->get_filename ]}\n";
+        }
     }
     D && $self->log( "from_cache() 2 filename=" . $self->get_filename );
 
     # not in memory cache, try file cache
     if ( $self->get_cache_dir ) {
-        #$self->init_runtime_args(%args);
         my $file = $self->get_scalar || $self->get_filehandle
             ? $self->get_filename
-            : $self->createFilename( $self->get_path, $self->get_filename );
+            : $self->createFilename( $self->get_path, \$self->get_filename );
         my $dir     = $self->get_cache_dir;
         $t = $self->from_file_cache($dir, $file);
         if ($t) {
@@ -380,7 +368,13 @@ sub from_cache {
                 $t->set_plugins($plug);
                 $t->load_plugins($plug);
             }
+            if ($debug->{cache} & DEBUG_CACHE_FILE_HIT) {
+                warn "### HTML::Template::Compiled Cache Debug ### FILE CACHE HIT: @{[ $self->get_filename ]}\n";
+            }
             return $t;
+        }
+        if ($debug->{cache} & DEBUG_CACHE_FILE_MISS) {
+            warn "### HTML::Template::Compiled Cache Debug ### FILE CACHE MISS: @{[ $self->get_filename ]}\n";
         }
     }
     D && $self->log( "from_cache() 3 filename=" . $self->get_filename );
@@ -492,7 +486,7 @@ sub from_cache {
             return 1;
         }
         else {
-            my $file = $self->createFilename( $self->get_path, $self->get_filename );
+            my $file = $self->createFilename( $self->get_path, \$self->get_filename );
             $self->set_file($file);
             #print STDERR "uptodate($file)\n";
             my @times = $self->_checktimes($file);
@@ -611,7 +605,7 @@ sub add_file_cache {
     #$includes_to_string =~ s/\$includes = //;
     my $search_path = $self->get_search_path || 0;
     my $gl = $self->get_global_vars;
-    my $debug_file = $self->get_debug_file;
+    my $debug_file = $self->get_debug->{file};
     $debug_file =~ tr/a-z0,//cd;
     my $use_objects = $self->get_objects;
     $use_objects =~ tr/a-z0//cd;
@@ -770,11 +764,13 @@ sub include_file {
 }
 
 sub createFilename {
-    my ( $self, $path, $filename, $cwd ) = @_;
+    my ( $self, $path, $filename_ref, $cwd ) = @_;
+    my $filename = $$filename_ref;
     D && $self->log("createFilename($path,$filename)");
     D && $self->stack(1);
+#warn __PACKAGE__.':'.__LINE__.": ---- createFilename($path, $$filename_ref, $cwd)\n";
     if ($path) {
-        local $" = "\\";
+        local $" = "\0";
         my $cached = $PATHS{"@$path"}->{$filename};
         return $cached if defined $cached;
     }
@@ -787,29 +783,27 @@ sub createFilename {
         D && $self->log( "file: " . File::Spec->catfile( $path, $filename ) );
         if ($path && @$path) {
             my @search = @$path;
-            push @search, $cwd if defined $cwd;
             for ( @search ) {
-                #if (ref $_) {
-                #    my $foo = basename $$_;
-                #    my ($dir, $f) = (dirname($$_), basename($$_));
-                #    my $found = 0;
-                #    while (defined $f) {
-                #        ($dir, $f) = (dirname($dir), basename($dir));
-                #        #sleep 1;
-                #        my $fp = File::Spec->catfile( $dir, $filename );
-                #        #warn __PACKAGE__.':'.__LINE__.": fp=$fp\n";
-                #        if (-f $fp) {
-                #            local $" = "\\";
-                #            $PATHS{"@$path"}->{$filename} = $fp;
-                #            return $fp;
-                #        }
-                #        last if $dir eq '.';
-                #    }
-                #}
                 my $fp = File::Spec->catfile( $_, $filename );
                 if (-f $fp) {
-                    local $" = "\\";
+                    local $" = "\0";
                     $PATHS{"@$path"}->{$filename} = $fp;
+                    return $fp;
+                }
+            }
+            # not found in $path, try current template dir
+            if (defined $cwd) {
+                my $fp = File::Spec->catfile( $cwd, $filename );
+                if (-f $fp) {
+                    for my $p (@search) {
+                        if ($fp =~ m{^\Q$p\E(.*)}) {
+                            my $rest = $1;
+                            my (undef, @p) = File::Spec->splitdir($rest);
+                            $rest = File::Spec->catfile(@p);
+                            $$filename_ref = $rest;
+                            $PATHS{"@$path"}->{$rest} = $fp;
+                        }
+                    }
                     return $fp;
                 }
             }
@@ -832,49 +826,86 @@ sub dump {
     return Data::Dumper->Dump( [$var], ['DUMP'] );
 }
 
-sub _check_deprecated_args {
-    my ($self, %args) = @_;
-    for (qw(method_call deref formatter_path)) {
-        if (exists $args{$_}) {
-            croak "Option $_ is deprecated";
-        }
-    }
-    if (exists $args{dumper}) {
-        croak "Option dumper is deprecated, use a plugin instead";
-    }
-    if (exists $args{formatter}) {
-        croak "Option formatter is deprecated, see documentation";
-    }
-}
-
 sub init_cache {
     my ($self, $args) = @_;
+    my $cachedir = $args->{file_cache_dir};
+    if ($args->{file_cache}) {
+        $self->set_cache_dir($cachedir) if $args->{file_cache};
+        if (defined $cachedir and not -d $cachedir) {
+            croak "Cachedir '$cachedir' does not exist";
+        }
+    }
+    $self->set_cache( exists $args->{cache} ? $args->{cache} : 1 );
+}
+
+sub init_args {
+    my ($class, $args) = @_;
+
     if (exists $args->{cache_dir}) {
         # will soon be deprecated
-        $args->{file_cache_dir} = $args->{cache_dir};
+        $args->{file_cache_dir} = delete $args->{cache_dir};
         unless (exists $args->{file_cache}) {
             # warn in future versions
             $args->{file_cache} = 1;
         }
     }
-    $self->set_cache_dir($args->{file_cache_dir}) if $args->{file_cache};
-    my $cachedir = $self->get_cache_dir;
-    if ($args->{file_cache} and defined $cachedir and not -d $cachedir) {
-        croak "Cachedir '$cachedir' does not exist";
-    }
-}
 
-sub init_args {
-    my ($class, %args) = @_;
-    if ($args{plugin} and (ref $args{plugin}) ne 'ARRAY') {
-        $args{plugin} = [$args{plugin}];
+    if ($args->{plugin} and (ref $args->{plugin}) ne 'ARRAY') {
+        $args->{plugin} = [$args->{plugin}];
     }
-    my %defaults = (
+    my $debug_cache_args = delete $args->{cache_debug} || 0;
+    my $debug_cache = 0;
+    if ($debug_cache_args) {
+        unless (ref $debug_cache_args) {
+            # no array ref, just a true value
+            $debug_cache |= DEBUG_CACHE_FILE_MISS | DEBUG_CACHE_FILE_HIT | DEBUG_CACHE_MEM_MISS | DEBUG_CACHE_MEM_HIT;
+        }
+        else {
+            for my $opt (@$debug_cache_args) {
+                if ($opt eq 'file_miss') {
+                    $debug_cache |= DEBUG_CACHE_FILE_MISS;
+                }
+                elsif ($opt eq 'file_hit') {
+                    $debug_cache |= DEBUG_CACHE_FILE_HIT;
+                }
+                elsif ($opt eq 'mem_miss') {
+                    $debug_cache |= DEBUG_CACHE_MEM_MISS;
+                }
+                elsif ($opt eq 'mem_hit') {
+                    $debug_cache |= DEBUG_CACHE_MEM_HIT;
+                }
+            }
+        }
+    }
+    # check deprecated
+    for (qw(method_call deref formatter_path)) {
+        if (exists $args->{$_}) {
+            croak "Option $_ is deprecated";
+        }
+    }
+    if (exists $args->{dumper}) {
+        croak "Option dumper is deprecated, use a plugin instead";
+    }
+    if (exists $args->{formatter}) {
+        croak "Option formatter is deprecated, see documentation";
+    }
+
+    my $debug_file = delete $args->{debug_file} || 0;
+    my $debug_compiled = delete $args->{debug} ? 1 : 0;
+    my $debug = 0;
+    $debug |= DEBUG_COMPILED if $debug_compiled;
+
+    $args->{debug} = {
+        options => $debug,
+        file    => $debug_file,
+        cache   => $debug_cache,
+    };
+
+    %$args = (
         search_path_on_include => $SEARCHPATH,
         loop_context_vars      => 0,
         case_sensitive         => $CASE_SENSITIVE_DEFAULT,
-        debug                  => $DEBUG_DEFAULT,
-        debug_file             => 0,
+#        debug_file             => 0,
         objects                => 'strict',
         out_fh                 => 0,
         global_vars            => 0,
@@ -889,9 +920,9 @@ sub init_args {
         post_chomp             => 0,
         expire_time            => $NEW_CHECK,
         strict                 => 1,
-        %args,
+        %$args,
     );
-    return %defaults;
+#    return %defaults;
 }
 
 sub init {
@@ -1613,7 +1644,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.97_004"
+$VERSION = "0.97_005"
 
 =cut
 
@@ -1806,6 +1837,10 @@ see L<"USE_VARS">
 =item tags TMPL_COMMENT, TMPL_NOPARSE, TMPL_VERBATIM
 
 see L<"TMPL_COMMENT">, L<"TMPL_NOPARSE">, L<"TMPL_VERBATIM">
+
+=item tag TMPL_WRAPPER
+
+see L<"WRAPPER">
 
 =item C<__index__>
 
@@ -2075,6 +2110,11 @@ As of L<HTML::Template::Compiled> 0.85 you can use this syntax:
     <tmpl_if arrayref# >true<tmpl_else>false</tmpl_if >
 
 In L<HTML::Template::Compiled::Classic> 0.04 it works as in HTML::Template.
+
+=item debug_cache
+
+Additional to 0 or 1 it can take an array ref for debugging only specific
+cache operations.
 
 =back
 
@@ -2476,6 +2516,40 @@ so that the compiler recognizes them as user defined vars and not parameters
 from the stash.
 This statement is valid until the end of the template so you cannot
 "overwrite" parameters of the stash locally.
+
+=head2 WRAPPER
+
+Since 0.97_005. Experimental. Please test.
+
+Needs option C<loop_context_vars>.
+
+Works similar to WRAPPER in Template-Toolkit.
+
+Is similar to TMPL_INCLUDE, just that the included wrapper is wrapped
+around the content. It can be used to avoid including head and foot seperately.
+
+    <tmpl_wrapper wrapper.html >
+    content: some var: <tmpl_var foo >
+    </tmpl_wrapper>
+
+In wrapper.html the special loop context var C<__wrapper__> is used for
+the included content:
+
+    wrapper.html:
+    <some><layout>
+    <tmpl_var __wrapped__ >
+    </layout></some>
+
+Important notes:
+
+If you are using C<out_fh> to print directly to a filehandle instead of
+returning to a string, this feature might not be useful, since it is
+appending the content inside of the wrapper to a string and prints it
+when it comes to the end of the wrapper tag.
+So if you are using C<out_fh> to avoid generating long strings in
+memory, you should rather use TMPL_INCLUDE instead.
+
+Also you need perl 5.8 or higher to use it in combination with out_fh.
 
 =head2 TMPL_COMMENT
 
@@ -2959,6 +3033,28 @@ write me. If enough people write me, I'll think abou it =)
 
 Set to 1 if you want to use the perl-tag. See L<"TMPL_PERL">. Default is 0.
 
+=item cache_debug
+
+Default: 0
+
+You can debug hits and misses for file cache and memory cache:
+
+    # debug all cache
+    my $htc = HTML::Template::Compiled->new(
+        cache_debug => 1,
+        ...
+    );
+    # only debug misses
+    my $htc = HTML::Template::Compiled->new(
+        cache_debug => [qw/ file_miss mem_miss /],
+        ...
+    );
+
+Possible values when passing an array ref: file_miss file_hit mem_miss mem_hit
+
+Output looks similar to HTML::Template cache_debug and will be output
+to STDERR via warn().
+
 =back
 
 =head2 METHODS
@@ -3005,7 +3101,7 @@ If you don't do preloading in mod_perl, memory usage might go up if you have a l
 of templates.
 
 Note: the directory is *not* the template directory. It should be the directory
-which you give as the cache_dir option.
+which you give as the file_cache_dir option.
 
 =item precompile
 
@@ -3062,7 +3158,8 @@ You create a template almost like in HTML::Template:
     loop_context_vars   => 1,
     filename            => 'test.html',
     # for testing without cache comment out
-    cache_dir           => "cache",
+    file_cache          => 1,
+    file_cache_dir      => "cache",
   );
 
 The next time you start your application and create a new template, HTC will read all generated
@@ -3161,11 +3258,11 @@ precompile class method.
 It works like this:
 
   HTML::Template::Compiled->precompile(
-    # usual options like path, default_escape, global_vars, cache_dir, ...
+    # usual options like path, default_escape, global_vars, file_cache_dir, ...
     filenames => [ list of template-filenames ],
   );
 
-This will then pre-compile all templates into cache_dir. Now you would just put this
+This will then pre-compile all templates into file_cache_dir. Now you would just put this
 directory onto the server, and it doesn't need any write-permissions, as it
 will be never changed (until you update it because templates have changed).
 

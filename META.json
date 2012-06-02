@@ -4,7 +4,7 @@
       "Tina Mueller"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4, CPAN::Meta::Converter version 2.112150",
+   "generated_by" : "Module::Build version 0.4, CPAN::Meta::Converter version 2.120630",
    "license" : [
       "perl_5"
    ],
@@ -16,19 +16,19 @@
    "prereqs" : {
       "configure" : {
          "requires" : {
-            "Module::Build" : 0
+            "Module::Build" : "0"
          }
       },
       "runtime" : {
          "recommends" : {
-            "URI::Escape" : 0
+            "URI::Escape" : "0"
          },
          "requires" : {
-            "Carp" : 0,
-            "Digest::MD5" : 0,
-            "File::Basename" : 0,
-            "File::Spec" : 0,
-            "Test::More" : 0,
+            "Carp" : "0",
+            "Digest::MD5" : "0",
+            "File::Basename" : "0",
+            "File::Spec" : "0",
+            "Test::More" : "0",
             "perl" : "v5.6.1"
          }
       }
@@ -36,7 +36,7 @@
    "provides" : {
       "HTML::Template::Compiled" : {
          "file" : "lib/HTML/Template/Compiled.pm",
-         "version" : "0.97_004"
+         "version" : "0.97_005"
       },
       "HTML::Template::Compiled::Classic" : {
          "file" : "lib/HTML/Template/Compiled/Classic.pm",
@@ -44,7 +44,7 @@
       },
       "HTML::Template::Compiled::Compiler" : {
          "file" : "lib/HTML/Template/Compiled/Compiler.pm",
-         "version" : "0.19"
+         "version" : "0.20"
       },
       "HTML::Template::Compiled::Compiler::Classic" : {
          "file" : "lib/HTML/Template/Compiled/Compiler/Classic.pm",
@@ -56,11 +56,11 @@
       },
       "HTML::Template::Compiled::Expr" : {
          "file" : "lib/HTML/Template/Compiled/Expr.pm",
-         "version" : "0.05"
+         "version" : "0.06"
       },
       "HTML::Template::Compiled::Expression" : {
          "file" : "lib/HTML/Template/Compiled/Expression.pm",
-         "version" : "0.02"
+         "version" : "0.03"
       },
       "HTML::Template::Compiled::Expression::Conditional" : {
          "file" : "lib/HTML/Template/Compiled/Expression.pm",
@@ -70,23 +70,15 @@
          "file" : "lib/HTML/Template/Compiled/Expression/Expressions.pm",
          "version" : 0
       },
-      "HTML::Template::Compiled::Expression::Else" : {
-         "file" : "lib/HTML/Template/Compiled/Expression.pm",
-         "version" : 0
-      },
       "HTML::Template::Compiled::Expression::Elsif" : {
          "file" : "lib/HTML/Template/Compiled/Expression.pm",
          "version" : 0
       },
       "HTML::Template::Compiled::Expression::Expressions" : {
          "file" : "lib/HTML/Template/Compiled/Expression/Expressions.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "HTML::Template::Compiled::Expression::Function" : {
-         "file" : "lib/HTML/Template/Compiled/Expression.pm",
-         "version" : 0
-      },
-      "HTML::Template::Compiled::Expression::If" : {
          "file" : "lib/HTML/Template/Compiled/Expression.pm",
          "version" : 0
       },
@@ -98,16 +90,8 @@
          "file" : "lib/HTML/Template/Compiled/Expression.pm",
          "version" : 0
       },
-      "HTML::Template::Compiled::Expression::String" : {
-         "file" : "lib/HTML/Template/Compiled/Expression/Expressions.pm",
-         "version" : 0
-      },
       "HTML::Template::Compiled::Expression::Ternary" : {
          "file" : "lib/HTML/Template/Compiled/Expression/Expressions.pm",
-         "version" : 0
-      },
-      "HTML::Template::Compiled::Expression::Unless" : {
-         "file" : "lib/HTML/Template/Compiled/Expression.pm",
          "version" : 0
       },
       "HTML::Template::Compiled::Filter" : {
@@ -124,7 +108,7 @@
       },
       "HTML::Template::Compiled::Parser" : {
          "file" : "lib/HTML/Template/Compiled/Parser.pm",
-         "version" : "0.13"
+         "version" : "0.14"
       },
       "HTML::Template::Compiled::Plugin::DHTML" : {
          "file" : "lib/HTML/Template/Compiled/Plugin/DHTML.pm",
@@ -168,5 +152,5 @@
          "url" : "https://github.com/perlpunk/HTML-Template-Compiled"
       }
    },
-   "version" : "0.97_004"
+   "version" : "0.97_005"
 }

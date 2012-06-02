@@ -8,7 +8,7 @@ use HTML::Template::Compiled::Expression qw(:expressions);
 use HTML::Template::Compiled::Utils qw(:walkpath);
 use File::Basename qw(dirname);
 
-our $VERSION = '0.19';
+our $VERSION = '0.20';
 
 use Carp qw(croak carp);
 use constant D             => 0;
@@ -31,6 +31,7 @@ use constant T_INCLUDE_VAR => 'INCLUDE_VAR';
 use constant T_INCLUDE_STRING => 'INCLUDE_STRING';
 use constant T_USE_VARS    => 'USE_VARS';
 use constant T_SET_VAR     => 'SET_VAR';
+use constant T_WRAPPER     => 'WRAPPER';
 
 use constant INDENT        => '    ';
 
@@ -170,6 +171,7 @@ my %loop_context = (
     __break__   => '$__break__',
     __filename__ => '$t->get_file',
     __filenameshort__ => '$t->get_filename',
+    __wrapped__ => '$args->{wrapped}',
 );
 
 sub parse_var {
@@ -407,7 +409,7 @@ sub compile {
     }
     my $parser = $self->get_parser;
     my @p = $parser->parse($fname, $text);
-    if (my $df = $self->get_debug_file) {
+    if (my $df = $self->get_debug->{file}) {
         my $debugfile = $df =~ m/short/ ? $self->get_filename : $self->get_file;
         if ($df =~ m/start/) {
             unshift @p, 
@@ -428,23 +430,27 @@ sub compile {
     my $info = {}; # for query()
     my $info_stack = [$info];
 
+my $test = $self->get_debug->{options};
     # got this trick from perlmonks.org
     my $anon = D
-      || $self->get_debug ? qq{local *__ANON__ = "htc_$fname";\n} : '';
+      || ($self->get_debug->{options} & HTML::Template::Compiled::DEBUG_COMPILED()) ? qq{local *__ANON__ = "htc_$fname";\n} : '';
 
     no warnings 'uninitialized';
-    my $output = '$OUT .= ';
+    my $string_output = '$OUT .= ';
+    my $fh_output = 'print $OFH ';
+    my $output = $string_output;
     my $out_fh = $self->get_out_fh;
     if ($out_fh) {
-        $output = 'print $OFH ';
+        $output = $fh_output;
     }
+    my @outputs = ($output);
     my $header = <<"EOM";
 sub {
     use vars qw/ \$__ix__ \$__key__ \$__value__ \$__break__ \$__size__ /;
     use strict;
     no warnings;
 $anon
-    my (\$t, \$P, \$C, \$OFH) = \@_;
+    my (\$t, \$P, \$C, \$OFH, \$args) = \@_;
     my \$OUT = '';
 EOM
 
@@ -466,6 +472,7 @@ EOM
         lexicals       => \@lexicals,
     );
     my %use_vars;
+    my @wrapped;
     for my $token (@p) {
         @use_vars{ @lexicals } = () if @lexicals;
         my ($text, $line, $open_close, $tname, $attr, $f, $nlevel) = @$token;
@@ -845,7 +852,7 @@ EOM
         }
 
         # --------- TMPL_INCLUDE_VAR
-        elsif ($tname eq T_INCLUDE_VAR or $tname eq T_INCLUDE) {
+        elsif ($tname eq T_INCLUDE_VAR or $tname eq T_INCLUDE or $tname eq T_WRAPPER) {
             my $filename;
             my $varstr;
             my $path = $self->get_path();
@@ -853,6 +860,18 @@ EOM
             my $dynamic = $tname eq T_INCLUDE_VAR ? 1 : 0;
             my $fullpath = "''";
 
+            my $cwd;
+            unless ($self->get_scalar) {
+                $dir      = dirname($fname);
+                if ($self->get_search_path == 1) {
+                }
+                elsif ($self->get_search_path == 2) {
+                    $cwd = $dir;
+                }
+                else {
+                    $path = [ $dir ] ;
+                }
+            }
             if ($dynamic) {
                 # dynamic filename
                 my $dfilename = $attr->{NAME};
@@ -870,31 +889,15 @@ EOM
             else {
                 # static filename
                 $filename = $attr->{NAME};
+                $fullpath = $self->createFilename( [@$path], \$filename, $cwd );
                 if ($self->get_use_query) {
                     $info_stack->[-1]->{lc $filename}->{type} = $tname;
                 }
                 $varstr   = $self->quote_file($filename);
-                my $cwd;
-				unless ($self->get_scalar) {
-					$dir      = dirname($fname);
-					if ($self->get_search_path == 1) {
-					}
-					elsif ($self->get_search_path == 2) {
-						$cwd = $dir;
-					}
-					else {
-						$path = [ $dir ] ;
-					}
-				}
                 # generate included template
                 {
                     D && $self->log("compile include $filename!!");
-                    #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\$self->get_file], ['file']);
-                    #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\$path], ['path']);
-                    #$fullpath = $self->createFilename( [@$path, \$self->get_file], $filename );
-                    $fullpath = $self->createFilename( [@$path], $filename, $cwd );
                     my $recursed = ++$HTML::Template::Compiled::COMPILE_STACK{$fullpath};
-                    #warn __PACKAGE__." fullpath $fullpath ($recursed)\n";
                     if ($recursed <= 1) {
                         my $cached_or_new;
                         $self->compile_early() and $cached_or_new
@@ -902,8 +905,6 @@ EOM
                                 #[@$path, \$self->get_file], $filename, '', $self->get_cache_dir
                               $path, $filename, '', $self->get_cache_dir
                           );
-                          #$fullpath = $cached_or_new->get_file;
-                        #$HTML::Template::Compiled::COMPILE_STACK{"@$path/$filename"} = $fullpath;
                         $self->get_includes()->{$fullpath}
                             = [$path, $filename, $cached_or_new];
                     }
@@ -917,47 +918,87 @@ EOM
               ? '['
               . join( ',', map { $self->quote_file($_) } @$path ) . ']'
               : 'undef';
+            $cwd = defined $cwd ? $self->quote_file($cwd) : 'undef';
             $cache = defined $cache ? $self->quote_file($cache) : 'undef';
             if ($dynamic) {
                 $code .= <<"EOM";
-${indent}\{
-${indent}  if (defined (my \$file = $varstr)) \{
-            my \$recursed = ++\$HTML::Template::Compiled::FILESTACK{$fullpath};
-            #warn "recursed \$recursed\\n";
-            \$HTML::Template::Compiled::FILESTACK{$fullpath} = 0, die "HTML::Template: recursive include of " . $fullpath . " \$recursed times (max \$HTML::Template::Compiled::MAX_RECURSE)"
-              if \$recursed > \$HTML::Template::Compiled::MAX_RECURSE;
-${indent}    my \$include = \$t->get_includes()->{$fullpath};
-${indent}    my \$new = \$include ? \$include->[2] : undef;
-#print STDERR "+++++++got new? \$new\\n";
-${indent}    if (!\$new || HTML::Template::Compiled::needs_new_check($cache||'',\$file,\$t->get_expire_time)) {
-${indent}      \$new = \$t->new_from_object($path,\$file,$fullpath,$cache);
-${indent}    }
-#print STDERR "got new? \$new\\n";
-${indent}    \$new->set_globalstack(\$t->get_globalstack);
-${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
-            --\$HTML::Template::Compiled::FILESTACK{$fullpath} or delete \$HTML::Template::Compiled::FILESTACK{$fullpath};
-${indent}  \}
-${indent}\}
+# ---------- INCLUDE_VAR
+\{
+  if (defined (my \$file = $varstr)) \{
+    my \$fullpath = \$t->createFilename( $path, \\\$file, $cwd );
+    my \$recursed = ++\$HTML::Template::Compiled::FILESTACK{\$fullpath};
+    \$HTML::Template::Compiled::FILESTACK{\$fullpath} = 0, die "HTML::Template: recursive include of " . \$fullpath . " \$recursed times (max \$HTML::Template::Compiled::MAX_RECURSE)"
+      if \$recursed > \$HTML::Template::Compiled::MAX_RECURSE;
+    my \$include = \$t->get_includes()->{\$fullpath};
+    my \$new = \$include ? \$include->[2] : undef;
+    if (!\$new || HTML::Template::Compiled::needs_new_check($cache||'',\$file,\$t->get_expire_time)) \{
+      \$new = \$t->new_from_object($path,\$file,\$fullpath,$cache);
+    \}
+    \$new->set_globalstack(\$t->get_globalstack);
+    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
+    --\$HTML::Template::Compiled::FILESTACK{\$fullpath} or delete \$HTML::Template::Compiled::FILESTACK{\$fullpath};
+  \}
+\}
 EOM
+            }
+            elsif ($tname eq T_WRAPPER) {
+                push @outputs, '$OUT' . (1 + scalar @outputs) . ' .= ';
+                $output = $outputs[-1];
+                my $wrapped = '';
+                $code .= <<"EOM";
+# ---------- WRAPPER
+\{
+  my \$OUT@{[ scalar @outputs ]};
+EOM
+                my $argument_fh = 'undef';
+                if ($out_fh) {
+                    $wrapped .= <<"EOM";
+my \$tmp_var = '';
+open my \$tmp_fh, '>', \\\$tmp_var;
+EOM
+                    $argument_fh = "\$tmp_fh";
+                }
+                $wrapped .= <<"EOM";
+  my \$_WRAPPED = \$OUT@{[ scalar @outputs ]};
+  my \$recursed = ++\$HTML::Template::Compiled::FILESTACK{$fullpath};
+  \$HTML::Template::Compiled::FILESTACK{$fullpath} = 0, die "HTML::Template: recursive include of " . $fullpath . " \$recursed times (max \$HTML::Template::Compiled::MAX_RECURSE)"
+  if \$recursed > \$HTML::Template::Compiled::MAX_RECURSE;
+    my \$include = \$t->get_includes()->{$fullpath};
+    my \$new = \$include ? \$include->[2] : undef;
+    if (!\$new) {
+      \$new = \$t->new_from_object($path,$varstr,$fullpath,$cache);
+    }
+    \$new->set_globalstack(\$t->get_globalstack);
+    $outputs[-2] \$new->get_code()->(\$new,\$P,\$C, $argument_fh, { wrapped => \$_WRAPPED });
+    --\$HTML::Template::Compiled::FILESTACK{$fullpath} or delete \$HTML::Template::Compiled::FILESTACK{$fullpath};
+  \$OUT@{[ scalar @outputs ]} = '';
+EOM
+                if ($out_fh) {
+                    $wrapped .= <<"EOM";
+$outputs[-2] \$tmp_var;
+EOM
+                }
+                $wrapped .= <<"EOM";
+\}
+EOM
+                push @wrapped, $wrapped;
             }
             else {
                 $code .= <<"EOM";
-${indent}\{
-            my \$recursed = ++\$HTML::Template::Compiled::FILESTACK{$fullpath};
-            #warn "+recursed \$recursed $fullpath\\n";
-            \$HTML::Template::Compiled::FILESTACK{$fullpath} = 0, die "HTML::Template: recursive include of " . $fullpath . " \$recursed times (max \$HTML::Template::Compiled::MAX_RECURSE)"
-              if \$recursed > \$HTML::Template::Compiled::MAX_RECURSE;
-${indent}    my \$include = \$t->get_includes()->{$fullpath};
-${indent}    my \$new = \$include ? \$include->[2] : undef;
-#print STDERR "got new? \$new\\n";
-${indent}    if (!\$new) {
-${indent}      \$new = \$t->new_from_object($path,$varstr,$fullpath,$cache);
-${indent}    }
-#print STDERR "got new? \$new\\n";
-${indent}    \$new->set_globalstack(\$t->get_globalstack);
-${indent}    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
-            --\$HTML::Template::Compiled::FILESTACK{$fullpath} or delete \$HTML::Template::Compiled::FILESTACK{$fullpath};
-${indent}\}
+# ---------- INCLUDE
+\{
+  my \$recursed = ++\$HTML::Template::Compiled::FILESTACK{$fullpath};
+  \$HTML::Template::Compiled::FILESTACK{$fullpath} = 0, die "HTML::Template: recursive include of " . $fullpath . " \$recursed times (max \$HTML::Template::Compiled::MAX_RECURSE)"
+  if \$recursed > \$HTML::Template::Compiled::MAX_RECURSE;
+    my \$include = \$t->get_includes()->{$fullpath};
+    my \$new = \$include ? \$include->[2] : undef;
+    if (!\$new) {
+      \$new = \$t->new_from_object($path,$varstr,$fullpath,$cache);
+    }
+    \$new->set_globalstack(\$t->get_globalstack);
+    $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
+    --\$HTML::Template::Compiled::FILESTACK{$fullpath} or delete \$HTML::Template::Compiled::FILESTACK{$fullpath};
+\}
 EOM
             }
         }
@@ -1009,6 +1050,14 @@ ${indent}\$t->popGlobalstack;
 EOM
             }
         }
+        elsif ($tname eq T_WRAPPER) {
+            $code .= $wrapped[-1];
+            pop @wrapped;
+pop @outputs;
+$output = $outputs[-1];
+            $code .= <<"EOM";
+EOM
+        }
         else {
             # user defined
             #warn Data::Dumper->Dump([\$token], ['token']);
@@ -1035,7 +1084,7 @@ EOM
     $code = $header . $code . "\n} # end of sub\n";
 
     #$code .= "\n} # end of sub\n";
-    print STDERR "# ----- code \n$code\n# end code\n" if $self->get_debug;
+    print STDERR "# ----- code \n$code\n# end code\n" if $self->get_debug->{options} & HTML::Template::Compiled::DEBUG_COMPILED();
 
     # untaint code
     if ( $code =~ m/(\A.*\z)/ms ) {
