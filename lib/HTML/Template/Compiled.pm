@@ -2,7 +2,7 @@ package HTML::Template::Compiled;
 # $Id: Compiled.pm 1161 2012-05-05 14:00:22Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.97_005";
+our $VERSION = "0.97_006";
 use Data::Dumper;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
@@ -1035,7 +1035,7 @@ sub init_plugins {
             $parser->add_tagnames($tagnames);
         }
         if (my $escape = $actions->{escape}) {
-            $compiler->add_escapes($escape);
+            $compiler->add_escapes((ref $plug) || $plug, $escape);
         }
         if (my $tags = $actions->{compile}) {
             $compiler->add_tags($tags);
@@ -1051,8 +1051,9 @@ sub init_plugins {
         $plugins = [$plugins] unless ref $plugins eq 'ARRAY';
         for my $plug (@$plugins) {
             my $actions = $plug->register;
-            $classes->{ref $plug || $plug} = $actions;
-            HTML::Template::Compiled::Compiler->setup_escapes($actions->{escape}||{});
+            my $plug_class = (ref $plug) || $plug;
+            $classes->{ $plug_class} = $actions;
+            HTML::Template::Compiled::Compiler->setup_escapes($plug_class, $actions->{escape}||{});
         }
     }
 
@@ -1507,6 +1508,17 @@ sub import {
     }
 }
 
+sub var2expression {
+    my ($self, $var) = @_;
+    $var = $self->get_compiler->parse_var($self,
+        var             => $var,
+        method_call     => $self->method_call,
+        deref           => $self->deref,
+        formatter_path => $self->formatter_path,
+    );
+    return $var;
+}
+
 sub ExpireTime {
     my ($class, $seconds) = @_;
     $NEW_CHECK = $seconds;
@@ -1644,7 +1656,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.97_005"
+$VERSION = "0.97_006"
 
 =cut
 
@@ -3143,6 +3155,11 @@ Returns the plugin object of that classname. If the plugin is only a string
 (the classname itself), it returns this string, so this method is only
 useful for plugin objects.
 
+=item var2expression
+
+Useful for plugins. Parses a template var (C<name="foo.bar.baz"> and returns
+the perl expression for the compiler.
+
 =back
 
 =head1 EXPORT
@@ -3242,7 +3259,7 @@ environment!
 
 In this case it is the safest option to generate your compiled templates on a local machine
 and just put the compiled templates onto the server, with no write access for the http server.
-Set the C<ExpireTime> variable to a high value so that HTC never attempts to check the
+Set the C<expire_time> option to a high value so that HTC never attempts to check the
 template timestamp to force a regenerating of the code.
 
 If you are alone on the machine, but you are running under taint mode (see L<perlsec>) then

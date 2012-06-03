@@ -36,7 +36,7 @@
    "provides" : {
       "HTML::Template::Compiled" : {
          "file" : "lib/HTML/Template/Compiled.pm",
-         "version" : "0.97_005"
+         "version" : "0.97_006"
       },
       "HTML::Template::Compiled::Classic" : {
          "file" : "lib/HTML/Template/Compiled/Classic.pm",
@@ -60,7 +60,7 @@
       },
       "HTML::Template::Compiled::Expression" : {
          "file" : "lib/HTML/Template/Compiled/Expression.pm",
-         "version" : "0.03"
+         "version" : "0.04"
       },
       "HTML::Template::Compiled::Expression::Conditional" : {
          "file" : "lib/HTML/Template/Compiled/Expression.pm",
@@ -90,6 +90,10 @@
          "file" : "lib/HTML/Template/Compiled/Expression.pm",
          "version" : 0
       },
+      "HTML::Template::Compiled::Expression::SubrefCall" : {
+         "file" : "lib/HTML/Template/Compiled/Expression.pm",
+         "version" : 0
+      },
       "HTML::Template::Compiled::Expression::Ternary" : {
          "file" : "lib/HTML/Template/Compiled/Expression/Expressions.pm",
          "version" : 0
@@ -113,6 +117,10 @@
       "HTML::Template::Compiled::Plugin::DHTML" : {
          "file" : "lib/HTML/Template/Compiled/Plugin/DHTML.pm",
          "version" : "0.02"
+      },
+      "HTML::Template::Compiled::Plugin::NumberFormat" : {
+         "file" : "lib/HTML/Template/Compiled/Plugin/NumberFormat.pm",
+         "version" : "0.01"
       },
       "HTML::Template::Compiled::Plugin::XMLEscape" : {
          "file" : "lib/HTML/Template/Compiled/Plugin/XMLEscape.pm",
@@ -152,5 +160,5 @@
          "url" : "https://github.com/perlpunk/HTML-Template-Compiled"
       }
    },
-   "version" : "0.97_005"
+   "version" : "0.97_006"
 }
