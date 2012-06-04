@@ -2,8 +2,9 @@ package HTML::Template::Compiled;
 # $Id: Compiled.pm 1161 2012-05-05 14:00:22Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.98";
+our $VERSION = "0.98_001";
 use Data::Dumper;
+use Scalar::Util;
 BEGIN {
 use constant D => $ENV{HTC_DEBUG} || 0;
 }
@@ -11,7 +12,6 @@ use strict;
 use warnings;
 use Digest::MD5 qw/ md5_hex /;
 
-our $Storable = 1;
 use Carp;
 use Fcntl qw(:seek :flock);
 use File::Spec;
@@ -23,10 +23,10 @@ use HTML::Template::Compiled::Compiler;
 eval {
     require URI::Escape;
 };
-eval {
-    require Encode;
-};
-my $Encode = $@ ? 0 : 1;
+#eval {
+#    require Encode;
+#};
+#my $Encode = $@ ? 0 : 1;
 
 use base 'Exporter';
 our @EXPORT_OK = qw(&HTC);
@@ -67,6 +67,7 @@ BEGIN {
           filter formatter
           globalstack use_query parse_tree parser compiler includes
           plugins open_mode chomp expire_time strict
+          args
         )
           #use_expressions
     );
@@ -158,8 +159,8 @@ sub _error_empty_filename {
 
 sub new_from_perl {
     my ($class, %args) = @_;
-    $class->init_args(\%args);
     my $self = bless [], $class;
+    $self->init_args(\%args);
     D && $self->log("new(perl) filename: $args{filename}");
 
     $self->init_cache(\%args);
@@ -181,8 +182,8 @@ sub new_from_perl {
 
 sub new_file {
     my ($class, $filename, %args) = @_;
-    $class->init_args(\%args);
     my $self = bless [], $class;
+    $self->init_args(\%args);
     $args{path} = $self->build_path($args{path});
     $self->_error_empty_filename()
         if (!defined $filename or !length $filename);
@@ -208,8 +209,8 @@ sub new_file {
 
 sub new_filehandle {
     my ($class, $filehandle, %args) = @_;
-    $class->init_args(\%args);
     my $self = bless [], $class;
+    $self->init_args(\%args);
     if (exists $args{scalarref}
         || exists $args{arrayref} || exists $args{filename}) {
         $self->_error_template_sources;
@@ -244,8 +245,8 @@ sub new_array_ref {
 
 sub new_scalar_ref {
     my ($class, $scalarref, %args) = @_;
-    $class->init_args(\%args);
     my $self = bless [], $class;
+    $self->init_args(\%args);
     if (exists $args{arrayref}
         || exists $args{filehandle} || exists $args{filename}) {
         $self->_error_template_sources;
@@ -256,9 +257,9 @@ sub new_scalar_ref {
     $self->set_scalar( $args{scalarref} );
     my $text = $self->get_scalar;
     my $md5  = md5($$text);
-    if ($args{cache} and !$md5) {
-        croak "For caching scalarrefs you need Digest::MD5";
-    }
+#    if ($args{cache} and !$md5) {
+#        croak "For caching scalarrefs you need Digest::MD5";
+#    }
     $self->set_filename($md5);
     D && $self->log("md5: $md5");
     my $md5path = md5_hex(@{ $args{path} || [] });
@@ -340,6 +341,7 @@ sub from_cache {
         my $fname  = $self->get_filename;
         $t = $self->from_mem_cache($dir,$fname, $args);
         if ($t) {
+            $t->set_args($args);
             if (@$plug) {
                 $t->set_plugins($plug);
                 $t->load_plugins($plug);
@@ -364,6 +366,7 @@ sub from_cache {
         my $dir     = $self->get_cache_dir;
         $t = $self->from_file_cache($dir, $file);
         if ($t) {
+            $t->set_args($args);
             if (@$plug) {
                 $t->set_plugins($plug);
                 $t->load_plugins($plug);
@@ -565,7 +568,7 @@ sub add_file_cache {
     my $lchecked = localtime $times{checked};
     my $cachefile = "$cache/$plfile";
     D && $self->log("add_file_cache() $cachefile");
-    if ($Storable and require_storable()) {
+    if (require_storable()) {
         #require Storable;
         local $Storable::Deparse = 1;
         my $clone = $self->clone;
@@ -580,91 +583,6 @@ sub add_file_cache {
             },
         };
         Storable::store($to_cache, "$cachefile.storable");
-    }
-    else {
-    my $utf8 = $Encode && Encode::is_utf8($source);
-    my $use_utf8 = $utf8 ? 'use utf8;' : '';
-    open my $fh, ">" . ($utf8 ? ':utf8' : ''), "$cachefile.pl" or die $!;    # TODO File::Spec
-    my $path     = $self->get_path;
-    my $path_str = '['
-      . ( join ', ', map { $self->quote_file($_) } @$path )
-      . ']';
-    my $isScalar = $self->get_scalar ? 1 : 0;
-    my $query_info = $self->get_parse_tree;
-    $query_info = Data::Dumper->Dump([$query_info], ['query_info']);
-    my $parser =$self->get_parser;
-    $parser = Data::Dumper->Dump([\$parser], ['parser']);
-    local $Data::Dumper::Deepcopy = 1;
-    my $includes = $self->get_includes;
-    my $includes_empty = {map {
-            $_ => [$includes->{$_}->[0], $includes->{$_}->[1], 0],
-        } keys %$includes};
-    my $includes_to_string = Data::Dumper->Dump(
-        [$includes_empty], ['includes']
-    );
-    #$includes_to_string =~ s/\$includes = //;
-    my $search_path = $self->get_search_path || 0;
-    my $gl = $self->get_global_vars;
-    my $debug_file = $self->get_debug->{file};
-    $debug_file =~ tr/a-z0,//cd;
-    my $use_objects = $self->get_objects;
-    $use_objects =~ tr/a-z0//cd;
-    my $plugins = $self->get_plugins;
-    my $plugin_dump = Data::Dumper->Dump([\@$plugins], ['plugin_dump']);
-    my $file_args = $isScalar
-      ? <<"EOM"
-        scalarref => $isScalar,
-        filename => '@{[$self->get_filename]}',
-EOM
-      : <<"EOM";
-        filename => '@{[$self->get_filename]}',
-EOM
-    my $package = <<"EOM";
-    $use_utf8
-    package HTML::Template::Compiled;
-# file date $lmtime
-# last checked date $lchecked
-# @$plugins
-my $plugin_dump;
-my $query_info;
-my \$parser;
-$parser;
-my $includes_to_string;
-my \$args = {
-    # HTC version
-    class => '@{[ref $self]}',
-    version => '$VERSION',
-    times => {
-        mtime => $times{mtime},
-        checked => $times{checked},
-    },
-    htc => {
-        case_sensitive => @{[$self->get_case_sensitive]},
-        cache_dir => '$cache',
-        cache => '@{[$self->get_cache]}',
-$file_args
-    path => $path_str,
-    out_fh => @{[$self->get_out_fh]},
-    default_path   => '@{[$self->get_default_path]}',
-    default_escape => '@{[$self->get_default_escape]}',
-    loop_context_vars => '@{[$self->get_loop_context||0]}',
-    use_query => \$query_info,
-    parser => \$parser,
-    global_vars => $gl,
-    debug_file => '$debug_file',
-    objects => '$use_objects',
-    includes => \$includes,
-    search_path_on_include => $search_path,
-    plugin => \$plugin_dump,
-    # TODO
-    # dumper => ...
-    # template subroutine
-    perl => $source,
-    },
-};
-EOM
-    print $fh $package;
-    D && $self->log("$cache/$plfile.pl generated");
     }
     $self->unlock;
 }
@@ -683,7 +601,8 @@ sub from_file_cache {
     D && $self->log("include file: $file");
 
     my $escaped = $self->escape_filename($file);
-    my $req     = File::Spec->catfile( $dir, "$escaped.".($Storable && require_storable()?"storable":"pl") );
+    croak "Storable and B::Deparse needed for file cache" unless require_storable();
+    my $req     = File::Spec->catfile( $dir, "$escaped.storable" );
     return unless -f $req;
     return $self->include_file($req);
 }
@@ -693,7 +612,7 @@ sub include_file {
     D && $self->log("do $req");
     my $r;
     my $t;
-    if ($Storable && require_storable()) {
+    if (require_storable()) {
         #require Storable;
         local $Storable::Eval = 1;
         my $cache;
@@ -715,50 +634,7 @@ sub include_file {
         );
     }
     else {
-    if ($UNTAINT) {
-        # you said explicitly that you can trust your compiled code
-        open my $fh, '<:utf8', $req or die "Could not open '$req': $!";
-        my $code = <$fh>;
-        if ($code =~ m/use utf8/) {
-            binmode $fh, ':utf8';
-            $Encode and Encode::_utf8_on($code);
-        }
-        local $/;
-        $code .= <$fh>;
-        my $utf8 = $Encode && Encode::is_utf8($code);
-        if ( $code =~ m/(\A.*\z)/ms ) {
-            $code = $1;
-        }
-        else {
-            $code = "";
-        }
-        if ($utf8) {
-            Encode::_utf8_on($code);
-        }
-        $r = eval $code;
-    }
-    else {
-        $r = do $req;
-    }
-    if ($@) {
-        # we had an error while including
-        die "Error while including '$req': $@";
-    }
-    my $cached_version = $r->{version};
-    my $class = $r->{class} || 'HTML::Template::Compiled';
-    my $args = $r->{htc};
-    # we first just create from cached perl-code
-    $t = $class->new_from_perl(%$args);
-    if ($VERSION ne $cached_version || !$t->uptodate( $r->{times} )) {
-        # is not uptodate
-        return;
-    }
-    $t->set_includes( $args->{includes} );
-    $t->init_includes;
-    $t->get_cache and $t->add_mem_cache(
-        checked => $r->{times}->{checked},
-        mtime   => $r->{times}->{mtime},
-    );
+        croak "Storable and B::Deparse needed for file cache";
     }
     return $t;
 }
@@ -839,7 +715,7 @@ sub init_cache {
 }
 
 sub init_args {
-    my ($class, $args) = @_;
+    my ($self, $args) = @_;
 
     if (exists $args->{cache_dir}) {
         # will soon be deprecated
@@ -922,6 +798,7 @@ sub init_args {
         strict                 => 1,
         %$args,
     );
+    $self->set_args($args);
 #    return %defaults;
 }
 
@@ -953,9 +830,6 @@ sub init {
     $self->set_debug( $args{debug} );
     $self->set_debug_file( $args{debug_file} );
     $self->set_objects( $args{objects} );
-    if ($args{objects} and $args{objects} eq 'nostrict') {
-        require Scalar::Util;
-    }
     $self->set_out_fh( $args{out_fh} );
     $self->set_global_vars( $args{global_vars} );
     if (my $plugins = $args{plugin}) {
@@ -1248,6 +1122,10 @@ sub new_from_object {
         $cached->init_includes;
         return $cached
     }
+    unless ($new->get_compiler) {
+        my %args = %{ $self->get_args || {} };
+        $new->init(%args);
+    }
     $new = $new->from_scratch;
     $new->init_includes;
     return $new;
@@ -1272,6 +1150,7 @@ sub prepare_for_cache {
     }
     $self->set_parser(undef);
     $self->set_compiler(undef);
+    $self->set_args(undef);
 }
 
 sub preload {
@@ -1656,7 +1535,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.98"
+$VERSION = "0.98_001"
 
 =cut
 

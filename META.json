@@ -21,6 +21,8 @@
       },
       "runtime" : {
          "recommends" : {
+            "B::Deparse" : "0.61",
+            "Storable" : "2",
             "URI::Escape" : "0"
          },
          "requires" : {
@@ -29,14 +31,14 @@
             "File::Basename" : "0",
             "File::Spec" : "0",
             "Test::More" : "0",
-            "perl" : "v5.6.1"
+            "perl" : "v5.8.1"
          }
       }
    },
    "provides" : {
       "HTML::Template::Compiled" : {
          "file" : "lib/HTML/Template/Compiled.pm",
-         "version" : "0.98"
+         "version" : "0.98_001"
       },
       "HTML::Template::Compiled::Classic" : {
          "file" : "lib/HTML/Template/Compiled/Classic.pm",
@@ -151,7 +153,7 @@
          "version" : "0.07"
       }
    },
-   "release_status" : "stable",
+   "release_status" : "testing",
    "resources" : {
       "license" : [
          "http://dev.perl.org/licenses/"
@@ -160,5 +162,5 @@
          "url" : "https://github.com/perlpunk/HTML-Template-Compiled"
       }
    },
-   "version" : "0.98"
+   "version" : "0.98_001"
 }
