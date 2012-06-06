@@ -2,7 +2,7 @@ package HTML::Template::Compiled;
 # $Id: Compiled.pm 1161 2012-05-05 14:00:22Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.98_001";
+our $VERSION = "0.98_002";
 use Data::Dumper;
 use Scalar::Util;
 BEGIN {
@@ -1535,7 +1535,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.98_001"
+$VERSION = "0.98_002"
 
 =cut
 
@@ -1828,7 +1828,14 @@ For example, these two loops are functionally equivalent:
 
 This works with C<TMPL_LOOP> and C<TMPL_WHILE> at the moment.
 
-You can also se aliases with the C<SET_VAR> tag. See L<"SET_VAR">
+You can also set aliases with the C<SET_VAR> tag. See L<"SET_VAR">
+
+To use template parameters with a C<$> at the beginning (which is not
+officially suppported, but some are abviously using it), you can set:
+
+    local $HTML::Template::Compiled::Compiler::DISABLE_NEW_ALIAS = 1;
+
+This is only a temporary workaround.
 
 =item Chained escaping
 
