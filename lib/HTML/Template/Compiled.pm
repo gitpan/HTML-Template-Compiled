@@ -2,7 +2,7 @@ package HTML::Template::Compiled;
 # $Id: Compiled.pm 1161 2012-05-05 14:00:22Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "0.98_002";
+our $VERSION = "0.98_003";
 use Data::Dumper;
 use Scalar::Util;
 BEGIN {
@@ -754,16 +754,13 @@ sub init_args {
         }
     }
     # check deprecated
-    for (qw(method_call deref formatter_path)) {
+    for (qw(method_call deref formatter_path default_path formatter)) {
         if (exists $args->{$_}) {
-            croak "Option $_ is deprecated";
+            croak "Option $_ is deprecated, see documentation";
         }
     }
     if (exists $args->{dumper}) {
         croak "Option dumper is deprecated, use a plugin instead";
-    }
-    if (exists $args->{formatter}) {
-        croak "Option formatter is deprecated, see documentation";
     }
 
     my $debug_file = delete $args->{debug_file} || 0;
@@ -1535,7 +1532,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "0.98_002"
+$VERSION = "0.98_003"
 
 =cut
 
@@ -1608,7 +1605,7 @@ __END__
 =head1 DESCRIPTION
 
 HTML::Template::Compiled is a template system which can be used for
-L<HTML::Template> templates with the same API. It
+L<HTML::Template> templates with almost the same API. It
 offers more flexible template delimiters, additional tags and features,
 and by compiling the template into perl code it can run significantly faster
 in persistent environments such as FastCGI or mod_perl.
@@ -1835,7 +1832,15 @@ officially suppported, but some are abviously using it), you can set:
 
     local $HTML::Template::Compiled::Compiler::DISABLE_NEW_ALIAS = 1;
 
-This is only a temporary workaround.
+This is only a temporary workaround and will be removed some day!
+
+Note that you are also able to access variables with dollar signs like this:
+
+    <tmpl_var _.$foo >
+
+since underscore means current position in the parameter stash, and aliases
+are only recognized at the beginning of a template var. But note that
+dollar signs are still not officially supported.
 
 =item Chained escaping
 
@@ -2034,6 +2039,25 @@ Note: the following is deprecated:
       use HTML::Template::Compiled speed => 1;
 
  which is the default but depending on user wishes that might change.
+
+=head2 DEPRECATED
+
+=over 4
+
+=item class methods ExpireTime, EnableSub, CaseSensitive, SearchPathOnInclude, UseQuery
+
+=item option formatter_path
+
+=item tag USE_VARS, not needed anymore
+
+=item option cache_dir (replaced by file_cache_dir)
+
+=item options method_call, deref, default_path, dumper
+
+=item import tags short, compatible, speed
+
+=back
+
 
 =head2 ESCAPING
 
@@ -2435,7 +2459,7 @@ Needs option C<loop_context_vars>.
 Works similar to WRAPPER in Template-Toolkit.
 
 Is similar to TMPL_INCLUDE, just that the included wrapper is wrapped
-around the content. It can be used to avoid including head and foot seperately.
+around the content. It can be used to avoid including head and foot separately.
 
     <tmpl_wrapper wrapper.html >
     content: some var: <tmpl_var foo >
