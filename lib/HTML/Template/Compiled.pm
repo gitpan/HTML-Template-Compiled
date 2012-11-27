@@ -2,7 +2,7 @@ package HTML::Template::Compiled;
 # $Id: Compiled.pm 1161 2012-05-05 14:00:22Z tinita $
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "1.000";
+our $VERSION = "1.000_001";
 use Data::Dumper;
 use Scalar::Util;
 BEGIN {
@@ -568,8 +568,7 @@ sub add_file_cache {
     my $lchecked = localtime $times{checked};
     my $cachefile = "$cache/$plfile";
     D && $self->log("add_file_cache() $cachefile");
-    if (require_storable()) {
-        #require Storable;
+    {
         local $Storable::Deparse = 1;
         my $clone = $self->clone;
         $clone->prepare_for_cache;
@@ -601,7 +600,6 @@ sub from_file_cache {
     D && $self->log("include file: $file");
 
     my $escaped = $self->escape_filename($file);
-    croak "Storable and B::Deparse needed for file cache" unless require_storable();
     my $req     = File::Spec->catfile( $dir, "$escaped.storable" );
     return unless -f $req;
     return $self->include_file($req);
@@ -612,7 +610,7 @@ sub include_file {
     D && $self->log("do $req");
     my $r;
     my $t;
-    if (require_storable()) {
+    {
         #require Storable;
         local $Storable::Eval = 1;
         my $cache;
@@ -632,9 +630,6 @@ sub include_file {
             checked => $cache->{times}->{checked},
             mtime   => $cache->{times}->{mtime},
         );
-    }
-    else {
-        croak "Storable and B::Deparse needed for file cache";
     }
     return $t;
 }
@@ -706,6 +701,9 @@ sub init_cache {
     my ($self, $args) = @_;
     my $cachedir = $args->{file_cache_dir};
     if ($args->{file_cache}) {
+        unless (require_storable()) {
+            croak "Storable and B::Deparse needed for file cache";
+        }
         $self->set_cache_dir($cachedir) if $args->{file_cache};
         if (defined $cachedir and not -d $cachedir) {
             croak "Cachedir '$cachedir' does not exist";
@@ -1532,7 +1530,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "1.000"
+$VERSION = "1.000_001"
 
 =cut
 
@@ -1609,6 +1607,29 @@ L<HTML::Template> templates with almost the same API. It
 offers more flexible template delimiters, additional tags and features,
 and by compiling the template into perl code it can run significantly faster
 in persistent environments such as FastCGI or mod_perl.
+
+The goal is to offer more features for flexibility but keep the basic syntax
+as easy as it is.
+
+Features at a glance:
+
+=over 4
+
+=item Dot notation for objects, hashes and arrays
+
+=item Use expressions without any disadvantages like those in L<HTML::Template::Expr>
+
+=item Write escaping plugins and plugins for new tags
+
+=item Alternate delimiters, e.g. C<[%if %]> and C<< <%if %> >>
+
+=item Avoid C<global_vars> option by using the C<SET_VAR> tag to create aliases.
+
+=item Tags ELSIF, EACH, WHILE, COMMENT, WRAPPER, SWITCH/CASE, INCLUDE_VAR
+
+=item Chomp newlines/whitespace
+
+=back
 
 For a quick reference, see L<HTML::Template::Compiled::Reference>.
 
@@ -1828,7 +1849,7 @@ This works with C<TMPL_LOOP> and C<TMPL_WHILE> at the moment.
 You can also set aliases with the C<SET_VAR> tag. See L<"SET_VAR">
 
 To use template parameters with a C<$> at the beginning (which is not
-officially suppported, but some are abviously using it), you can set:
+officially supported, but some are obviously using it), you can set:
 
     local $HTML::Template::Compiled::Compiler::DISABLE_NEW_ALIAS = 1;
 
@@ -2406,6 +2427,21 @@ TMPL_EACH expects a ref), then you can set C<context=list>:
     <tmpl_var __key__ >
     </tmpl_each>
 
+Since 1.000_001 you can also define by which variable you want to sort.
+If you have a hash with hashes as values:
+
+    $htc->param(
+        letters => {
+            1 => { letter =>'b' },
+            2 => { letter =>'a' },
+            3 => { letter =>'c' },
+        },
+    );
+    <%each letters sort=alpha sortby="letter" %>
+    <%set_var val value=__value__ %>
+    <%= __key__ %> = <%= $val.letter %>
+    <%/each%>
+
 =head2 SET_VAR
 
 Since 0.96_002
@@ -2664,7 +2700,7 @@ browse through the stack.
 Now everything will be escaped for HTML unless you explicitly specify C<ESCAPE=0> (no escaping)
 or C<ESCAPE=URL>.
 
-=item strict
+=item strict (since 0.97_001)
 
 Default: 1
 

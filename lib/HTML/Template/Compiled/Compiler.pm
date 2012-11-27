@@ -489,6 +489,10 @@ EOM
     );
     my %use_vars;
     my @wrapped;
+    my $globalstack = '';
+    if ($self->get_global_vars) {
+        $globalstack = '$new->set_globalstack($t->get_globalstack);';
+    }
     for my $token (@p) {
         @use_vars{ @lexicals } = () if @lexicals;
         my ($text, $line, $open_close, $tname, $attr, $f, $nlevel) = @$token;
@@ -670,22 +674,32 @@ EOM
             # SORT=ALPHA or SORT not set => cmp
             # SORT=NUM => <=>
             # SORT=0 or anything else => don't sort
+
+            my $sort_key_a = '$a';
+            my $sort_key_b = '$b';
+            if ($attr->{SORTBY}) {
+                my $varstr = $class->parse_var($self,
+                    %var_args,
+                    var   => $attr->{SORTBY},
+                    context => $token,
+                    compiler => $class,
+                );
+                ($sort_key_a, $sort_key_b) = ($varstr, $varstr);
+                $sort_key_a =~ s/\$\$C/\$hash\{\$a\}/g;
+                $sort_key_b =~ s/\$\$C/\$hash\{\$b\}/g;
+            }
+
+            if ($attr->{REVERSE}) {
+                ($sort_key_b, $sort_key_a) = ($sort_key_a, $sort_key_b);
+            }
+            my $sort_op = 'cmp';
             if (!defined $attr->{SORT} or uc $attr->{SORT} eq 'ALPHA') {
-                if ($attr->{REVERSE}) {
-                    $sort_keys = "sort \{ \$b cmp \$a \}";
-                }
-                else {
-                    $sort_keys = "sort \{ \$a cmp \$b \}";
-                }
             }
             elsif (uc $attr->{SORT} eq 'NUM') {
-                if ($attr->{REVERSE}) {
-                    $sort_keys = "sort \{ \$b <=> \$a \}";
-                }
-                else {
-                    $sort_keys = "sort \{ \$a <=> \$b \}";
-                }
+                $sort_op = '<=>';
             }
+            $sort_keys = "sort \{ $sort_key_a $sort_op $sort_key_b \}";
+
             my $global = '';
             my $lexi =
               defined $lexical ? "${indent}local \$HTML::Template::Compiled::_lexi_$lexical = \$\$C;\n" : "";
@@ -860,7 +874,7 @@ qq#${indent}if (grep \{ \$_switch eq \$_ \} $values $is_default) \{\n#;
 \{
 my \$scalar = $varstr;
 my \$new = \$t->new_scalar_from_object(\$scalar);
-\$new->set_globalstack(\$t->get_globalstack);
+$globalstack
 $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
 \}
 EOM
@@ -950,7 +964,7 @@ EOM
     if (!\$new || HTML::Template::Compiled::needs_new_check($cache||'',\$file,\$t->get_expire_time)) \{
       \$new = \$t->new_from_object($path,\$file,\$fullpath,$cache);
     \}
-    \$new->set_globalstack(\$t->get_globalstack);
+    $globalstack
     $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
     --\$HTML::Template::Compiled::FILESTACK{\$fullpath} or delete \$HTML::Template::Compiled::FILESTACK{\$fullpath};
   \}
@@ -984,7 +998,7 @@ EOM
     if (!\$new) {
       \$new = \$t->new_from_object($path,$varstr,$fullpath,$cache);
     }
-    \$new->set_globalstack(\$t->get_globalstack);
+    $globalstack
     $outputs[-2] \$new->get_code()->(\$new,\$P,\$C, $argument_fh, { wrapped => \$_WRAPPED });
     --\$HTML::Template::Compiled::FILESTACK{$fullpath} or delete \$HTML::Template::Compiled::FILESTACK{$fullpath};
   \$OUT@{[ scalar @outputs ]} = '';
@@ -1011,7 +1025,7 @@ EOM
     if (!\$new) {
       \$new = \$t->new_from_object($path,$varstr,$fullpath,$cache);
     }
-    \$new->set_globalstack(\$t->get_globalstack);
+    $globalstack
     $output \$new->get_code()->(\$new,\$P,\$C@{[$out_fh ? ",\$OFH" : '']});
     --\$HTML::Template::Compiled::FILESTACK{$fullpath} or delete \$HTML::Template::Compiled::FILESTACK{$fullpath};
 \}
