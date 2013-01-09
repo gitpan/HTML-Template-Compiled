@@ -1,7 +1,7 @@
 package HTML::Template::Compiled;
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "1.000_003";
+our $VERSION = "1.000_004";
 use Data::Dumper;
 use Scalar::Util;
 BEGIN {
@@ -65,7 +65,7 @@ BEGIN {
           debug debug_file objects perl out_fh default_escape
           filter formatter
           globalstack use_query parse_tree parser compiler includes
-          plugins open_mode chomp expire_time strict
+          plugins open_mode chomp expire_time strict warnings line_info
           args
         )
           #use_expressions
@@ -806,6 +806,16 @@ sub init {
     $self->set_use_query( $args{use_query} );
     $self->set_chomp([$args{pre_chomp}, $args{post_chomp}]);
     $self->set_strict( $args{strict} );
+    my $warnings = $args{warnings} || 0;
+    unless ($warnings eq 1 or $warnings eq 'fatal') {
+        $warnings = 0;
+    }
+    $self->set_warnings($warnings);
+    my $line_info = 0;
+    if ($args{line_info}) {
+        $line_info = 1;
+    }
+    $self->set_line_info($line_info);
     #$self->set_use_expressions( $args{use_expressions} );
     if ($args{use_expressions}) {
         require HTML::Template::Compiled::Expr;
@@ -1482,7 +1492,7 @@ sub debug_code {
     my $filename = $self->get_file;
     #warn __PACKAGE__.':'.__LINE__.$".Data::Dumper->Dump([\$body], ['body']);
     my $message = '';
-    if ($LAST_EXCEPTION and $LAST_EXCEPTION =~ m/at \(eval \d*\) line (\d+)\./) {
+    if ($LAST_EXCEPTION and $LAST_EXCEPTION =~ m/at (?:\(eval \d*\)|\S+) line (\d+)\./) {
         my $rline = $1;
         my $line = $rline;
         $line--;
@@ -1529,7 +1539,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "1.000_003"
+$VERSION = "1.000_004"
 
 =cut
 
@@ -1812,7 +1822,7 @@ See L<"IMPLEMENTATION">
 
 dot-notation for accessing hash values. See L<"EXTENDED VARIABLE ACCESS">
 
-=item rendering objcets
+=item rendering objects
 
 dot-notation for accessing object methods. See L<"RENDERING OBJECTS">
 
@@ -2707,6 +2717,27 @@ If set to 0 unknown tags will be ignored and output verbatim:
 
     <TMPL_FOOBAR anything ... <TMPL_VAR valid>
 
+=item line_info (fixed) (since 1.000_004)
+
+Default: 0
+
+  my $htc = HTML::Template::Compiled->new(
+      ...
+      line_info => 1, # default 0
+  );
+
+If any runtime errors occur, line information will output the template
+filename and line instead of eval and the geberated perl code line
+
+=item warnings (fixed) (since 1.000_004)
+
+Default: 0
+
+If set to 1, runtime warnings (like use of uninitialized value) will be
+output to stderr.
+
+If set to 'fatal', any runtime warning will cause the script to die.
+
 =item no_includes (since 0.92)
 
 Default is 0. If set to 1, the tags INCLUDE, INCLUDE_VAR and INCLUDE_STRING
@@ -2878,7 +2909,7 @@ At the moment there are the following named tagstyles builtin:
 You deactive a style by saying -stylename. You activate by saying
 +stylename.
 
-Define your own tagstyle by specifying for regexes. For example
+Define your own tagstyle by specifyin regexes. For example
 you want to use {C<{if foo}}{{var bar}}{{/if foo}}>, then your
 definition should be:
 
