@@ -23,6 +23,7 @@ my %use = (
 	'HTML::Template::Compiled::Classic' => 0,
 #	'HTML::Template::JIT'      => 0,
 	'Template'                 => 0,
+    'Template::Alloy'                 => 0,
     'Template::HTML'           => 0,
     'Template::AutoFilter'     => 0,
     'Template::Like'           => 0,
@@ -64,9 +65,10 @@ my $ht_file = 'test.htc';
 my $htcc_file = $ht_file . 'c';
 my $tt_file = "test.tt";
 my $tst_file = "test.tst";
+my $xslfile = "test.xslate";
 $template_size =~ tr/0-9//cd;
 if ($template_size > 1) {
-    for my $file ($ht_file, $htcc_file, $tt_file, $tst_file) {
+    for my $file ($ht_file, $htcc_file, $tt_file, $tst_file, $xslfile) {
         open my $fh, "<", "examples/$file" or die "examples/$file: $!";
         my $data = do { local $/; <$fh> };
         my $new_file = "$file.n$template_size";
@@ -252,6 +254,24 @@ sub new_tt {
 	return $tt;
 }
 
+sub new_ta {
+    my $tt = Template::Alloy->new(
+        $FILE_CACHE
+            ? (
+                COMPILE_EXT => '.ttc',
+                COMPILE_DIR => 'cache/tt',
+            )
+            : (),
+        $MEM_CACHE
+            ? ()
+            : (CACHE_SIZE => 0),
+        INCLUDE_PATH => 'examples',
+    );
+	#my $size = total_size($tt);
+	#print "size tt  = $size\n";
+    return $tt;
+}
+
 sub new_ttaf {
 	my $tt= Template::AutoFilter->new(
         $FILE_CACHE
@@ -289,15 +309,13 @@ sub new_tth {
 }
 
 sub new_xslate {
-	my $t = Text::Xslate->new(
-        cache_dir => ($FILE_CACHE ? "cache/xslate" : undef),
-        cache => $MEM_CACHE,
-		path => 'examples',
+    # Text::Xslate has no file caching
+    my $t = Text::Xslate->new(
+        $MEM_CACHE ? (cache => 2, cache_dir => "cache/xslate") : (),
+        path => 'examples',
         syntax => 'TTerse',
-	);
-	#my $size = total_size($tt);
-	#print "size tt  = $size\n";
-	return $t;
+    );
+    return $t;
 }
 
 sub new_cet {
@@ -441,7 +459,7 @@ sub output_xslate {
 	#my $size = total_size($t);
 	#print "size $t = $size\n";
 	#print $t->{code} if exists $t->{code};
-    my $out = $t->render('test.xslate', \%params);
+    my $out = $t->render($xslfile, \%params);
     #my $out = $t->output;
     if ($STDOUT) {
         print OUT $out;
@@ -455,6 +473,7 @@ my $global_htp = $use{'HTML::Template::Pro'} ? new_htp : undef;
 my $global_htpl = $use{'HTML::Template::Pluggable'} ? new_htpl : undef;
 my $global_htj = $use{'HTML::Template::JIT'} ? new_htj : undef;
 my $global_tt = $use{'Template'} ? new_tt : undef;
+my $global_ta = $use{'Template::Alloy'} ? new_ta : undef;
 my $global_ttaf = $use{'Template::AutoFilter'} ? new_ttaf : undef;
 my $global_tth = $use{'Template::HTML'} ? new_tth : undef;
 my $global_xslate = $use{'Text::Xslate'} ? new_xslate : undef;
@@ -512,6 +531,14 @@ my %args = (
                 ? ()
                 : (all_tt_new_object => sub {my $t = new_tt();output_tt($t)}),
         ): (),
+        $use{'Template::Alloy'} ? (
+            #new_tt => sub {my $t = new_tt();},
+            #output_tt => sub {output_tt($global_tt)},
+            process_ta => sub {output_tt($global_ta)},
+            $MEM_CACHE
+                ? ()
+                : (all_ta_new_object => sub {my $t = new_ta();output_tt($t)}),
+        ): (),
         $use{'Template::AutoFilter'} ? (
             #new_ttaf => sub {my $t = new_ttaf();},
             #output_ttaf => sub {output_ttaf($global_ttaf)},
@@ -553,14 +580,20 @@ my %args = (
 						all_tst => sub {my $t = new_tst();output_tst($t)},
         ): (),
 );
+# try to align table correctly also for longer strings
+my %args_new;
+for my $key (keys %args) {
+    my $new_key = sprintf "%21s", $key;
+    $args_new{ $new_key } = $args{ $key };
+}
 if ($bench eq 'timethese') {
     timethese ($iterations||-1, {
-        %args
+        %args_new
  	});
 }
 elsif ($bench eq 'cmpthese') {
     cmpthese ($iterations||-1, {
-        %args
+        %args_new
  	});
 }
 }
