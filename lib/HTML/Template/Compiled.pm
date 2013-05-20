@@ -1,7 +1,7 @@
 package HTML::Template::Compiled;
 # doesn't work with make tardist
 #our $VERSION = ($version_pod =~ m/^\$VERSION = "(\d+(?:\.\d+)+)"/m) ? $1 : "0.01";
-our $VERSION = "1.001";
+our $VERSION = "1.001_001";
 use Data::Dumper;
 use Scalar::Util;
 BEGIN {
@@ -66,7 +66,7 @@ BEGIN {
           filter formatter
           globalstack use_query parse_tree parser compiler includes
           plugins open_mode chomp expire_time strict warnings line_info
-          args
+          args optimize
         )
           #use_expressions
     );
@@ -773,6 +773,12 @@ sub init_args {
         file    => $debug_file,
         cache   => $debug_cache,
     };
+    my %optimize = (
+        initial_var  => 1,
+        object_check => 0,
+        root_hash    => 0,
+        %{ $args->{optimize} || {} },
+    );
 
     %$args = (
         search_path_on_include => $SEARCHPATH,
@@ -793,6 +799,7 @@ sub init_args {
         post_chomp             => 0,
         expire_time            => $NEW_CHECK,
         strict                 => 1,
+        optimize               => \%optimize,
         %$args,
     );
     $self->set_args($args);
@@ -809,6 +816,7 @@ sub init {
     $self->set_use_query( $args{use_query} );
     $self->set_chomp([$args{pre_chomp}, $args{post_chomp}]);
     $self->set_strict( $args{strict} );
+    $self->set_optimize($args{optimize});
     my $warnings = $args{warnings} || 0;
     unless ($warnings eq 1 or $warnings eq 'fatal') {
         $warnings = 0;
@@ -823,6 +831,7 @@ sub init {
     if ($args{use_expressions}) {
         require HTML::Template::Compiled::Expr;
     }
+    $args{open_mode} = '' unless length $args{open_mode};
     if ($args{open_mode}) {
         $args{open_mode} =~ s/^[<>]//; # <:utf8
     }
@@ -948,23 +957,13 @@ sub init_plugins {
 sub _readfile {
     my ( $self, $file ) = @_;
     my $open_mode = $self->get_open_mode;
-    my $fh;
-    if ($] < 5.007001) {
-        open $fh, $file or die "Cannot open '$file': $!";
-    }
-    else {
-        $open_mode = '' unless length $open_mode;
-        open $fh, "<$open_mode", $file or die "Cannot open '$file': $!";
-    }
+    open my $fh, "<$open_mode", $file or die "Cannot open '$file': $!";
     local $/;
-    my $text = <$fh>;
-    return $text;
+    <$fh>;
 }
 
 sub get_code {
-    my ($self) = @_;
-    my $perl = $self->get_perl;
-    return $perl;
+    return $_[0]->get_perl;
 }
 
 sub compile_early { 1 }
@@ -1542,7 +1541,7 @@ HTML::Template::Compiled - Template System Compiles HTML::Template files to Perl
 
 =head1 VERSION
 
-$VERSION = "1.001"
+$VERSION = "1.001_001"
 
 =cut
 
@@ -2764,6 +2763,69 @@ If set to 'start,short', 'end,short' or 'start,end,short' the path
 to the templates will be stripped:
     <!-- start path/filename.html -->
     <!-- end path/filename.html -->
+
+=item optimize (fixed) (since 1.001_001)
+
+Hashref with compiler hints.
+
+Every access to the parameter stash has to check if the current var is
+an object or a hash. This allows you to use the same notation for hash accesses
+and method calls without caring about the data.
+But this is quite expensive. You can give the compiler hints:
+
+    HTML::Template::Compiled->new(
+        optimize => {
+            initial_var  => 1, # defaults
+            object_check => 0,
+            root_hash    => 0,
+        },
+
+=over 4
+
+=item initial_var
+
+Default: 1
+
+Might become a default in the code itself and removed as an option. Report if
+you have problems and set it to 0.
+This is just a minor internal optimization for variable accesses like
+C<[%= foo.bar.baz %]>
+
+=item object_check
+
+Default: 0
+
+If you are in a loop and make several accesses to the same var, it always
+checks if it is an object or not:
+
+    [%loop threads %]
+    [%= id %]
+    [%= title %]
+    [%= ctime %]
+    ...
+    [%/loop threads %]
+
+If you set this to true, the check will be done at the beginning of the loop
+and saved into a variable, so that subsequent accesses only use the check
+variable.
+Same for TMPL_WITH, TMPL_WHILE.
+
+If you only have one access in a loop, this might be unnecessary overhead.
+Also, theoretically, a variable can change during calls.
+
+In the most cases this option should be fine. I will set the default to 1
+someday probably.
+
+=item root_hash
+
+It is possible to pass an object to param() instead of a hash.
+So even every access to the root of the parameter stash has to check if
+it is an object or a hashref.
+In the most cases the parameter stash is a hashref. If you are sure that you
+always have a parameter hash and activate this option, the compiler can
+avoid this check.
+
+=back
 
 =item objects (fixed) (since 0.91_001)
 
